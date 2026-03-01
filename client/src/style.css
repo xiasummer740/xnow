@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { background-color: #0f172a; color: #e2e8f0; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+.x-badge { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-weight: 900; letter-spacing: 0.1em; padding: 4px 8px; font-size: 11px; } 
+.badge-super { color: #fdf4ff; background-color: rgba(134, 25, 143, 0.6); border: 1px solid #c084fc; animation: badgePulseSuper 2s infinite ease-in-out; }
+@keyframes badgePulseSuper { 0%, 100% { box-shadow: 0 0 8px rgba(192, 132, 252, 0.4); } 50% { box-shadow: 0 0 20px rgba(192, 132, 252, 1); border-color: #d8b4fe; } }
+.badge-admin { color: #fee2e2; background-color: rgba(127, 29, 29, 0.6); border: 1px solid #ef4444; animation: badgePulseAdmin 2s infinite ease-in-out; } 
+@keyframes badgePulseAdmin { 0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); } 50% { box-shadow: 0 0 20px rgba(239, 68, 68, 1); border-color: #f87171; } } 
+.badge-agent { color: #fef3c7; background-color: rgba(120, 53, 15, 0.6); border: 1px solid #f59e0b; animation: badgePulseAgent 3s infinite ease-in-out; } 
+@keyframes badgePulseAgent { 0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); } 50% { box-shadow: 0 0 20px rgba(245, 158, 11, 1); border-color: #fbbf24; } } 
+.badge-gold { color: #fef08a; background-color: rgba(66, 32, 6, 0.4); border: 1px solid #eab308; box-shadow: 0 0 10px rgba(234, 179, 8, 0.4); } 
+.badge-shimmer { position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent); transform: skewX(-20deg); animation: shimmerAnim 2.5s infinite; } 
+@keyframes shimmerAnim { 0% { left: -100%; } 100% { left: 200%; } } 
+
+/* 全局 TG 悬浮按钮样式 */
+.tg-float-btn { position: fixed; bottom: 24px; right: 24px; width: 60px; height: 60px; background: linear-gradient(135deg, #24A1DE 0%, #1c85b8 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 99999; box-shadow: 0 4px 20px rgba(36, 161, 222, 0.4); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); cursor: pointer; text-decoration: none; }
+.tg-float-btn:hover { transform: scale(1.1) rotate(5deg); box-shadow: 0 8px 30px rgba(36, 161, 222, 0.6); }
+.tg-icon-wrapper { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; }
+.tg-badge { position: absolute; top: -10px; right: -10px; background: #22c55e; color: white; font-size: 9px; font-weight: 900; padding: 2px 6px; border-radius: 20px; text-transform: uppercase; border: 2px solid #0f172a; }
+.tg-pulse { position: absolute; width: 100%; height: 100%; background: #24A1DE; border-radius: 50%; z-index: 1; opacity: 0.6; animation: tgPulse 2s infinite; }
+@keyframes tgPulse { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(1.8); opacity: 0; } }
+@media (max-width: 768px) { .tg-float-btn { bottom: 80px; right: 20px; width: 50px; height: 50px; } .tg-badge { top: -8px; right: -8px; font-size: 8px; padding: 1px 4px;} .x-badge { font-size: 9px; padding: 2px 6px; } }
