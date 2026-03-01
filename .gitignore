@@ -92,3 +92,6 @@ client/node_modules/
 client/dist/
 *.bak*
 *.tmp
+*.sqlite
+*.db
+*.sql
