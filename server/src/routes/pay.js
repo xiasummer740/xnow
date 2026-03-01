@@ -32,6 +32,7 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
         const price = actualPrice.toFixed(2);
         
         const domain = getDomain(req);
+        // BufPay 不校验 alpha_dash，所以可以保留小数点
         const order_id = `BUF_${pay_type}_${amountFloat.toFixed(2)}_${Date.now()}`;
         const name = `${conf.site_name || 'XNOW'}充值`;
         const order_uid = String(req.user.id);
@@ -60,18 +61,30 @@ router.post('/usd', authenticate, async (req, res) => {
     try {
         const configs = await Config.findAll({ where: { key: ['cryptomus_id', 'cryptomus_key'] } });
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
-        if (!conf.cryptomus_id) return res.json({ status: 'error', message: 'USDT Config Missing' });
+        if (!conf.cryptomus_id || !conf.cryptomus_key) return res.json({ status: 'error', message: 'USDT商户参数未配置' });
 
         const domain = getDomain(req);
         const amountFloat = parseFloat(amount);
-        const order_id = `USDT_${amountFloat.toFixed(2)}_${Date.now()}`;
+        
+        // 💡 核心修复：把小数点 . 替换为 d，避免触发 Cryptomus 的 alpha_dash 报错！
+        const safeAmountStr = amountFloat.toFixed(2).replace('.', 'd');
+        const order_id = `USDT_${safeAmountStr}_${Date.now()}`;
         
         const payload = { amount: String(amount), currency: 'USD', order_id: order_id, url_return: `${domain}/recharge`, url_callback: `${domain}/api/pay/notify/cryptomus`, is_payment_multiple: true, lifetime: 3600, to_currency: 'USDT' };
         const sign = cryptomusSign(payload, conf.cryptomus_key);
+        
         const response = await axios.post('https://api.cryptomus.com/v1/payment', payload, { headers: { 'merchant': conf.cryptomus_id, 'sign': sign, 'Content-Type': 'application/json' } });
-        if (response.data?.result?.url) res.json({ status: 'success', url: response.data.result.url });
-        else res.json({ status: 'error', message: 'Failed' });
-    } catch (e) { res.json({ status: 'error', message: 'Cryptomus Error' }); }
+        
+        if (response.data?.result?.url) {
+            res.json({ status: 'success', url: response.data.result.url });
+        } else {
+            res.json({ status: 'error', message: '网关未返回支付链接' });
+        }
+    } catch (e) { 
+        const exactError = e.response?.data?.message || e.message || '未知网关错误';
+        console.error('❌ [Cryptomus API Error Detailed]:', e.response?.data || exactError);
+        res.json({ status: 'error', message: `网关阻断: ${exactError} (请检查域名或密钥)` }); 
+    }
 });
 
 router.get('/status', authenticate, async (req, res) => {
@@ -135,7 +148,8 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
         if (orderId.startsWith('BUF_') && parts.length >= 4) {
             realAddAmount = parseFloat(parts[2]); 
         } else if (orderId.startsWith('USDT_') && parts.length >= 3) {
-            realAddAmount = parseFloat(parts[1]);
+            // 💡 核心修复：把 d 还原回小数点 . 以便正确入账
+            realAddAmount = parseFloat(parts[1].replace('d', '.'));
         }
         
         const user = await User.findByPk(userId, { transaction: t });
@@ -148,7 +162,6 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
                 type: prefix, description: `${prefix} - ${sourceDesc} [单号:${orderId}]`
             }, { transaction: t });
 
-            // 💡 核心强化：TG 增加详尽的用户画像
             const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
             sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n📧 <b>邮箱:</b> ${user.email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(user.balance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);
         }

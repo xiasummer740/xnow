@@ -19,19 +19,18 @@ import transactionsRoutes from './routes/transactions.js';
 dotenv.config();
 const app = express();
 
-app.set('trust proxy', true);
+// 💡 核心修复：不再使用 true，只信任第一跳 (Nginx)，彻底消除 Rate Limit 报错
+app.set('trust proxy', 1);
 
-// 💡 1. 核心注入：挂载 Helmet 安全响应头
 app.use(helmet({
-  crossOriginResourcePolicy: false, // 允许加载跨域图片
-  contentSecurityPolicy: false,     // 避免阻断前端内联脚本
-  frameguard: false                 // 允许 iframe，避免阻断第三方支付网关跳转
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: false,    
+  frameguard: false                 
 }));
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// 💡 2. 核心注入：全局防 CC 基础限流 (每 15 分钟 2000 次请求)
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 2000,
@@ -39,18 +38,15 @@ const globalLimiter = rateLimit({
 });
 app.use('/api/', globalLimiter);
 
-// 💡 3. 核心注入：高危接口专属防爆破限流 (每 15 分钟 30 次请求)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { status: 'error', message: '操作过于频繁，系统已触发防爆破与防刷单护盾' }
 });
-// 仅对高危操作实行死锁限流
 app.use('/api/login', authLimiter);
 app.use('/api/send-code', authLimiter);
 app.use('/api/register', authLimiter);
 
-// 挂载业务路由
 app.use('/api', authRoutes); 
 app.use('/api/user', userRoutes); 
 app.use('/api/services', servicesRoutes); 
@@ -64,10 +60,6 @@ const initDatabase = async () => {
   try {
     await sequelize.sync({ alter: true });
     
-    // 💡 4. 核心清洗：彻底移除旧版写死 id=0 的发霉逻辑，完全拥抱无痕虚拟影子冷启动机制！
-    // 此时数据库干干净净，首个用户注册将自动通过 auth.js 被提权为至尊管理
-    
-    // 确保数据库中有基础系统配置
     const defaultConfigCount = await Config.count();
     if (defaultConfigCount === 0) {
       await Config.bulkCreate([ 
