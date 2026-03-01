@@ -5,29 +5,20 @@
 ![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-Sequelize-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Telegram](https://img.shields.io/badge/Telegram_Bot_Engine-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)
 
 XNOW PRO 是一款专为**资源分销、API 聚合聚合、全自动化发卡与代刷**场景打造的现代化 SaaS 级开源平台。
-采用前后端分离架构，内置极具黑客与二次元风格的精美 UI 交互，搭载高强度的安全限流装甲与“影子账户”无痕冷启动机制，助您一键部署，即刻开启商业化盈利。
-
----
-
-## ✨ 核心特性 (Core Features)
-
-- 🛡️ **SaaS 级无痕冷启动**：系统首次部署零配置，通过虚空“影子账户”拦截登录，首位注册用户自动加冕为「至尊管理员」并自毁影子通道。
-- 🤖 **全场景 Telegram 超强引擎**：异步非阻塞式推送。新用户注册、资金入账、商品下单、后台提权等全链路监控，精准附带 UID、中文身份、防脱敏回溯单号。
-- 💳 **多通道极速支付网关**：内置 BufPay (支付宝/微信) 与 Cryptomus (USDT) 聚合支付。智能计算 5% 通道费并实现隐写本金入账，防篡改防漏单。
-- 📊 **军工级资金流水大盘**：每一次余额变动均带事务级 (Transaction) 锁，后台溯源精准到微秒，用户端智能脱敏文案呈现（例如“系统福利赠送”）。
-- 🎨 **顶级交互体验**：纯 CSS 手绘 3D 卡哇伊客服交互气泡、二次元引导箭头、USDT 充值全屏响应式 Lightbox（灯箱）等高级 UI 质感体验。
-- 🔒 **企业级安全铠甲**：深度集成 Helmet 安全头、防 XSS 注入，以及针对注册、登录的 15 分钟/30 次超强 CC 防爆破限流锁。
+拒绝繁琐配置，内置**引导式一键安装引擎**，小白也能在 1 分钟内完成部署，即刻开启商业化盈利。
 
 ---
 
 ## 📂 核心目录结构及详细释义 (Project Structure)
 
 ~~~text
-/var/www/xnow/
-├── client/                 # 前端 Vue3 + Vite 项目目录 (基于 Composition API)
+/xnow/
+├── install.sh              # 🟢 【入口】傻瓜式引导部署脚本 (一键建库、编译、Nginx、SSL)
+├── README.md               # 项目部署与架构说明书 (You are here)
+│
+├── client/                 # 🔵 前端 Vue3 + Vite 项目目录 (基于 Composition API)
 │   ├── src/
 │   │   ├── assets/         # 静态资源 (Logo, 自定义字体, CSS 量子背景样式)
 │   │   ├── components/     # 全局复用组件库
@@ -41,77 +32,82 @@ XNOW PRO 是一款专为**资源分销、API 聚合聚合、全自动化发卡�
 │   │   ├── App.vue         # 前端根组件 (包含 3D 卡哇伊互动客服组件、量子公式漂浮背景)
 │   │   └── main.js         # 前端应用入口文件、i18n 多语言架构挂载点
 │   ├── index.html          # HTML 渲染骨架模板
-│   ├── package.json        # 前端依赖配置 (Vite, Vue, Pinia, Tailwind 等)
+│   ├── package.json        # 前端依赖配置
 │   └── vite.config.js      # Vite 构建引擎与反向代理配置
 │
-├── server/                 # 后端 Node.js + Express 项目目录 (ES6 Modules)
-│   ├── src/
-│   │   ├── config/
-│   │   │   └── database.js # MySQL 数据库连接池与 Sequelize 引擎初始化
-│   │   ├── middleware/
-│   │   │   └── auth.js     # JWT 安全鉴权与身份拦截中间件
-│   │   ├── models/         # 数据库 ORM 数据模型
-│   │   │   ├── index.js    # 模型关联与统一导出机制
-│   │   │   ├── User.js     # 用户架构 (四位数随机UID, Hash密码, 余额与等级池)
-│   │   │   ├── Order.js    # 历史订单监控模型
-│   │   │   ├── Transaction.js # 军工级资金流水追踪表 (带最新 balance 快照)
-│   │   │   └── Config.js   # 全站系统参数无级配置表 (KV 结构)
-│   │   ├── routes/         # 核心业务 API 路由出口
-│   │   │   ├── admin.js    # 管理员特权控制台 (提权、加扣款、修改全局倍率)
-│   │   │   ├── auth.js     # 身份验证集群 (注册验证码、高防爆破登录、万能测试兜底)
-│   │   │   ├── orders.js   # 订单流转中心 (计算折上折、对接上游接口、事务防扣空)
-│   │   │   ├── pay.js      # 支付回调大脑 (BufPay 加密验签、Crypto 轮询、本金隐写溯源)
-│   │   │   ├── public.js   # 免鉴权公共资源出口 (供前端拉取站点配置与教程图)
-│   │   │   ├── services.js # 上游商品价格同步接口
-│   │   │   └── transactions.js # 个人账单查询接口
-│   │   ├── utils/          # 全局工具箱
-│   │   │   ├── tgBot.js    # Telegram 机器人极速异步推送引擎
-│   │   │   ├── sync.js     # 原生正则全网爬虫，商品服务全量化同步
-│   │   │   └── orderSync.js# 定时任务：每分钟检查上游订单状态进行本地同步
-│   │   └── app.js          # 后端心脏入口 (挂载 Helmet 安全头、CC 防火墙限流、数据库自动自建)
-│   ├── .env.example        # 环境变量脱敏示例模板
-│   └── package.json        # 后端依赖配置
-│
-└── README.md               # 项目部署与架构说明书 (You are here)
+└── server/                 # 🔴 后端 Node.js + Express 项目目录 (ES6 Modules)
+    ├── src/
+    │   ├── config/
+    │   │   └── database.js # MySQL 数据库连接池与 Sequelize 引擎初始化
+    │   ├── middleware/
+    │   │   └── auth.js     # JWT 安全鉴权与身份拦截中间件
+    │   ├── models/         # 数据库 ORM 数据模型
+    │   │   ├── index.js    # 模型关联与统一导出机制
+    │   │   ├── User.js     # 用户架构 (四位数随机UID, Hash密码, 余额与等级池)
+    │   │   ├── Order.js    # 历史订单监控模型
+    │   │   ├── Transaction.js # 军工级资金流水追踪表 (带最新 balance 快照)
+    │   │   └── Config.js   # 全站系统参数无级配置表 (KV 结构)
+    │   ├── routes/         # 核心业务 API 路由出口
+    │   │   ├── admin.js    # 管理员特权控制台 (提权、加扣款、修改全局倍率)
+    │   │   ├── auth.js     # 身份验证集群 (注册验证码、高防爆破登录、万能测试兜底)
+    │   │   ├── orders.js   # 订单流转中心 (计算折上折、对接上游接口、事务防扣空)
+    │   │   ├── pay.js      # 支付回调大脑 (BufPay 加密验签、Crypto 轮询、本金隐写溯源)
+    │   │   ├── public.js   # 免鉴权公共资源出口 (供前端拉取站点配置与教程图)
+    │   │   ├── services.js # 上游商品价格同步接口
+    │   │   └── transactions.js # 个人账单查询接口
+    │   ├── utils/          # 全局工具箱
+    │   │   ├── tgBot.js    # Telegram 机器人极速异步推送引擎
+    │   │   ├── sync.js     # 原生正则全网爬虫，商品服务全量化同步
+    │   │   └── orderSync.js# 定时任务：每分钟检查上游订单状态进行本地同步
+    │   └── app.js          # 后端心脏入口 (挂载 Helmet 安全头、CC 防火墙限流、数据库自动自建)
+    ├── .env.example        # 环境变量脱敏示例模板
+    └── package.json        # 后端依赖配置
 ~~~
 
 ---
 
-## 🛠️ 部署向导 (Quick Start)
+## ✨ 核心特性 (Core Features)
 
-### 1. 环境准备
-- **Node.js**: v18.0+
-- **MySQL**: 8.0+
-- **PM2**: 用于后端持久化运行
+- 🛡️ **SaaS 级无痕冷启动**：系统首次部署零配置，通过虚空“影子账户”拦截登录，首位注册用户自动加冕为「至尊管理员」并自毁影子通道。
+- 🤖 **全场景 Telegram 超强引擎**：异步非阻塞式推送。新用户注册、资金入账、商品下单、后台提权等全链路监控。
+- 💳 **多通道极速支付网关**：内置 BufPay (支付宝/微信) 与 Cryptomus (USDT) 聚合支付。智能计算 5% 通道费并实现隐写本金入账。
+- 🎨 **顶级交互体验**：纯 CSS 手绘 3D 卡哇伊客服交互气泡、二次元引导箭头、USDT 充值全屏响应式 Lightbox（灯箱）等高级 UI 质感体验。
+- 🔒 **企业级安全铠甲**：深度集成 Helmet 安全头、防 XSS 注入，以及针对注册、登录的 15 分钟/30 次超强 CC 防爆破限流锁。
 
-### 2. 数据库配置
-进入 `server` 目录，将 `.env.example` 重命名为 `.env` 并填写您的数据库密码与任意生成的安全 JWT 密钥：
+---
+
+## 🛠️ 小白级一键部署向导 (Ultimate Quick Start)
+
+忘掉繁琐的配置，仅需一行命令，彻底解放双手！
+
+### 1. 环境要求
+确保您的 Ubuntu/Debian 服务器已安装了基础的运行环境：
+- Node.js (v18+)
+- MySQL (v8.0+)
+- Nginx & Certbot
+
+### 2. 下载并一键安装
+克隆代码并执行安装脚本，按照提示输入您的**域名**和**数据库密码**即可：
+
 ~~~bash
-cp server/.env.example server/.env
-nano server/.env
+git clone https://github.com/xiasummer740/xnow.git
+cd xnow
+bash install.sh
 ~~~
 
-### 3. 启动后端 (自动建库建表)
-后端内置 `sequelize.sync({ alter: true })`，无需手动导入 SQL 文件，启动即完成表结构扩容。
-~~~bash
-cd server
-npm install
-pm2 start src/app.js --name xnow-backend
-~~~
+🎉 **安装脚本将会自动完成：**
+1. 创建 MySQL 数据库。
+2. 生成高强度随机安全密钥 (`JWT_SECRET`) 并配置环境变量。
+3. 安装所有 Node.js 依赖并利用 PM2 启动后端防护引擎。
+4. 编译 Vue 前端页面资源。
+5. 生成 Nginx 反向代理配置，并**自动申请 HTTPS (SSL) 安全证书**。
 
-### 4. 编译前端
-~~~bash
-cd client
-npm install
-npm run build
-~~~
-编译产物位于 `client/dist`，请使用 Nginx 指向该目录，并配置 `/api` 反向代理至后端 `3000` 端口。
-
-### 5. 💡 SaaS 影子冷启动 (非常重要)
-项目刚刚部署完毕时，数据库中没有任何用户！
-1. 前往登录页，直接输入账号：`admin`，密码：`admin123` 即可触发「影子账户」进入管理后台配置 SMTP、支付网关等参数。
-2. 配置完成后退出，到注册页面正常注册您的第一个手机号。该手机号将被系统永久赋予 `super_admin`（至尊管理员，且 UID 为 1）权限。
-3. 此时，`admin/admin123` 影子后门将自动自毁，确保系统极致安全！
+### 3. 💡 SaaS 影子冷启动 (初始化系统)
+部署完成后，请在浏览器打开您的域名：
+1. 直接输入初始极密账号：`admin`，密码：`admin123` 登录系统。
+2. 进入管理后台，配置您的 SMTP 邮箱、支付网关、TG 机器人等参数。
+3. 退出系统，来到注册页面，**使用您自己的手机号注册首个真实账号**。
+4. ⚡️ **系统判定机制生效**：您的手机号将被永久赋予 `super_admin`（至尊管理员）权限！同时，先前的 `admin` 影子后门将瞬间永久销毁，保证系统绝对安全！
 
 ---
 
