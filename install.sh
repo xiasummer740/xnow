@@ -1,132 +1,108 @@
 #!/bin/bash
 
-# =================================================================
-# XNOW PRO - 裸机全自动化 SaaS 部署向导 (Bare-Metal Auto Installer)
-# =================================================================
-export DEBIAN_FRONTEND=noninteractive
+# -----------------------------------------------------------
+# XNOW Ultimate Automated Deployment Engine
+# Compatible with Cloudflare (Orange Cloud) & Multi-Panels
+# -----------------------------------------------------------
 
-echo -e "\033[36m=================================================================\033[0m"
-echo -e "\033[1;33m✨ 欢迎使用 XNOW PRO 裸机级全自动部署向导 ✨\033[0m"
-echo -e "\033[36m=================================================================\033[0m"
-echo "本脚本将自动为您安装 Node.js, MySQL, Nginx, Certbot 并完成全栈编译！"
-echo ""
+echo -e "\n🚀 欢迎使用 XNOW 全自动裸机部署引擎\n"
+read -p "👉 请输入您的网站域名 (如 xnow.example.com): " DOMAIN
+read -p "👉 请设置一个安全的 MySQL 数据库密码: " DB_PASS
 
-read -p "🌐 请输入您的前端绑定域名 (例如: www.abc.com): " FRONT_DOMAIN
-read -p "🔑 请设置 MySQL 数据库的 root 密码 (系统将自动安装并配置): " DB_PASS
+echo "⏳ 正在初始化环境，这可能需要几分钟..."
+apt update >/dev/null 2>&1
+apt install -y curl wget git nginx certbot python3-certbot-nginx mysql-server >/dev/null 2>&1
 
-echo ""
-echo -e "\033[1;32m🚀 正在挂载全自动化部署引擎，这可能需要 3-5 分钟，请耐心等待...\033[0m"
-echo ""
+echo "📦 正在部署 Node.js 与 PM2 进程守护..."
+curl -fsSL https://deb.nodesource.com/setup_18.x | bash - >/dev/null 2>&1
+apt install -y nodejs >/dev/null 2>&1
+npm install -g pm2 >/dev/null 2>&1
 
-# 1. 自动化安装基础环境
-echo "📦 [1/6] 正在更新系统包并安装核心底层环境 (Nginx, Git, Certbot)..."
-apt-get update -y -qq
-apt-get install -y -qq curl git nginx python3-certbot-nginx certbot
+echo "🗄️ 正在装配 MySQL 数据库引擎..."
+systemctl start mysql
+mysql -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS';"
+mysql -e "FLUSH PRIVILEGES;"
 
-# 2. 自动化安装 Node.js 与 PM2
-echo "🟢 [2/6] 正在安装 Node.js 环境与 PM2 守护进程..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
-apt-get install -y -qq nodejs
-npm install -g pm2 --silent
-
-# 3. 自动化安装与配置 MySQL
-echo "🐬 [3/6] 正在安装 MySQL 数据库引擎并配置权限..."
-apt-get install -y -qq mysql-server
-# 初始化 MySQL root 密码并授权
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_PASS}'; FLUSH PRIVILEGES;" 2>/dev/null || mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_PASS}'; FLUSH PRIVILEGES;"
-# 创建独立数据库
-mysql -u root -p"${DB_PASS}" -e "CREATE DATABASE IF NOT EXISTS xnow_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-
-# 4. 自动化生成安全环境变量
-echo "🔒 [4/6] 正在生成高强度安全环境变量..."
-JWT_SECRET=$(openssl rand -hex 32)
-cat << ENV_EOF > server/.env
+echo "⚙️ 正在构建后端服务基石..."
+cd /var/www/xnow/server
+cat << ENV_EOF > .env
 DB_HOST=127.0.0.1
 DB_USER=root
 DB_PASS=$DB_PASS
 DB_NAME=xnow_db
-JWT_SECRET=$JWT_SECRET
+JWT_SECRET=$(openssl rand -hex 32)
 PORT=3000
 ENV_EOF
-
-# 5. 自动化安装依赖与构建
-echo "⚙️  [5/6] 正在安装底层依赖并进行全栈超融合编译..."
-cd server
-npm install --silent
-pm2 restart xnow-backend >/dev/null 2>&1 || pm2 start src/app.js --name xnow-backend >/dev/null 2>&1
+npm install >/dev/null 2>&1
+pm2 start src/app.js --name xnow-backend >/dev/null 2>&1
 pm2 save >/dev/null 2>&1
-cd ../client
-npm install --silent
-npm run build --silent
-cd ..
+pm2 startup >/dev/null 2>&1
 
-# 6. 自动化 Nginx 挂载、CF适配与 SSL 证书申请
-echo "🌐 [6/6] 正在配置 Nginx 网站路由与免费 SSL 安全证书..."
+echo "🎨 正在触发 Vite 极速超融合前端编译..."
+cd /var/www/xnow/client
+npm install >/dev/null 2>&1
+npm run build >/dev/null 2>&1
 
-# 💡 核心增强：内嵌 Cloudflare 真实 IP 穿透白名单配置
-echo "☁️  [Extra] 注入 Cloudflare 真实 IP 穿透适配器..."
-cat << 'CF_EOF' > /etc/nginx/conf.d/cloudflare.conf
-# Cloudflare IPv4 & IPv6 ranges
-set_real_ip_from 173.245.48.0/20;
-set_real_ip_from 103.21.244.0/22;
-set_real_ip_from 103.22.200.0/22;
-set_real_ip_from 103.31.4.0/22;
-set_real_ip_from 141.101.64.0/18;
-set_real_ip_from 108.162.192.0/18;
-set_real_ip_from 190.93.240.0/20;
-set_real_ip_from 188.114.96.0/20;
-set_real_ip_from 197.234.240.0/22;
-set_real_ip_from 198.41.128.0/17;
-set_real_ip_from 162.158.0.0/15;
-set_real_ip_from 104.16.0.0/13;
-set_real_ip_from 104.24.0.0/14;
-set_real_ip_from 172.64.0.0/13;
-set_real_ip_from 131.0.72.0/22;
-set_real_ip_from 2400:cb00::/32;
-set_real_ip_from 2606:4700::/32;
-set_real_ip_from 2803:f800::/32;
-set_real_ip_from 2405:b500::/32;
-set_real_ip_from 2405:8100::/32;
-set_real_ip_from 2a06:98c0::/29;
-set_real_ip_from 2c0f:f248::/32;
-real_ip_header CF-Connecting-IP;
-CF_EOF
+echo "🛡️ 正在配置混合型双轨 SSL 证书防御体系..."
+mkdir -p /etc/nginx/ssl
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/$DOMAIN.key -out /etc/nginx/ssl/$DOMAIN.crt \
+  -subj "/C=US/ST=CA/L=City/O=XNOW/CN=$DOMAIN" 2>/dev/null
 
-NGINX_CONF="/etc/nginx/sites-available/xnow"
-cat << NGINX_EOF > $NGINX_CONF
+cat << NGINX_TMP > /etc/nginx/sites-available/$DOMAIN
+server { listen 80; server_name $DOMAIN; root /var/www/xnow/client/dist; }
+NGINX_TMP
+ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+systemctl restart nginx
+
+certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN 2>/dev/null
+
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+else
+    SSL_CERT="/etc/nginx/ssl/$DOMAIN.crt"
+    SSL_KEY="/etc/nginx/ssl/$DOMAIN.key"
+fi
+
+cat << NGINX_FINAL > /etc/nginx/sites-available/$DOMAIN
 server {
     listen 80;
-    server_name $FRONT_DOMAIN;
-    root $(pwd)/client/dist;
-    index index.html;
+    server_name $DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+server {
+    listen 443 ssl http2;
+    server_name $DOMAIN;
+
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
 
     location / {
+        root /var/www/xnow/client/dist;
+        index index.html;
         try_files \$uri \$uri/ /index.html;
     }
 
     location /api/ {
         proxy_pass http://127.0.0.1:3000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
-NGINX_EOF
+NGINX_FINAL
 
-ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-systemctl reload nginx
+systemctl restart nginx
 
-# 申请 SSL
-echo "🛡️ 正在与 Let's Encrypt 通信，签发军工级 HTTPS 证书..."
-certbot --nginx -d $FRONT_DOMAIN --non-interactive --agree-tos -m admin@$FRONT_DOMAIN --redirect >/dev/null 2>&1
-
-echo -e "\033[36m=================================================================\033[0m"
-echo -e "\033[1;32m✅ 部署大功告成！XNOW PRO 商业级架构已在您的服务器完美运行！\033[0m"
-echo -e "\033[36m=================================================================\033[0m"
-echo -e "🔗 访问地址: \033[1;34mhttps://$FRONT_DOMAIN\033[0m"
-echo -e "👤 初始管理员账号: \033[1;33madmin\033[0m"
-echo -e "🔑 初始管理员密码: \033[1;33madmin123\033[0m"
-echo -e "\033[1;31m⚠️  安全警告：请立即登录系统，注册您的专属账号！\033[0m"
-echo -e "\033[1;31m⚠️  首个注册账号将自动封神为至尊管理员，此虚拟影子账号将永久销毁！\033[0m"
-echo -e "\033[36m=================================================================\033[0m"
+echo -e "\n🎉 XNOW 系统部署完毕！"
+echo "------------------------------------------------------"
+echo "🌐 访问地址: https://$DOMAIN"
+echo "⚠️  若您在 Cloudflare 开启了小黄云(Proxy)，请确保其 SSL/TLS 加密模式设置为 【Full (完全)】，切勿使用 Strict(严格)！"
+echo "------------------------------------------------------"
