@@ -13,8 +13,10 @@ const User = sequelize.define('User', {
   vip_expire_at: { type: DataTypes.DATE, allowNull: true },
   register_ip: { type: DataTypes.STRING(45), allowNull: true },
   last_login_ip: { type: DataTypes.STRING(45), allowNull: true },
-  // 💡 裂变系统新增字段
   inviter_id: { type: DataTypes.INTEGER, allowNull: true },
-  total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 }
+  total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
+  // 💡 WAF 风控新增字段
+  is_banned: { type: DataTypes.BOOLEAN, defaultValue: false },
+  ban_reason: { type: DataTypes.STRING(255), allowNull: true }
 });
 export default User;

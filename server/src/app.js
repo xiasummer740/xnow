@@ -1,3 +1,4 @@
+import { wafMiddleware } from './middleware/waf.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -18,6 +19,7 @@ import transactionsRoutes from './routes/transactions.js';
 
 dotenv.config();
 const app = express();
+app.use(wafMiddleware);
 
 // 💡 核心修复：不再使用 true，只信任第一跳 (Nginx)，彻底消除 Rate Limit 报错
 app.set('trust proxy', 1);

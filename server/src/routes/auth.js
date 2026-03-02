@@ -55,7 +55,6 @@ router.post('/send-code', async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     global.verificationCodes.set(email, { code, expires: Date.now() + 3 * 60 * 1000 });
 
-    // 💡 终极修复：使用纯 CSS 渲染的网站标志，无视一切邮件客户端屏蔽策略！
     const cssLogo = `
       <div style="text-align: center; margin-bottom: 35px;">
         <div style="display: inline-block; padding: 3px; background: linear-gradient(135deg, #fbbf24, #d97706); border-radius: 14px; box-shadow: 0 10px 25px rgba(245, 158, 11, 0.3);">
@@ -71,17 +70,13 @@ router.post('/send-code', async (req, res) => {
 
     const htmlTemplate = `
     <div style="max-width: 600px; margin: 0 auto; background: #0f172a; padding: 40px; border-radius: 16px; border: 1px solid #334155; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-      
       ${cssLogo}
-
       <h2 style="color: #f8fafc; text-align: center; font-weight: 600; letter-spacing: 1px;">安全身份验证</h2>
       <p style="color: #94a3b8; text-align: center; font-size: 14px; line-height: 1.6;">您正在尝试进行注册或登录操作，这是您的专属验证码：</p>
-      
       <div style="background: #1e293b; padding: 20px; border-radius: 12px; text-align: center; margin: 30px 0; border: 1px dashed #475569; box-shadow: inset 0 4px 6px rgba(0,0,0,0.3);">
         <span style="font-size: 40px; font-weight: 900; color: #fbbf24; letter-spacing: 10px;">${code}</span>
       </div>
       <p style="color: #ef4444; text-align: center; font-size: 12px; font-weight: bold;">⚠️ 验证码有效期为 3 分钟，请勿将此码泄露给任何人！</p>
-      
       <div style="background: linear-gradient(145deg, rgba(251,191,36,0.1), rgba(245,158,11,0.02)); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 12px; padding: 25px; margin-top: 40px;">
         <h3 style="color: #fbbf24; text-align: center; margin-top: 0; margin-bottom: 20px; font-size: 18px; letter-spacing: 1px;">💎 升级至尊代理，解锁三大财富特权！</h3>
         <div style="margin-bottom: 16px;">
@@ -97,7 +92,6 @@ router.post('/send-code', async (req, res) => {
           <span style="color: #cbd5e1; font-size: 13px; line-height: 1.5; display: block;">普通用户推广仅享5%佣金，升级代理瞬间翻倍至 <strong style="color:#34d399; font-size: 14px;">10%</strong>！下线充值，佣金全自动秒入您的金库，上不封顶！</span>
         </div>
       </div>
-
       <hr style="border: 0; border-top: 1px solid #334155; margin: 30px 0;" />
       <p style="color: #64748b; font-size: 11px; text-align: center; line-height: 1.5;">此邮件由系统自动发送，请勿直接回复。<br/>&copy; ${new Date().getFullYear()} ${conf.site_name || 'System'}. All rights reserved.</p>
     </div>`;
@@ -158,6 +152,13 @@ router.post('/login', async (req, res) => {
     }
     const user = await User.findOne({ where: { phone } });
     if (!user || !(await bcrypt.compare(password, user.password_hash))) return res.status(401).json({ status: 'error', message: '账号不存在或密码错误' });
+    
+    // 💡 WAF 核心防御：如果该账号被管理员封禁，直接拒绝登录并上报电报机器人
+    if (user.is_banned) {
+        sendTgMessage(`⚠️ <b>[WAF 拦截] 封禁账号尝试登录</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n🌐 <b>IP:</b> <code>${getRealIp(req)}</code>\n🛑 <b>封禁原因:</b> ${user.ban_reason || '系统风控拦截'}`);
+        return res.status(403).json({ status: 'error', message: `账号已被封禁: ${user.ban_reason || '系统风控拦截'}` });
+    }
+
     user.last_login_ip = getRealIp(req);
     await user.save();
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });

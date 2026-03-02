@@ -32,6 +32,7 @@ router.get('/dashboard', authenticate, async (req, res) => {
       } catch(e) {}
     }
 
+    // findAll 会自动携带包括 is_banned 等所有新增字段
     const users = await User.findAll({ limit: 50, order: [['created_at', 'DESC']] });
     const orders = await Order.findAll({ limit: 50, order: [['created_at', 'DESC']] });
     const txs = await Transaction.findAll({ limit: 50, order: [['created_at', 'DESC']] });
@@ -105,38 +106,50 @@ router.post('/user/update', authenticate, async (req, res) => {
   }
 });
 
-// 💡 新增：管理员强制删除/注销用户核爆接口
-router.post('/user/delete', authenticate, async (req, res) => {
+// 💡 核心风控：管理员控制用户封禁状态
+router.post('/user/ban', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
-  const { userId } = req.body;
-  
+  const { userId, reason } = req.body;
   try {
     const targetUser = await User.findByPk(userId);
     if (!targetUser) return res.status(404).json({ status: 'error', message: '目标用户不存在' });
-    
-    // 风控校验：不能删自己
-    if (String(targetUser.id) === String(req.user.id)) return res.status(403).json({ status: 'error', message: '操作拒绝：您不能注销自己！' });
-    
-    // 风控校验：admin 不能删 admin 和 super_admin。super_admin 不能删 super_admin。
+
+    if (String(targetUser.id) === String(req.user.id)) return res.status(403).json({ status: 'error', message: '操作拒绝：您不能封禁自己！' });
+    if (targetUser.role === 'super_admin') return res.status(403).json({ status: 'error', message: '操作拒绝：至尊管理员受到系统底层保护，绝对免疫封禁！' });
     if (['admin', 'super_admin'].includes(targetUser.role) && req.user.role !== 'super_admin') {
-       return res.status(403).json({ status: 'error', message: '越权拦截：普通管理员无法删除同级或高级账号' });
+       return res.status(403).json({ status: 'error', message: '越权拦截：普通管理员无法封禁同级或高级账号' });
     }
-    if (targetUser.role === 'super_admin') {
-       return res.status(403).json({ status: 'error', message: '极度危险：至尊管理员账号受到底层保护，无法被任何人删除！' });
-    }
+
+    targetUser.is_banned = !targetUser.is_banned;
+    targetUser.ban_reason = targetUser.is_banned ? (reason || '管理员强制封禁') : null;
+    await targetUser.save();
+
+    const action = targetUser.is_banned ? '🚫 强制封禁' : '✅ 解除封禁';
+    sendTgMessage(`🛡️ <b>[风控中心] 账号状态变更</b>\n执行官: <code>UID ${req.user.id}</code>\n目标用户: <code>UID ${targetUser.id} (${targetUser.phone})</code>\n动作: ${action}\n原因: ${targetUser.ban_reason || '无'}`);
+
+    res.json({ status: 'success', message: `操作成功，该用户已被${targetUser.is_banned ? '强制封禁' : '解封'}` });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '操作失败' });
+  }
+});
+
+router.post('/user/delete', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
+  const { userId } = req.body;
+  try {
+    const targetUser = await User.findByPk(userId);
+    if (!targetUser) return res.status(404).json({ status: 'error', message: '目标用户不存在' });
+    if (String(targetUser.id) === String(req.user.id)) return res.status(403).json({ status: 'error', message: '操作拒绝：您不能注销自己！' });
+    if (['admin', 'super_admin'].includes(targetUser.role) && req.user.role !== 'super_admin') return res.status(403).json({ status: 'error', message: '越权拦截：普通管理员无法删除同级或高级账号' });
+    if (targetUser.role === 'super_admin') return res.status(403).json({ status: 'error', message: '极度危险：至尊管理员账号受到底层保护，无法被任何人删除！' });
 
     const ghostInfo = `🆔 UID: ${targetUser.id} | 📱 手机: ${targetUser.phone} | 💰 余额: ${targetUser.balance}`;
-
     await Transaction.destroy({ where: { user_id: targetUser.id } });
     await Order.destroy({ where: { user_id: targetUser.id } });
     await targetUser.destroy();
-
     sendTgMessage(`💥 <b>[管理操作] 执行死刑：账号抹除</b>\n执行官: <code>UID ${req.user.id}</code>\n被抹除的账号信息：\n${ghostInfo}`);
-
     res.json({ status: 'success', message: '已彻底抹除该用户及其产生的所有数据流水' });
-  } catch (e) {
-    res.status(500).json({ status: 'error', message: '删除失败，服务器异常' });
-  }
+  } catch (e) { res.status(500).json({ status: 'error', message: '删除失败，服务器异常' }); }
 });
 
 export default router;
