@@ -16,6 +16,24 @@ const getRealIp = (req) => {
   return ip === '::1' ? '127.0.0.1' : (ip || '未知IP');
 };
 
+router.get('/site-logo', async (req, res) => {
+  try {
+    const conf = await Config.findOne({ where: { key: 'site_logo' } });
+    if (conf && conf.value) {
+      if (conf.value.startsWith('http')) return res.redirect(conf.value);
+      if (conf.value.startsWith('data:image')) {
+        const matches = conf.value.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const imgBuffer = Buffer.from(matches[2], 'base64');
+          res.writeHead(200, { 'Content-Type': matches[1], 'Content-Length': imgBuffer.length, 'Cache-Control': 'public, max-age=86400' });
+          return res.end(imgBuffer);
+        }
+      }
+    }
+    res.redirect('/logo.png');
+  } catch (e) { res.redirect('/logo.png'); }
+});
+
 router.post('/send-code', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ status: 'error', message: '请输入接收邮箱' });
@@ -37,34 +55,56 @@ router.post('/send-code', async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     global.verificationCodes.set(email, { code, expires: Date.now() + 3 * 60 * 1000 });
 
-    const htmlTemplate = `
-    <div style="max-width: 600px; margin: 0 auto; background: #0f172a; padding: 40px; border-radius: 16px; border: 1px solid #334155; font-family: sans-serif;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #fbbf24; margin: 0; font-size: 28px; font-style: italic; letter-spacing: 2px;">${conf.site_name || 'XNOW'} <span style="font-size: 14px; border: 1px solid #fbbf24; padding: 2px 6px; border-radius: 12px; position: relative; top: -4px;">PRO</span></h1>
+    // 💡 终极修复：使用纯 CSS 渲染的网站标志，无视一切邮件客户端屏蔽策略！
+    const cssLogo = `
+      <div style="text-align: center; margin-bottom: 35px;">
+        <div style="display: inline-block; padding: 3px; background: linear-gradient(135deg, #fbbf24, #d97706); border-radius: 14px; box-shadow: 0 10px 25px rgba(245, 158, 11, 0.3);">
+          <div style="background-color: #0f172a; padding: 12px 28px; border-radius: 11px; border: 1px solid #334155;">
+            <h1 style="margin: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center;">
+              <span style="color: #ffffff; font-size: 32px; font-weight: 900; font-style: italic; letter-spacing: 3px;">${conf.site_name || 'XNOW'}</span>
+              <span style="background-color: #fbbf24; color: #000000; font-size: 13px; font-weight: 900; padding: 3px 8px; border-radius: 6px; margin-left: 10px; position: relative; top: -2px;">PRO</span>
+            </h1>
+          </div>
+        </div>
       </div>
-      <h2 style="color: #f8fafc; text-align: center; font-weight: 600;">安全身份验证</h2>
-      <p style="color: #94a3b8; text-align: center; font-size: 14px; line-height: 1.6;">您正在尝试进行关键操作，这是您的专属验证码：</p>
-      <div style="background: #1e293b; padding: 20px; border-radius: 12px; text-align: center; margin: 30px 0; border: 1px dashed #475569;">
-        <span style="font-size: 36px; font-weight: 900; color: #fbbf24; letter-spacing: 8px;">${code}</span>
+    `;
+
+    const htmlTemplate = `
+    <div style="max-width: 600px; margin: 0 auto; background: #0f172a; padding: 40px; border-radius: 16px; border: 1px solid #334155; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+      
+      ${cssLogo}
+
+      <h2 style="color: #f8fafc; text-align: center; font-weight: 600; letter-spacing: 1px;">安全身份验证</h2>
+      <p style="color: #94a3b8; text-align: center; font-size: 14px; line-height: 1.6;">您正在尝试进行注册或登录操作，这是您的专属验证码：</p>
+      
+      <div style="background: #1e293b; padding: 20px; border-radius: 12px; text-align: center; margin: 30px 0; border: 1px dashed #475569; box-shadow: inset 0 4px 6px rgba(0,0,0,0.3);">
+        <span style="font-size: 40px; font-weight: 900; color: #fbbf24; letter-spacing: 10px;">${code}</span>
       </div>
       <p style="color: #ef4444; text-align: center; font-size: 12px; font-weight: bold;">⚠️ 验证码有效期为 3 分钟，请勿将此码泄露给任何人！</p>
       
-      <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; padding: 20px; margin-top: 40px; text-align: center;">
-        <h3 style="color: #fbbf24; margin-top: 0; margin-bottom: 10px; font-size: 16px;">💎 升级至尊代理，解锁终极财富引擎！</h3>
-        <p style="color: #cbd5e1; font-size: 13px; line-height: 1.6; margin: 0;">
-          普通用户仅享 <strong>5%</strong> 推广返佣。<br/>
-          成为 <strong>👑 至尊代理</strong>，立享全站底价特权，且下线充值返佣暴涨至 <strong style="color:#10b981; font-size:16px;">10%</strong>！<br/>
-          <strong>邀请一人，双倍收益。您当老板，我们为您护航！</strong>
-        </p>
+      <div style="background: linear-gradient(145deg, rgba(251,191,36,0.1), rgba(245,158,11,0.02)); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 12px; padding: 25px; margin-top: 40px;">
+        <h3 style="color: #fbbf24; text-align: center; margin-top: 0; margin-bottom: 20px; font-size: 18px; letter-spacing: 1px;">💎 升级至尊代理，解锁三大财富特权！</h3>
+        <div style="margin-bottom: 16px;">
+          <strong style="color: #f8fafc; font-size: 15px; display: block; margin-bottom: 4px;">📉 1. 极致底价垄断</strong>
+          <span style="color: #cbd5e1; font-size: 13px; line-height: 1.5; display: block;">突破普通用户价格限制，享受全站千万商品骨折级拿货底价。单单省钱，利润空间彻底释放！</span>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <strong style="color: #f8fafc; font-size: 15px; display: block; margin-bottom: 4px;">🌐 2. API对接 & 独立建站</strong>
+          <span style="color: #cbd5e1; font-size: 13px; line-height: 1.5; display: block;">无条件开放开发者 API 权限。无缝对接货源，轻松搭建属于您的独立分站，做自己的庄家！</span>
+        </div>
+        <div>
+          <strong style="color: #10b981; font-size: 15px; display: block; margin-bottom: 4px;">💸 3. 10% 裂变暴利分润</strong>
+          <span style="color: #cbd5e1; font-size: 13px; line-height: 1.5; display: block;">普通用户推广仅享5%佣金，升级代理瞬间翻倍至 <strong style="color:#34d399; font-size: 14px;">10%</strong>！下线充值，佣金全自动秒入您的金库，上不封顶！</span>
+        </div>
       </div>
 
       <hr style="border: 0; border-top: 1px solid #334155; margin: 30px 0;" />
-      <p style="color: #64748b; font-size: 10px; text-align: center;">此邮件由系统自动发送，请勿直接回复。<br/>&copy; ${new Date().getFullYear()} System. All rights reserved.</p>
+      <p style="color: #64748b; font-size: 11px; text-align: center; line-height: 1.5;">此邮件由系统自动发送，请勿直接回复。<br/>&copy; ${new Date().getFullYear()} ${conf.site_name || 'System'}. All rights reserved.</p>
     </div>`;
 
     await transporter.sendMail({
       from: `"${conf.site_name || 'XNOW'} System" <${conf.smtp_email}>`,
-      to: email, subject: '【系统通知】安全验证码', html: htmlTemplate
+      to: email, subject: `【${conf.site_name || '系统'}】安全身份验证码`, html: htmlTemplate
     });
 
     res.json({ status: 'success', message: '验证码已极速送达您的邮箱' });
@@ -85,52 +125,25 @@ router.post('/register', async (req, res) => {
   const { phone, password, email, code, inviter_id } = req.body;
   const check = verifyCode(email, code);
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
-
   try {
     const existing = await User.findOne({ where: { phone } });
     if (existing) return res.status(400).json({ status: 'error', message: '该手机号已注册' });
-
     const realUserCount = await User.count({ where: { id: { [Op.gt]: 0 } } });
-    let assignedRole = 'user'; 
-    let initBalance = 0.00;
-    let finalUid;
-    
-    if (realUserCount === 0) {
-      assignedRole = 'admin'; 
-      initBalance = 99999.00;
-      finalUid = 1; 
-    } else {
-      while (true) {
-        const randId = Math.floor(1000 + Math.random() * 9000);
-        const checkId = await User.findByPk(randId);
-        if (!checkId && randId !== 1) { finalUid = randId; break; }
-      }
-    }
-
+    let assignedRole = 'user'; let initBalance = 0.00; let finalUid;
+    if (realUserCount === 0) { assignedRole = 'admin'; initBalance = 99999.00; finalUid = 1; } 
+    else { while (true) { const randId = Math.floor(1000 + Math.random() * 9000); const checkId = await User.findByPk(randId); if (!checkId && randId !== 1) { finalUid = randId; break; } } }
     let finalInviterId = null;
-    if (inviter_id) {
-        const inviter = await User.findByPk(inviter_id);
-        if (inviter) finalInviterId = inviter.id;
-    }
-
+    if (inviter_id) { const inviter = await User.findByPk(inviter_id); if (inviter) finalInviterId = inviter.id; }
     const password_hash = await bcrypt.hash(password, 10);
     const registerIp = getRealIp(req);
-    
     const newUser = await User.create({
-      id: finalUid, phone, email, password_hash, role: assignedRole, balance: initBalance,
-      register_ip: registerIp, inviter_id: finalInviterId, 
-      api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
+      id: finalUid, phone, email, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId, api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
     });
-
     global.verificationCodes.delete(email);
-
     const roleName = assignedRole === 'admin' ? '至尊管理员' : '黄金用户';
     sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${phone}</code>\n📧 <b>邮箱:</b> ${email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🤝 <b>引荐人:</b> ${finalInviterId ? 'UID '+finalInviterId : '无'}\n🌐 <b>IP:</b> <code>${registerIp}</code>`);
-
-    res.json({ status: 'success', message: realUserCount === 0 ? '全站首位【至尊管理员】注册成功！系统虚拟影子通道已永久销毁。' : '注册成功，欢迎加入。' });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: '服务器注册异常' });
-  }
+    res.json({ status: 'success', message: realUserCount === 0 ? '全站首位【至尊管理员】注册成功！' : '注册成功，欢迎加入。' });
+  } catch (err) { res.status(500).json({ status: 'error', message: '服务器注册异常' }); }
 });
 
 router.post('/login', async (req, res) => {
