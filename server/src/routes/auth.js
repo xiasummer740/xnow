@@ -24,14 +24,13 @@ router.post('/send-code', async (req, res) => {
     const configs = await Config.findAll({ where: { key: ['smtp_host', 'smtp_port', 'smtp_email', 'smtp_pass', 'site_name'] } });
     const conf = {}; configs.forEach(c => conf[c.key] = c.value);
 
-    // 💡 容错处理：如果冷启动阶段还未配置 SMTP，允许使用默认的万能验证码 '123456' 进行通过
     if (!conf.smtp_host || !conf.smtp_email || !conf.smtp_pass) {
       global.verificationCodes.set(email, { code: '123456', expires: Date.now() + 3 * 60 * 1000 });
-      return res.json({ status: 'success', message: '系统处于冷启动未配置邮件状态。已为您发放默认测试验证码: 123456' });
+      return res.json({ status: 'success', message: '系统未配置邮件状态，已发放默认测试验证码: 123456' });
     }
 
     const transporter = nodemailer.createTransport({
-      host: conf.smtp_host, port: parseInt(conf.smtp_port) || 465, secure: true,
+      host: conf.smtp_host, port: parseInt(conf.smtp_port) || 465, secure: (parseInt(conf.smtp_port) === 465),
       auth: { user: conf.smtp_email, pass: conf.smtp_pass }
     });
 
@@ -49,10 +48,16 @@ router.post('/send-code', async (req, res) => {
         <span style="font-size: 36px; font-weight: 900; color: #fbbf24; letter-spacing: 8px;">${code}</span>
       </div>
       <p style="color: #ef4444; text-align: center; font-size: 12px; font-weight: bold;">⚠️ 验证码有效期为 3 分钟，请勿将此码泄露给任何人！</p>
+      
       <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; padding: 20px; margin-top: 40px; text-align: center;">
-        <h3 style="color: #fbbf24; margin-top: 0; margin-bottom: 10px; font-size: 16px;">🚀 升级至尊代理，解锁财富密码！</h3>
-        <p style="color: #cbd5e1; font-size: 13px; line-height: 1.6; margin: 0;">成为 <strong>至尊代理</strong>，立享全站骨折级底价拿货特权！<br/>独家开放开发者 API 无缝对接，助您一键搭建专属分站。<br/><strong>您当老板，我们护航，开启您的自动化盈利时代！</strong></p>
+        <h3 style="color: #fbbf24; margin-top: 0; margin-bottom: 10px; font-size: 16px;">💎 升级至尊代理，解锁终极财富引擎！</h3>
+        <p style="color: #cbd5e1; font-size: 13px; line-height: 1.6; margin: 0;">
+          普通用户仅享 <strong>5%</strong> 推广返佣。<br/>
+          成为 <strong>👑 至尊代理</strong>，立享全站底价特权，且下线充值返佣暴涨至 <strong style="color:#10b981; font-size:16px;">10%</strong>！<br/>
+          <strong>邀请一人，双倍收益。您当老板，我们为您护航！</strong>
+        </p>
       </div>
+
       <hr style="border: 0; border-top: 1px solid #334155; margin: 30px 0;" />
       <p style="color: #64748b; font-size: 10px; text-align: center;">此邮件由系统自动发送，请勿直接回复。<br/>&copy; ${new Date().getFullYear()} System. All rights reserved.</p>
     </div>`;
@@ -77,7 +82,7 @@ const verifyCode = (email, inputCode) => {
 };
 
 router.post('/register', async (req, res) => {
-  const { phone, password, email, code } = req.body;
+  const { phone, password, email, code, inviter_id } = req.body;
   const check = verifyCode(email, code);
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
 
@@ -90,37 +95,37 @@ router.post('/register', async (req, res) => {
     let initBalance = 0.00;
     let finalUid;
     
-    // 💡 核心强化：判断是否首个用户注册，或者生成 4 位数随机 UID
     if (realUserCount === 0) {
       assignedRole = 'admin'; 
       initBalance = 99999.00;
-      finalUid = 1; // 第一位注册者永久固定为 UID 1，并尊享管理员
+      finalUid = 1; 
     } else {
-      // 随机生成不重复的 4 位数 (1000 - 9999)
       while (true) {
         const randId = Math.floor(1000 + Math.random() * 9000);
         const checkId = await User.findByPk(randId);
-        if (!checkId && randId !== 1) {
-          finalUid = randId;
-          break;
-        }
+        if (!checkId && randId !== 1) { finalUid = randId; break; }
       }
+    }
+
+    let finalInviterId = null;
+    if (inviter_id) {
+        const inviter = await User.findByPk(inviter_id);
+        if (inviter) finalInviterId = inviter.id;
     }
 
     const password_hash = await bcrypt.hash(password, 10);
     const registerIp = getRealIp(req);
     
     const newUser = await User.create({
-      id: finalUid, // 强制注入 UID
-      phone, email, password_hash, role: assignedRole, balance: initBalance,
-      register_ip: registerIp,
+      id: finalUid, phone, email, password_hash, role: assignedRole, balance: initBalance,
+      register_ip: registerIp, inviter_id: finalInviterId, 
       api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
     });
 
     global.verificationCodes.delete(email);
 
     const roleName = assignedRole === 'admin' ? '至尊管理员' : '黄金用户';
-    sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${phone}</code>\n📧 <b>邮箱:</b> ${email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🌐 <b>IP:</b> <code>${registerIp}</code>\n⌚ <b>时间:</b> ${new Date().toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai'})}`);
+    sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${phone}</code>\n📧 <b>邮箱:</b> ${email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🤝 <b>引荐人:</b> ${finalInviterId ? 'UID '+finalInviterId : '无'}\n🌐 <b>IP:</b> <code>${registerIp}</code>`);
 
     res.json({ status: 'success', message: realUserCount === 0 ? '全站首位【至尊管理员】注册成功！系统虚拟影子通道已永久销毁。' : '注册成功，欢迎加入。' });
   } catch (err) {
@@ -130,32 +135,18 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   const { phone, password } = req.body;
-  
   try {
-    // 💡 核心突破：SaaS 影子冷启动拦截
     if (phone === 'admin' && password === 'admin123') {
         const realCount = await User.count({ where: { id: { [Op.gt]: 0 } } });
         if (realCount === 0) {
-            // 数据库还是空的时，凭空捏造一个 JWT Token，无须入库！
             const token = jwt.sign({ id: 0, role: 'super_admin' }, process.env.JWT_SECRET, { expiresIn: '12h' });
-            return res.json({ 
-                status: 'success', 
-                message: '【系统冷启动】临时最高管理员已接入！', 
-                token, 
-                user: { id: 0, phone: 'admin', role: 'super_admin', balance: '0.00', api_key: 'sys_init_key' } 
-            });
-        } else {
-            return res.status(403).json({ status: 'error', message: '系统已成功完成初始化，临时影子账号已永久自毁封闭。' });
-        }
+            return res.json({ status: 'success', message: '【系统冷启动】临时最高管理员已接入！', token, user: { id: 0, phone: 'admin', role: 'super_admin', balance: '0.00', api_key: 'sys_init_key' } });
+        } else { return res.status(403).json({ status: 'error', message: '系统已成功完成初始化，临时影子账号已永久自毁封闭。' }); }
     }
-
     const user = await User.findOne({ where: { phone } });
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      return res.status(401).json({ status: 'error', message: '账号不存在或密码错误' });
-    }
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) return res.status(401).json({ status: 'error', message: '账号不存在或密码错误' });
     user.last_login_ip = getRealIp(req);
     await user.save();
-
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ status: 'success', message: '登录成功', token, user: { id: user.id, phone: user.phone, role: user.role, balance: user.balance, api_key: user.api_key } });
   } catch (err) { res.status(500).json({ status: 'error', message: '登录解析异常' }); }
@@ -165,11 +156,9 @@ router.post('/reset', async (req, res) => {
   const { phone, email, password, code } = req.body;
   const check = verifyCode(email, code); 
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
-  
   try {
     const user = await User.findOne({ where: { phone, email } });
     if (!user) return res.status(400).json({ status: 'error', message: '账号与安全邮箱不匹配' });
-    
     user.password_hash = await bcrypt.hash(password, 10);
     await user.save();
     global.verificationCodes.delete(email);

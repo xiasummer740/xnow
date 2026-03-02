@@ -17,11 +17,9 @@ const getDomain = (req) => {
 router.post('/rmb/sign', authenticate, async (req, res) => {
     const { pay_type, amount } = req.body;
     if (!['wechat', 'alipay'].includes(pay_type) || !amount || amount <= 0) return res.json({ status: 'error', message: '参数非法' });
-
     try {
         const configs = await Config.findAll({ where: { key: ['bufpay_id', 'bufpay_key', 'site_name'] } });
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
-
         const cleanBufId = (val) => { if (!val) return ''; const match = val.match(/\/(\d+)$/); if (match) return match[1]; return val.replace(/[^0-9]/g, ''); };
         const realBufId = cleanBufId(conf.bufpay_id);
         if (!realBufId || !conf.bufpay_key) return res.json({ status: 'error', message: '支付配置缺失' });
@@ -32,7 +30,6 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
         const price = actualPrice.toFixed(2);
         
         const domain = getDomain(req);
-        // BufPay 不校验 alpha_dash，所以可以保留小数点
         const order_id = `BUF_${pay_type}_${amountFloat.toFixed(2)}_${Date.now()}`;
         const name = `${conf.site_name || 'XNOW'}充值`;
         const order_uid = String(req.user.id);
@@ -65,8 +62,6 @@ router.post('/usd', authenticate, async (req, res) => {
 
         const domain = getDomain(req);
         const amountFloat = parseFloat(amount);
-        
-        // 💡 核心修复：把小数点 . 替换为 d，避免触发 Cryptomus 的 alpha_dash 报错！
         const safeAmountStr = amountFloat.toFixed(2).replace('.', 'd');
         const order_id = `USDT_${safeAmountStr}_${Date.now()}`;
         
@@ -75,15 +70,10 @@ router.post('/usd', authenticate, async (req, res) => {
         
         const response = await axios.post('https://api.cryptomus.com/v1/payment', payload, { headers: { 'merchant': conf.cryptomus_id, 'sign': sign, 'Content-Type': 'application/json' } });
         
-        if (response.data?.result?.url) {
-            res.json({ status: 'success', url: response.data.result.url });
-        } else {
-            res.json({ status: 'error', message: '网关未返回支付链接' });
-        }
+        if (response.data?.result?.url) res.json({ status: 'success', url: response.data.result.url });
+        else res.json({ status: 'error', message: '网关未返回支付链接' });
     } catch (e) { 
-        const exactError = e.response?.data?.message || e.message || '未知网关错误';
-        console.error('❌ [Cryptomus API Error Detailed]:', e.response?.data || exactError);
-        res.json({ status: 'error', message: `网关阻断: ${exactError} (请检查域名或密钥)` }); 
+        res.json({ status: 'error', message: `网关阻断，请联系管理员` }); 
     }
 });
 
@@ -115,7 +105,7 @@ router.get('/return/bufpay', async (req, res) => {
             if (localSign === sign) await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回');
         }
     } catch (e) {}
-    res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>支付成功</title><style>body { background: #0f172a; color: #34d399; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }</style></head><body><div style="text-align: center;"><svg style="width: 60px; height: 60px; margin: 0 auto 10px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><h2>支付成功，正在自动跳转...</h2></div><script>if (window.parent && window.parent !== window) { window.parent.postMessage({ type: 'pay_success' }, '*'); } else { window.location.href = '/recharge'; }</script></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>支付成功</title><style>body { background: #0f172a; color: #34d399; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }</style></head><body><h2>支付成功，正在自动跳转...</h2><script>if(window.parent!==window){window.parent.postMessage({type:'pay_success'},'*');}else{window.location.href='/recharge';}</script></body></html>`);
 });
 
 router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req, res) => {
@@ -148,7 +138,6 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
         if (orderId.startsWith('BUF_') && parts.length >= 4) {
             realAddAmount = parseFloat(parts[2]); 
         } else if (orderId.startsWith('USDT_') && parts.length >= 3) {
-            // 💡 核心修复：把 d 还原回小数点 . 以便正确入账
             realAddAmount = parseFloat(parts[1].replace('d', '.'));
         }
         
@@ -163,7 +152,30 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
             }, { transaction: t });
 
             const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
-            sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n📧 <b>邮箱:</b> ${user.email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(user.balance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);
+            sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(user.balance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);
+
+            // 💡 裂变引擎：阶梯式全自动提成计算
+            if (user.inviter_id) {
+                const inviter = await User.findByPk(user.inviter_id, { transaction: t });
+                if (inviter) {
+                    // 判断上级身份，agent/admin 享受 10%，否则 5%
+                    const rate = ['agent', 'admin', 'super_admin'].includes(inviter.role) ? 0.10 : 0.05;
+                    const commission = parseFloat((realAddAmount * rate).toFixed(2));
+                    
+                    if (commission > 0) {
+                        inviter.balance = (parseFloat(inviter.balance) + commission).toFixed(6);
+                        inviter.total_commission = (parseFloat(inviter.total_commission || 0) + commission).toFixed(6);
+                        await inviter.save({ transaction: t });
+                        
+                        await Transaction.create({
+                            user_id: inviter.id, phone: inviter.phone, amount: commission, balance: inviter.balance,
+                            type: '推广返佣', description: `下级(UID:${user.id})充值返佣`
+                        }, { transaction: t });
+
+                        sendTgMessage(`🎁 <b>推广返佣已发放</b>\n🆔 <b>上级 UID:</b> <code>${inviter.id}</code> (身份: ${inviter.role})\n💸 <b>入账金额:</b> ￥${commission.toFixed(2)} (级别红利 ${rate*100}%)\n🔗 <b>来源:</b> UID <code>${user.id}</code>`);
+                    }
+                }
+            }
         }
         await t.commit();
     } catch (e) { await t.rollback(); }

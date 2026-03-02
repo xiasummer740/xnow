@@ -40,11 +40,15 @@ const sendCode = async () => {
 const handleSubmit = async () => { 
   loading.value = true;
   try { 
-    // 彻底切断任何前端硬编码后门，所有请求必须打向 Node.js 后端进行真实校验！
+    // 💡 裂变系统：注册时附带缓存中的推广人 UID
+    if (mode.value === 'register') {
+        const cachedRef = localStorage.getItem('xnow_inviter_id');
+        if (cachedRef) form.value.inviter_id = cachedRef;
+    }
+
     const res = await fetch(`/api/${mode.value}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form.value) });
     const data = await res.json(); 
     
-    // 增加严格的 res.ok 判断，如果后端返回 400 或 401 走报错逻辑
     if (res.ok && data.status === 'success') { 
       uiStore.showToast(data.message || (appStore.lang === 'zh' ? '成功' : 'Success'), 'success');
       if (mode.value === 'login') { 
@@ -60,5 +64,15 @@ const handleSubmit = async () => {
   } 
   loading.value = false; 
 };
-onMounted(() => { appStore.fetchConfig(); });
+
+onMounted(() => { 
+  appStore.fetchConfig(); 
+  // 💡 裂变系统：页面加载时捕捉 URL 中的 ref 邀请码并存入本地
+  const urlParams = new URLSearchParams(window.location.search);
+  const refCode = urlParams.get('ref');
+  if (refCode) {
+    localStorage.setItem('xnow_inviter_id', refCode);
+    mode.value = 'register'; 
+  }
+});
 </script>

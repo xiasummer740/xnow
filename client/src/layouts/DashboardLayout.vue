@@ -7,6 +7,9 @@
         <router-link to="/order" @click="handleNav('/order')" active-class="bg-amber-400 text-slate-900 shadow-[0_0_15px_rgba(251,191,36,0.2)]" class="text-slate-400 hover:text-white hover:bg-slate-800 font-bold px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg><span>{{ appStore.t('menu_order') }}</span></router-link>
         <router-link to="/mass-order" @click="handleNav('/mass-order')" active-class="bg-slate-800 text-white" class="text-slate-400 hover:text-white hover:bg-slate-800 px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg><span>{{ appStore.t('menu_mass') }}</span></router-link>
         <router-link to="/history" @click="handleNav('/history')" active-class="bg-slate-800 text-white" class="text-slate-400 hover:text-white hover:bg-slate-800 px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span>{{ appStore.t('menu_history') }}</span></router-link>
+        
+        <router-link to="/affiliate" @click="handleNav('/affiliate')" active-class="bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]" class="text-slate-400 hover:text-white hover:bg-slate-800 font-bold px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer group"><span class="text-xl group-hover:scale-125 transition-transform drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]">🔥</span><span class="text-orange-400 font-black tracking-widest">{{ appStore.lang === 'zh' ? '推广赚钱' : 'Affiliate' }}</span></router-link>
+        
         <router-link to="/recharge" @click="handleNav('/recharge')" active-class="bg-slate-800 text-white" class="text-slate-400 hover:text-white hover:bg-slate-800 px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg><span>{{ appStore.t('menu_recharge') }}</span></router-link>
         <router-link to="/vip" @click="handleNav('/vip')" active-class="bg-slate-800 text-white" class="text-slate-400 hover:text-white hover:bg-slate-800 px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer"><svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg><span class="text-amber-500 font-medium">{{ appStore.t('menu_vip') }}</span></router-link>
         <router-link to="/api-doc" v-if="['admin', 'super_admin', 'agent'].includes(userStore.userInfo?.role)" @click="handleNav('/api-doc')" active-class="bg-slate-800 text-white" class="text-slate-400 hover:text-white hover:bg-slate-800 px-4 py-3 rounded-xl flex items-center space-x-3 transition cursor-pointer"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg><span class="text-blue-400 font-bold">{{ appStore.t('menu_api') || '开发者 API' }}</span></router-link>
@@ -24,7 +27,6 @@
           <div class="flex items-center space-x-1.5 md:space-x-3 text-slate-300">
             <span class="hidden lg:inline text-slate-400 text-xs">UID: {{ userStore.userInfo?.id || '--' }}</span>
             <span class="hidden md:inline font-bold text-xs">{{ userStore.userInfo?.phone || '未登录' }}</span>
-            
             <span v-if="userStore.userInfo?.role === 'super_admin'" class="x-badge badge-super"><span class="badge-shimmer"></span>{{ appStore.t('super_admin_badge') || '至尊管理员' }}</span>
             <span v-else-if="userStore.userInfo?.role === 'admin'" class="x-badge badge-admin"><span class="badge-shimmer"></span>{{ appStore.t('admin_badge') || '管理员' }}</span>
             <span v-else-if="userStore.userInfo?.role === 'agent'" class="x-badge badge-agent"><span class="badge-shimmer"></span>{{ appStore.t('agent_badge') || '代理' }}</span>
@@ -35,7 +37,6 @@
           
           <div class="relative flex items-center">
             <div v-if="isProfileMenuOpen" @click="isProfileMenuOpen = false" class="fixed inset-0 z-[90]"></div>
-            
             <button @click="isProfileMenuOpen = !isProfileMenuOpen" class="text-slate-400 hover:text-white transition pl-1 focus:outline-none flex items-center h-full relative z-[95]" title="设置/退出">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             </button>
@@ -90,19 +91,12 @@
         <div class="bg-slate-900 border-2 border-red-500/50 p-8 rounded-3xl shadow-[0_0_80px_rgba(239,68,68,0.4)] max-w-md w-full relative transform transition-all scale-100">
           <button @click="deleteModal.show = false" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
           <div class="text-center mb-6"><div class="text-6xl mb-4">☢️</div><h3 class="text-2xl font-black text-red-500 tracking-wider">警告：核爆注销</h3></div>
-          <p class="text-slate-300 text-sm mb-6 text-center leading-relaxed">
-            此操作将<span class="text-red-400 font-bold">永久抹除</span>您的账号、所有余额以及交易记录。数据无法恢复！
-          </p>
+          <p class="text-slate-300 text-sm mb-6 text-center leading-relaxed">此操作将<span class="text-red-400 font-bold">永久抹除</span>您的账号、所有余额以及交易记录。数据无法恢复！</p>
           <div class="space-y-4 mb-8">
-            <div class="bg-red-500/10 border border-red-500/30 p-4 rounded-xl text-center">
-              <span class="text-xs text-slate-400 block mb-2">请输入下方红字以确认执行：</span>
-              <span class="text-lg font-black text-red-500 tracking-widest select-none cursor-not-allowed">确认注销</span>
-            </div>
+            <div class="bg-red-500/10 border border-red-500/30 p-4 rounded-xl text-center"><span class="text-xs text-slate-400 block mb-2">请输入下方红字以确认执行：</span><span class="text-lg font-black text-red-500 tracking-widest select-none cursor-not-allowed">确认注销</span></div>
             <input type="text" v-model="deleteModal.confirmText" placeholder="请输入 确认注销" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500 transition font-mono text-center">
           </div>
-          <button @click="submitDeleteAccount" :disabled="deleteModal.confirmText !== '确认注销'" :class="['w-full font-black text-lg py-3.5 rounded-xl transition shadow-lg flex items-center justify-center space-x-2', deleteModal.confirmText === '确认注销' ? 'bg-red-600 hover:bg-red-500 text-white transform hover:-translate-y-1 shadow-[0_0_20px_rgba(239,68,68,0.6)]' : 'bg-slate-800 text-slate-500 cursor-not-allowed']">
-            <span>💀 立即抹除一切</span>
-          </button>
+          <button @click="submitDeleteAccount" :disabled="deleteModal.confirmText !== '确认注销'" :class="['w-full font-black text-lg py-3.5 rounded-xl transition shadow-lg flex items-center justify-center space-x-2', deleteModal.confirmText === '确认注销' ? 'bg-red-600 hover:bg-red-500 text-white transform hover:-translate-y-1 shadow-[0_0_20px_rgba(239,68,68,0.6)]' : 'bg-slate-800 text-slate-500 cursor-not-allowed']"><span>💀 立即抹除一切</span></button>
         </div>
       </div>
       
@@ -129,11 +123,8 @@ const handleLogout = async () => {
   } 
 };
 
-// 个人资料高级验证逻辑
 const profileModal = ref({ show: false, form: { current_password: '', email_code: '', phone: '', email: '', new_password: '', new_email_for_code: '' } });
-const countdown = ref(0);
-let timer = null;
-
+const countdown = ref(0); let timer = null;
 const openProfileModal = () => { 
   isProfileMenuOpen.value = false;
   profileModal.value.form = { current_password: '', email_code: '', phone: userStore.userInfo?.phone || '', email: userStore.userInfo?.email || '', new_password: '', new_email_for_code: '' };
@@ -141,40 +132,31 @@ const openProfileModal = () => {
 };
 
 const sendEmailCode = async () => {
-  if (!userStore.userInfo?.email && !profileModal.value.form.new_email_for_code) {
-      return uiStore.showToast('您尚未绑定邮箱，请填入邮箱地址', 'warning');
-  }
+  if (!userStore.userInfo?.email && !profileModal.value.form.new_email_for_code) return uiStore.showToast('您尚未绑定邮箱，请填入邮箱地址', 'warning');
   try {
     const res = await fetch('/api/user/send-profile-code', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
         body: JSON.stringify({ new_email: profileModal.value.form.new_email_for_code })
     });
     const json = await res.json();
     if (json.status === 'success') {
       uiStore.showToast('验证码已发送，请查收邮箱', 'success');
-      countdown.value = 60;
-      timer = setInterval(() => { countdown.value--; if(countdown.value <= 0) clearInterval(timer); }, 1000);
-    } else { uiStore.showToast(json.message || '发送失败，请确保后台已配置 SMTP 邮件服务', 'error'); }
+      countdown.value = 60; timer = setInterval(() => { countdown.value--; if(countdown.value <= 0) clearInterval(timer); }, 1000);
+    } else { uiStore.showToast(json.message || '发送失败，请确保后台已配置 SMTP', 'error'); }
   } catch (e) { uiStore.showToast('网络请求异常', 'error'); }
 };
 
 const submitProfileUpdate = async () => {
   if (!profileModal.value.form.current_password) return uiStore.showToast('必须输入当前登录密码！', 'error');
   if (!profileModal.value.form.email_code) return uiStore.showToast('必须输入邮箱验证码！', 'error');
-  
-  // 如果是第一次绑定邮箱，强制将 new_email_for_code 作为要保存的新邮箱
-  if (!userStore.userInfo?.email && profileModal.value.form.new_email_for_code && !profileModal.value.form.email) {
-      profileModal.value.form.email = profileModal.value.form.new_email_for_code;
-  }
+  if (!userStore.userInfo?.email && profileModal.value.form.new_email_for_code && !profileModal.value.form.email) profileModal.value.form.email = profileModal.value.form.new_email_for_code;
 
   try {
     const res = await fetch('/api/user/update-profile', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify(profileModal.value.form) });
     const json = await res.json();
     if (json.status === 'success') {
       uiStore.showToast('资料通过安全验证并更新成功！', 'success');
-      profileModal.value.show = false;
-      syncUserStatus();
+      profileModal.value.show = false; syncUserStatus();
       if (profileModal.value.form.new_password) {
         uiStore.showToast('密码已重置，请重新登录', 'warning');
         setTimeout(() => { userStore.logout(); window.location.href = '/'; }, 1500);
@@ -183,7 +165,6 @@ const submitProfileUpdate = async () => {
   } catch (e) { uiStore.showToast('网络请求异常', 'error'); }
 };
 
-// 账号注销逻辑
 const deleteModal = ref({ show: false, confirmText: '' });
 const openDeleteModal = () => { isProfileMenuOpen.value = false; deleteModal.value = { show: true, confirmText: '' }; };
 const submitDeleteAccount = async () => {

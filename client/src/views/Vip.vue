@@ -87,14 +87,17 @@
 
       <div class="relative group bg-gradient-to-b from-slate-800/80 to-slate-900/90 rounded-[2rem] p-1.5 border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 overflow-hidden shadow-xl hover:shadow-[0_0_50px_rgba(16,185,129,0.2)]">
         <div class="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"></div>
+        <div class="absolute -top-4 -right-4 bg-emerald-500 text-slate-900 text-xs font-black px-6 py-2 rounded-bl-3xl rounded-tr-xl shadow-lg rotate-12 z-20">
+          {{ appStore.lang === 'zh' ? '全自动赚钱' : 'Passive Income' }}
+        </div>
         <div class="h-full bg-slate-900 rounded-[1.8rem] p-8 relative z-10 flex flex-col items-center text-center">
-          <div class="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-full flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(16,185,129,0.5)] mb-6 transform group-hover:scale-110 transition-transform duration-500">⚡</div>
-          <h3 class="text-2xl font-black text-white mb-2 tracking-wide">{{ appStore.lang === 'zh' ? '专属通道 & 优先权' : 'Priority Queue' }}</h3>
-          <div class="text-emerald-400 font-black text-xl md:text-2xl my-6 tracking-widest border-y border-emerald-500/30 py-3 w-full bg-emerald-500/5">
-            {{ appStore.lang === 'zh' ? '24H 极速响应' : '24H Fast Response' }}
+          <div class="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-full flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(16,185,129,0.5)] mb-6 transform group-hover:scale-110 transition-transform duration-500">💸</div>
+          <h3 class="text-2xl font-black text-white mb-2 tracking-wide">{{ appStore.lang === 'zh' ? '裂变暴利分润' : '10% Commission' }}</h3>
+          <div class="text-emerald-400 font-black text-4xl md:text-5xl my-6 drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]">
+            10<span class="text-2xl font-bold">%</span>
           </div>
           <p class="text-slate-400 text-sm leading-relaxed">
-            {{ appStore.lang === 'zh' ? '全站订单优先处理队列，享受更快的上游提交速度。拥有专属于您的售后反馈通道，确保您的业务永不停歇。' : 'Priority processing for all site orders, enjoying faster upstream submission speeds and exclusive after-sales support.' }}
+            {{ appStore.lang === 'zh' ? '普通用户推广仅享 5% 佣金，升级代理瞬间翻倍至 10%！只要您的下线充值，佣金全自动秒入您的金库，上不封顶！' : 'Upgrade to agent and double your referral commission from 5% to 10%! Enjoy automatic passive income every time your downlines top up.' }}
           </p>
         </div>
       </div>
@@ -140,7 +143,6 @@ const handleUpgrade = async () => {
     setTimeout(() => { router.push('/recharge'); }, 1500); return;
   }
   
-  // 💡 核心修改：防呆确认框也明确为 1 个月
   const confirmMsg = appStore.lang === 'zh' ? '确认消耗 ¥99 开通/续费 1 个月至尊代理特权吗？' : 'Confirm spending ¥99 for 1-month Supreme Agent privilege?';
   const confirm = await uiStore.showConfirm(confirmMsg); if (!confirm) return;
 
