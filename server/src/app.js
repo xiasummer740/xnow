@@ -1,3 +1,4 @@
+import { autoBackupTask } from './utils/backupEngine.js';
 import { wafMiddleware } from './middleware/waf.js';
 import express from 'express';
 import cors from 'cors';
@@ -85,4 +86,5 @@ app.listen(PORT, async () => {
   setTimeout(autoSyncServices, 3000); 
   setInterval(autoSyncServices, 1000 * 60 * 10); 
   setInterval(autoSyncOrders, 1000 * 60 * 1);
+  setInterval(autoBackupTask, 1000 * 60 * 5);
 });
