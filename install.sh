@@ -3,7 +3,7 @@
 # -----------------------------------------------------------
 # XNOW Ultimate Automated Deployment Engine
 # Compatible with Cloudflare (Orange Cloud) & Multi-Panels
-# Built-in Bulletproof MySQL Initialization
+# Built-in Bulletproof MySQL Initialization & Clean Restart
 # -----------------------------------------------------------
 
 echo -e "\n🚀 欢迎使用 XNOW 全自动裸机部署引擎\n"
@@ -22,9 +22,8 @@ npm install -g pm2 >/dev/null 2>&1
 echo "🗄️ 正在装配 MySQL 数据库引擎..."
 systemctl start mysql
 
-# 💡 核心防线：双重容错注入机制。涵盖首次纯净部署与二次覆盖部署，彻底歼灭 1045 报错
+# 💡 核心防线：双重容错注入机制。涵盖首次纯净部署与二次覆盖部署
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || mysql -u root -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
-
 sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null || mysql -u root -p"$DB_PASS" -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null
 
 echo "⚙️ 正在构建后端服务基石..."
@@ -57,6 +56,9 @@ cat << NGINX_TMP > /etc/nginx/sites-available/$DOMAIN
 server { listen 80; server_name $DOMAIN; root /var/www/xnow/client/dist; }
 NGINX_TMP
 ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+
+# 💡 核心修复：重载 systemd 守护进程，消除警告
+systemctl daemon-reload
 systemctl restart nginx
 
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN 2>/dev/null
@@ -104,6 +106,8 @@ server {
 }
 NGINX_FINAL
 
+# 💡 核心修复：重载 systemd 守护进程，消除警告
+systemctl daemon-reload
 systemctl restart nginx
 
 echo -e "\n🎉 XNOW 系统部署完毕！"
