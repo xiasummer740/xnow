@@ -2,7 +2,8 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
 
 export const authenticate = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  // 💡 核心修复：同时支持 Header 鉴权与 URL Query 鉴权 (解决原生大文件下载请求无 Header 问题)
+  const token = req.headers.authorization?.split(' ')[1] || req.query.token;
   
   if (!token) {
     return res.status(401).json({ status: 'error', message: '未授权的访问' });
