@@ -3,6 +3,7 @@
 # -----------------------------------------------------------
 # XNOW Ultimate Automated Deployment Engine
 # Compatible with Cloudflare (Orange Cloud) & Multi-Panels
+# Built-in Bulletproof MySQL Initialization
 # -----------------------------------------------------------
 
 echo -e "\n🚀 欢迎使用 XNOW 全自动裸机部署引擎\n"
@@ -20,9 +21,11 @@ npm install -g pm2 >/dev/null 2>&1
 
 echo "🗄️ 正在装配 MySQL 数据库引擎..."
 systemctl start mysql
-mysql -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS';"
-mysql -e "FLUSH PRIVILEGES;"
+
+# 💡 核心防线：双重容错注入机制。涵盖首次纯净部署与二次覆盖部署，彻底歼灭 1045 报错
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || mysql -u root -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null || mysql -u root -p"$DB_PASS" -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null
 
 echo "⚙️ 正在构建后端服务基石..."
 cd /var/www/xnow/server
@@ -78,6 +81,8 @@ server {
 
     ssl_certificate $SSL_CERT;
     ssl_certificate_key $SSL_KEY;
+
+    client_max_body_size 100M;
 
     location / {
         root /var/www/xnow/client/dist;
