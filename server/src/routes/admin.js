@@ -116,9 +116,9 @@ router.post('/user/delete', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
 
-// 💡 可视化灾备引擎 API 集群
+// 💡 核心修复：允许 admin 和 super_admin 访问灾备中心
 router.get('/backups', authenticate, async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.status(403).json({ status: 'error', message: '仅至尊管理员有权访问灾备中心' });
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '仅管理员有权访问灾备中心' });
   try {
     if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
     const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.sql.gz')).map(f => {
@@ -130,7 +130,7 @@ router.get('/backups', authenticate, async (req, res) => {
 });
 
 router.post('/backup/create', authenticate, async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.status(403).json({ status: 'error' });
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   try {
     await createBackup();
     res.json({ status: 'success', message: '冷冻级快照创建成功' });
@@ -138,7 +138,7 @@ router.post('/backup/create', authenticate, async (req, res) => {
 });
 
 router.post('/backup/upload', authenticate, upload.single('file'), async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.status(403).json({ status: 'error' });
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   if (!req.file) return res.status(400).json({ status: 'error', message: '请选择文件' });
   try {
     await restoreBackup(req.file.path);
@@ -148,7 +148,7 @@ router.post('/backup/upload', authenticate, upload.single('file'), async (req, r
 });
 
 router.post('/backup/restore', authenticate, async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.status(403).json({ status: 'error' });
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const { filename } = req.body;
   try {
     const filepath = path.join(BACKUP_DIR, filename);
@@ -160,7 +160,7 @@ router.post('/backup/restore', authenticate, async (req, res) => {
 });
 
 router.get('/backup/download', authenticate, async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.status(403).send('Forbidden');
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).send('Forbidden');
   const { filename } = req.query;
   const filepath = path.join(BACKUP_DIR, filename);
   if (fs.existsSync(filepath)) res.download(filepath);
