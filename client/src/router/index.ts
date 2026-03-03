@@ -21,6 +21,8 @@ const routes = [
       { path: 'recharge', component: Recharge },
       { path: 'vip', component: Vip },
       { path: 'admin', component: Admin },
+      // 💡 核心修复：精准挂载灾备中心组件 (按需懒加载)
+      { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: ApiDoc },
       { path: 'affiliate', component: Affiliate }
     ]
@@ -29,9 +31,8 @@ const routes = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-// 💡 核心修复：全局路由守卫，死死锁住一切带有推广码的流量！
+// 💡 全局路由守卫：死死锁住一切带有推广码的流量！
 router.beforeEach((to, from, next) => {
-  // 如果发现地址栏里有 ref 参数，不管在哪个页面，立刻存入本地最深处
   if (to.query.ref) {
     localStorage.setItem('xnow_inviter_id', to.query.ref as string);
   }
