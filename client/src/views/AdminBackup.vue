@@ -15,10 +15,11 @@ const fetchBackups = async () => {
         const json = await res.json();
         if (json.status === 'success') backups.value = json.backups;
         
-        const confRes = await fetch(`/api/public/config?_t=${Date.now()}`);
-        const confJson = await confRes.json();
-        if (confJson.data && confJson.data.auto_backup_interval) {
-            autoInterval.value = parseFloat(confJson.data.auto_backup_interval);
+        // 💡 核心修复：从受保护的 admin 接口提取全量配置，杜绝返回 0
+        const dashRes = await fetch('/api/admin/dashboard', { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+        const dashJson = await dashRes.json();
+        if (dashJson.status === 'success' && dashJson.config && dashJson.config.auto_backup_interval) {
+            autoInterval.value = parseFloat(dashJson.config.auto_backup_interval);
         }
     } catch(e) {} finally { loading.value = false; }
 };
@@ -59,6 +60,21 @@ const restoreFromHistory = async (filename) => {
         if (json.status === 'success') { ui.showToast(json.message, 'success'); setTimeout(() => window.location.reload(), 2000); }
         else ui.showToast(json.message, 'error');
     } catch(e) { ui.showToast('恢复异常', 'error'); } finally { loading.value = false; }
+};
+
+// 💡 核心新增：手动物理删除快照函数
+const deleteBackupFile = async (filename) => {
+    if (!await ui.showConfirm(`⚠️ 确定要彻底删除快照 [${filename}] 吗？此操作无法撤销！`)) return;
+    loading.value = true;
+    try {
+        const res = await fetch('/api/admin/backup/delete', { 
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+            body: JSON.stringify({ filename })
+        });
+        const json = await res.json();
+        if (json.status === 'success') { ui.showToast(json.message, 'success'); fetchBackups(); }
+        else ui.showToast(json.message, 'error');
+    } catch(e) { ui.showToast('网络异常', 'error'); } finally { loading.value = false; }
 };
 
 const handleFileUpload = async (event) => {
@@ -114,13 +130,14 @@ onMounted(() => { fetchBackups(); });
           <table class="w-full text-left text-sm whitespace-nowrap">
               <thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">生成时间</th><th class="px-6 py-4">快照文件名</th><th class="px-6 py-4">体量</th><th class="px-6 py-4 text-right">执行操作</th></tr></thead>
               <tbody class="divide-y divide-slate-700/50 text-slate-200">
-                  <tr v-for="b in backups" :key="b.name" class="hover:bg-slate-700/30 transition">
+                  <tr v-for="b in backups" :key="b.name" class="hover:bg-slate-700/30 transition group">
                       <td class="px-6 py-4 font-mono text-xs text-amber-400/80 font-bold">{{ new Date(b.time).toLocaleString() }}</td>
                       <td class="px-6 py-4 font-mono text-emerald-400 text-xs">{{ b.name }}</td>
                       <td class="px-6 py-4 font-mono text-slate-400 text-xs">{{ (b.size / 1024).toFixed(2) }} KB</td>
                       <td class="px-6 py-4 text-right space-x-2">
                           <button @click="downloadFile(b.name)" class="text-xs bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded transition font-bold">⬇️ 下载</button>
-                          <button @click="restoreFromHistory(b.name)" class="text-xs bg-red-500/10 hover:bg-red-500/30 text-red-400 border border-red-500/30 px-3 py-1.5 rounded transition font-bold">☠️ 强制覆盖还原</button>
+                          <button @click="restoreFromHistory(b.name)" class="text-xs bg-amber-500/10 hover:bg-amber-500/30 text-amber-500 border border-amber-500/30 px-3 py-1.5 rounded transition font-bold">☠️ 覆盖</button>
+                          <button @click="deleteBackupFile(b.name)" class="text-xs bg-red-500/10 hover:bg-red-500/30 text-red-500 border border-red-500/30 px-3 py-1.5 rounded transition font-bold">🗑️ 删除</button>
                       </td>
                   </tr>
                   <tr v-if="backups.length === 0"><td colspan="4" class="text-center py-10 text-slate-500">暂无任何数据快照</td></tr>

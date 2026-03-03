@@ -116,7 +116,7 @@ router.post('/user/delete', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
 
-// 💡 核心修复：允许 admin 和 super_admin 访问灾备中心
+// 💡 灾备引擎 API
 router.get('/backups', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '仅管理员有权访问灾备中心' });
   try {
@@ -165,6 +165,21 @@ router.get('/backup/download', authenticate, async (req, res) => {
   const filepath = path.join(BACKUP_DIR, filename);
   if (fs.existsSync(filepath)) res.download(filepath);
   else res.status(404).send('File not found');
+});
+
+// 💡 核心修复：增加快照物理删除 API
+router.post('/backup/delete', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  const { filename } = req.body;
+  try {
+    const filepath = path.join(BACKUP_DIR, filename);
+    if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+        res.json({ status: 'success', message: '快照文件已从服务器物理移除' });
+    } else {
+        res.status(404).json({ status: 'error', message: '未找到该快照文件' });
+    }
+  } catch (e) { res.status(500).json({ status: 'error', message: '删除失败' }); }
 });
 
 export default router;
