@@ -56,7 +56,7 @@
     │   ├── utils/          # 全局工具箱
     │   │   ├── tgBot.js    # Telegram 机器人极速异步推送引擎
     │   │   ├── sync.js     # 原生正则全网爬虫，商品服务全量化同步
-    │   │   ├── email.js    # 📧 经典企业级白底蓝标 HTML 邮件引擎 (精准识别 smtp_email)
+    │   │   ├── email.js    # 📧 XNOW PRO 专属黑金裂变营销 HTML 邮件引擎 (精准识别 smtp_email)
     │   │   ├── backupEngine.js # 自动化定时压缩备份与文件流还原引擎核心
     │   │   └── orderSync.js# 异步缓冲队列定时任务：平滑检查上游订单，防 OOM
     │   └── app.js          # 后端心脏入口 (挂载 Helmet, 真实 IP 限流锁, WAF拦截墙)
@@ -67,7 +67,7 @@
 
 ## ✨ 核心特性 (Core Features)
 
-* **📧 经典动态邮件引擎**：内置 `Nodemailer` 核心，精准提取数据库 `smtp_email`，发送典雅、清爽的企业级白底蓝标验证码邮件。
+* **📧 极客黑金营销邮件引擎**：内置 `Nodemailer` 核心，精准提取数据库 `smtp_email`，发送带有【升级至尊代理特权】的裂变式黑金验证码邮件。
 * **🛡️ 生产级前置防克隆系统**：在请求发送验证码的瞬间激活雷达，精准拦截已被注册的邮箱，彻底杜绝资源浪费与重复注册。内置精细化时间戳监控。
 * **🚀 裸机级一键部署引擎**：小白专属 `install.sh`。自带 CF 小黄云无敌态双轨 SSL 容灾策略。脚本自动装配 Node、MySQL、Nginx 并申请证书，解放双手。
 * **🤖 全场景 Telegram 超强引擎**：异步非阻塞式推送。新用户注册、资金入账、上下级返佣、违规封禁、自动灾备完成等全链路实时监控。
@@ -83,7 +83,7 @@
 
 ### 1. 克隆代码
 ~~~bash
-git clone [https://github.com/xiasummer740/xnow.git](https://github.com/xiasummer740/xnow.git)
+git clone https://github.com/xiasummer740/xnow.git
 cd xnow
 ~~~
 
@@ -94,7 +94,7 @@ bash install.sh
 按照屏幕提示输入您的 **网站域名** 和自定义的 **数据库密码**。系统自动为您配置并拉起一切服务。
 
 ### 3. 💡 SaaS 影子冷启动 (系统初始化)
-部署完成后，请在浏览器打开您的域名：
+部署完成后，请浏览器打开您的域名：
 1.  账号：`admin`，密码：`admin123` 登录系统。
 2.  进入【管理密室】，配置您的全局参数、支付网关、TG 机器人等。
 3.  **退出系统**，来到前台注册页面，使用您的手机号完成首次真实注册。
