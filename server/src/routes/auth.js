@@ -30,21 +30,29 @@ const verifyCodeInline = (email, code) => {
 router.post('/register', async (req, res) => {
   const { phone, password, email, code, inviter_id } = req.body;
   
+  // 💡 极致防御：彻底清洗数据，防止利用空格或大小写绕过唯一性校验
+  const cleanPhone = String(phone || '').trim();
+  const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+
+  if (!cleanPhone || !password) return res.status(400).json({ status: 'error', message: '手机号与密码不能为空' });
+
   const check = verifyCodeInline(email, code);
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
   
   try {
-    const existingPhone = await User.findOne({ where: { phone: String(phone) } });
+    // 💡 绝对锁定：强制在数据库中查询清洗后的数据
+    const existingPhone = await User.findOne({ where: { phone: cleanPhone } });
     if (existingPhone) return res.status(400).json({ status: 'error', message: '该手机号已被注册，请直接登录' });
     
-    if (email && String(email).trim() !== '') {
-        const existingEmail = await User.findOne({ where: { email: String(email).trim() } });
-        if (existingEmail) return res.status(400).json({ status: 'error', message: '该邮箱已被注册绑定' });
+    if (cleanEmail && cleanEmail !== '') {
+        const existingEmail = await User.findOne({ where: { email: cleanEmail } });
+        if (existingEmail) return res.status(400).json({ status: 'error', message: '该邮箱已被注册绑定，请更换邮箱' });
     }
 
     const realUserCount = await User.count({ where: { id: { [Op.gt]: 0 } } });
     let assignedRole = 'user'; let initBalance = 0.00; let finalUid;
     
+    // 💡 首位注册者加冕为至尊管理员
     if (realUserCount === 0) { 
         assignedRole = 'admin'; initBalance = 99999.00; finalUid = 1; 
     } else { 
@@ -60,13 +68,15 @@ router.post('/register', async (req, res) => {
     
     const password_hash = await bcrypt.hash(String(password), 10);
     const registerIp = getRealIp(req);
+    
+    // 创建用户时也必须存入清洗后的纯净数据
     const newUser = await User.create({
-      id: finalUid, phone, email, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId, api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
+      id: finalUid, phone: cleanPhone, email: cleanEmail, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId, api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
     });
     
     if(global.verificationCodes) global.verificationCodes.delete(email);
     const roleName = assignedRole === 'admin' ? '至尊管理员' : '黄金用户';
-    sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${phone}</code>\n📧 <b>邮箱:</b> ${email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🤝 <b>引荐人:</b> ${finalInviterId ? 'UID '+finalInviterId : '无'}\n🌐 <b>IP:</b> <code>${registerIp}</code>`);
+    sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${cleanPhone}</code>\n📧 <b>邮箱:</b> ${cleanEmail || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🤝 <b>引荐人:</b> ${finalInviterId ? 'UID '+finalInviterId : '无'}\n🌐 <b>IP:</b> <code>${registerIp}</code>`);
     
     res.json({ status: 'success', message: realUserCount === 0 ? '全站首位【至尊管理员】注册成功！' : '注册成功，欢迎加入。' });
   } catch (err) { 
@@ -76,7 +86,6 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  // 💡 核心修复：全量兼容前端传参 (不论是 account, 还是 phone, 还是 email 都能精准提取)
   const password = req.body.password;
   const accountStr = req.body.account || req.body.phone || req.body.email;
 
@@ -84,21 +93,23 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ status: 'error', message: '请输入账号和密码' });
   }
 
+  const cleanAccount = String(accountStr).trim();
+
   try {
-    // 💡 完美复刻 SaaS 影子账户冷启动机制
-    if (String(accountStr) === 'admin' && String(password) === 'admin123') {
+    // 💡 完美复刻 SaaS 影子账户冷启动机制！任何人部署均可使用 admin / admin123 唤醒系统
+    if (cleanAccount === 'admin' && String(password) === 'admin123') {
       const realAdminExists = await User.findOne({ where: { role: ['admin', 'super_admin'] } });
       if (realAdminExists) return res.status(403).json({ status: 'error', message: '正式管理员已登基，测试通道已永久自毁封闭！' });
       const testToken = jwt.sign({ id: 0, role: 'super_admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
       return res.json({ status: 'success', token: 'super-admin-offline-token', user: { id: 0, phone: 'admin', role: 'super_admin', balance: 0 } });
     }
 
-    // 数据库真实账号比对
+    // 数据库真实账号比对 (兼容手机号和邮箱登录，忽略大小写)
     const user = await User.findOne({ 
         where: { 
             [Op.or]: [
-                { phone: String(accountStr) }, 
-                { email: String(accountStr) }
+                { phone: cleanAccount }, 
+                { email: cleanAccount.toLowerCase() }
             ] 
         } 
     });
