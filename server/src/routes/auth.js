@@ -126,21 +126,29 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 💡 核心修复：真实的邮件发送接口，接入极客模板
+// 💡 核心前置拦截：在发验证码时就进行唯一性判断
 router.post('/send-code', async (req, res) => {
-    let email = req.body.email || req.body.new_email; // 兼容注册和修改资料的传参
+    let email = req.body.email || req.body.new_email;
+    const type = req.body.type || 'register'; // 默认视为注册行为
+
     if (!email) return res.status(400).json({ status: 'error', message: '请提供邮箱地址' });
     email = String(email).trim().toLowerCase();
 
+    // 💡 拦截网激活：如果不是找回密码，就必须检查邮箱是否被占用
+    if (type !== 'reset' && type !== 'login') {
+        const existingUser = await User.findOne({ where: { email } });
+        if (existingUser) {
+            return res.status(400).json({ status: 'error', message: '该邮箱已被注册，请直接登录' });
+        }
+    }
+
     if (!global.verificationCodes) global.verificationCodes = new Map();
     
-    // 60秒防刷限制
     const existing = global.verificationCodes.get(email);
     if (existing && Date.now() < existing.expires - 9 * 60 * 1000) {
         return res.status(429).json({ status: 'error', message: '发送过于频繁，请稍后再试' });
     }
 
-    // 生成6位随机动态码
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
     try {
@@ -148,7 +156,7 @@ router.post('/send-code', async (req, res) => {
         if (result.success) {
             global.verificationCodes.set(email, {
                 code,
-                expires: Date.now() + 10 * 60 * 1000 // 10分钟有效期
+                expires: Date.now() + 10 * 60 * 1000
             });
             res.json({ status: 'success', message: '验证码已发送，请注意查收邮件(含垃圾箱)' });
         } else {
