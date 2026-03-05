@@ -4,7 +4,8 @@ import sequelize from '../config/database.js';
 const User = sequelize.define('User', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   phone: { type: DataTypes.STRING(20), unique: true, allowNull: false },
-  email: { type: DataTypes.STRING(100), allowNull: true },
+  // 💡 核心修复：为邮箱注入 unique 约束
+  email: { type: DataTypes.STRING(100), unique: true, allowNull: true },
   password_hash: { type: DataTypes.STRING, allowNull: false },
   role: { type: DataTypes.ENUM('user', 'gold', 'agent', 'admin', 'super_admin'), defaultValue: 'user' },
   balance: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
@@ -15,7 +16,6 @@ const User = sequelize.define('User', {
   last_login_ip: { type: DataTypes.STRING(45), allowNull: true },
   inviter_id: { type: DataTypes.INTEGER, allowNull: true },
   total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
-  // 💡 WAF 风控新增字段
   is_banned: { type: DataTypes.BOOLEAN, defaultValue: false },
   ban_reason: { type: DataTypes.STRING(255), allowNull: true }
 });
