@@ -61,7 +61,7 @@ app.use('/api/public', publicRoutes);
 
 const initDatabase = async () => {
   try {
-    await sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: false });
     
     const defaultConfigCount = await Config.count();
     if (defaultConfigCount === 0) {

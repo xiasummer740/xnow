@@ -34,7 +34,6 @@ router.post('/register', async (req, res) => {
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
   
   try {
-    // 💡 核心防御：API 层面的柔性双重防重校验 (保护生产数据库，不再依赖底层唯一键报错)
     const existingPhone = await User.findOne({ where: { phone: String(phone) } });
     if (existingPhone) return res.status(400).json({ status: 'error', message: '该手机号已被注册，请直接登录' });
     
@@ -43,7 +42,6 @@ router.post('/register', async (req, res) => {
         if (existingEmail) return res.status(400).json({ status: 'error', message: '该邮箱已被注册绑定' });
     }
 
-    // 统计目前非影子账户的数量
     const realUserCount = await User.count({ where: { id: { [Op.gt]: 0 } } });
     let assignedRole = 'user'; let initBalance = 0.00; let finalUid;
     
@@ -78,24 +76,29 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const { account, password } = req.body;
-  if (!account || !password) return res.status(400).json({ status: 'error', message: '请输入账号和密码' });
+  // 💡 核心修复：全量兼容前端传参 (不论是 account, 还是 phone, 还是 email 都能精准提取)
+  const password = req.body.password;
+  const accountStr = req.body.account || req.body.phone || req.body.email;
+
+  if (!accountStr || !password) {
+      return res.status(400).json({ status: 'error', message: '请输入账号和密码' });
+  }
 
   try {
-    // 💡 核心修复：完美复刻 SaaS 影子账户冷启动机制！
-    if (String(account) === 'admin' && String(password) === 'admin123') {
+    // 💡 完美复刻 SaaS 影子账户冷启动机制
+    if (String(accountStr) === 'admin' && String(password) === 'admin123') {
       const realAdminExists = await User.findOne({ where: { role: ['admin', 'super_admin'] } });
       if (realAdminExists) return res.status(403).json({ status: 'error', message: '正式管理员已登基，测试通道已永久自毁封闭！' });
       const testToken = jwt.sign({ id: 0, role: 'super_admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
       return res.json({ status: 'success', token: 'super-admin-offline-token', user: { id: 0, phone: 'admin', role: 'super_admin', balance: 0 } });
     }
 
-    // 容错查询：兼容手机号或邮箱登录
+    // 数据库真实账号比对
     const user = await User.findOne({ 
         where: { 
             [Op.or]: [
-                { phone: String(account) }, 
-                { email: String(account) }
+                { phone: String(accountStr) }, 
+                { email: String(accountStr) }
             ] 
         } 
     });
@@ -107,14 +110,13 @@ router.post('/login', async (req, res) => {
     if (!isValid) return res.status(401).json({ status: 'error', message: '账号或密码错误' });
 
     user.last_login_ip = getRealIp(req);
-    // 捕获可能因字段超长导致的非致命错误，防止登录阻断
     await user.save().catch(e => console.error('Failed to save last_login_ip:', e));
 
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ status: 'success', token, user: { id: user.id, phone: user.phone, role: user.role, balance: user.balance } });
   } catch (err) { 
       console.error('Login Error:', err);
-      res.status(500).json({ status: 'error', message: '数据库连接异常或登录态失效，请刷新页面重试: ' + err.message }); 
+      res.status(500).json({ status: 'error', message: '数据库连接异常或登录态失效，请刷新页面重试' }); 
   }
 });
 
