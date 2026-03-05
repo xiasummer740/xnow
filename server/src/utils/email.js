@@ -3,38 +3,38 @@ import { Config } from '../models/index.js';
 
 export const sendEmailCode = async (toEmail, code) => {
     try {
+        // 全量拉取配置，绕过针对特定键名的限制
         const allConfigs = await Config.findAll();
         const cm = {};
-        const rawKeys = [];
         
         allConfigs.forEach(c => {
             if (c.key) {
                 cm[String(c.key).toLowerCase().trim()] = c.value;
-                rawKeys.push(c.key);
             }
         });
 
-        const smtp_host = cm['smtp_host'] || cm['smtphost'] || cm['email_host'] || cm['smtp_server'] || cm['host'];
-        const smtp_port = cm['smtp_port'] || cm['smtpport'] || cm['email_port'] || cm['port'];
-        const smtp_user = cm['smtp_user'] || cm['smtpuser'] || cm['email_user'] || cm['smtp_email'] || cm['email'];
-        const smtp_pass = cm['smtp_pass'] || cm['smtppass'] || cm['email_pass'] || cm['smtp_password'] || cm['email_password'] || cm['password'];
+        // 💡 铁证修复：根据您数据库真实的键名，精准提取！
+        const smtp_host = cm['smtp_host'] || 'smtp.qq.com';
+        const smtp_port = parseInt(cm['smtp_port']) || 465;
+        // 关键修复：优先抓取 smtp_email
+        const smtp_user = cm['smtp_email'] || cm['smtp_user'] || cm['email_user'];
+        const smtp_pass = cm['smtp_pass'];
 
         if (!smtp_host || !smtp_user || !smtp_pass) {
-            console.error(`[SMTP Error] 拦截！配置缺失。数据库中实际存在的配置键有: [${rawKeys.join(', ')}]`);
-            throw new Error('SMTP配置不完整，请先在后台管理密室配置并保存');
+            throw new Error(`SMTP配置缺失: host=${!!smtp_host}, user=${!!smtp_user}, pass=${!!smtp_pass}`);
         }
 
         const transporter = nodemailer.createTransport({
             host: smtp_host,
-            port: parseInt(smtp_port) || 465,
-            secure: parseInt(smtp_port) === 465 || parseInt(smtp_port) === 587,
+            port: smtp_port,
+            secure: smtp_port === 465,
             auth: {
                 user: smtp_user,
                 pass: smtp_pass
             }
         });
 
-        // 💡 核心复原：v2.13.11 版本的经典亮色企业级白底蓝标模板
+        // 💡 保持 v2.13.11 版本的经典亮色企业级白底蓝标模板
         const mailOptions = {
             from: `"XNOW 验证中心" <${smtp_user}>`,
             to: toEmail,

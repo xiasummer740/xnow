@@ -126,15 +126,15 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 💡 核心前置拦截：在发验证码时就进行唯一性判断
+// 💡 前置防重拦截机制
 router.post('/send-code', async (req, res) => {
     let email = req.body.email || req.body.new_email;
-    const type = req.body.type || 'register'; // 默认视为注册行为
+    const type = req.body.type || 'register';
 
     if (!email) return res.status(400).json({ status: 'error', message: '请提供邮箱地址' });
     email = String(email).trim().toLowerCase();
 
-    // 💡 拦截网激活：如果不是找回密码，就必须检查邮箱是否被占用
+    // 拦截已注册的邮箱
     if (type !== 'reset' && type !== 'login') {
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
