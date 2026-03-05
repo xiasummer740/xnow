@@ -28,7 +28,7 @@ const submitText = computed(() => { if (loading.value) return appStore.lang === 
 const sendCode = async () => { 
   if (!form.value.email) return uiStore.showAlert(appStore.lang === 'zh' ? '请填写邮箱' : 'Email required', '错误');
   try { 
-    const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.value.email }) });
+    const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.value.email, type: mode.value }) });
     const data = await res.json(); 
     if (data.status === 'success') { 
       uiStore.showToast(appStore.lang === 'zh' ? '验证码已发送' : 'Code sent', 'success');
