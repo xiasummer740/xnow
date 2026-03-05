@@ -3,26 +3,35 @@ import { Config } from '../models/index.js';
 
 export const sendEmailCode = async (toEmail, code) => {
     try {
-        // 💡 动态从数据库拉取后台配置的 SMTP 信息
-        const configs = await Config.findAll({
-            where: {
-                key: ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass']
+        // 💡 上帝视角：全量拉取数据库配置，不遗漏任何变异的键名
+        const allConfigs = await Config.findAll();
+        const cm = {};
+        const rawKeys = [];
+        
+        allConfigs.forEach(c => {
+            if (c.key) {
+                // 统一转小写，去除空格，实现绝对兼容
+                cm[String(c.key).toLowerCase().trim()] = c.value;
+                rawKeys.push(c.key);
             }
         });
 
-        const configMap = {};
-        configs.forEach(c => configMap[c.key] = c.value);
-
-        const { smtp_host, smtp_port, smtp_user, smtp_pass } = configMap;
+        // 💡 全维度模糊匹配：覆盖前端可能发来的各种命名习惯
+        const smtp_host = cm['smtp_host'] || cm['smtphost'] || cm['email_host'] || cm['smtp_server'] || cm['host'];
+        const smtp_port = cm['smtp_port'] || cm['smtpport'] || cm['email_port'] || cm['port'];
+        const smtp_user = cm['smtp_user'] || cm['smtpuser'] || cm['email_user'] || cm['smtp_email'] || cm['email'];
+        const smtp_pass = cm['smtp_pass'] || cm['smtppass'] || cm['email_pass'] || cm['smtp_password'] || cm['email_password'] || cm['password'];
 
         if (!smtp_host || !smtp_user || !smtp_pass) {
-            throw new Error('SMTP配置不完整，请先在后台管理密室配置邮件服务');
+            // 将数据库里真实存在的所有 Key 打印出来，彻底拒绝盲猜
+            console.error(`[SMTP Error] 拦截！配置缺失。数据库中实际存在的配置键有: [${rawKeys.join(', ')}]`);
+            throw new Error('SMTP配置不完整，请先在后台管理密室配置并保存');
         }
 
         const transporter = nodemailer.createTransport({
             host: smtp_host,
             port: parseInt(smtp_port) || 465,
-            secure: parseInt(smtp_port) === 465, // 465端口使用 SSL
+            secure: parseInt(smtp_port) === 465 || parseInt(smtp_port) === 587,
             auth: {
                 user: smtp_user,
                 pass: smtp_pass
