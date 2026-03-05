@@ -30,7 +30,6 @@ const verifyCodeInline = (email, code) => {
 
 router.post('/register', async (req, res) => {
   const { phone, password, email, code, inviter_id } = req.body;
-  
   const cleanPhone = String(phone || '').trim();
   const cleanEmail = email ? String(email).trim().toLowerCase() : null;
 
@@ -116,7 +115,9 @@ router.post('/login', async (req, res) => {
     if (!isValid) return res.status(401).json({ status: 'error', message: '账号或密码错误' });
 
     user.last_login_ip = getRealIp(req);
-    await user.save().catch(e => console.error('Failed to save last_login_ip:', e));
+    // 💡 核心加法：记录最后登录时间戳
+    user.last_login_at = new Date();
+    await user.save().catch(e => console.error('Failed to save login info:', e));
 
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ status: 'success', token, user: { id: user.id, phone: user.phone, role: user.role, balance: user.balance } });
@@ -126,7 +127,6 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 💡 前置防重拦截机制
 router.post('/send-code', async (req, res) => {
     let email = req.body.email || req.body.new_email;
     const type = req.body.type || 'register';
@@ -134,7 +134,6 @@ router.post('/send-code', async (req, res) => {
     if (!email) return res.status(400).json({ status: 'error', message: '请提供邮箱地址' });
     email = String(email).trim().toLowerCase();
 
-    // 拦截已注册的邮箱
     if (type !== 'reset' && type !== 'login') {
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
@@ -154,10 +153,7 @@ router.post('/send-code', async (req, res) => {
     try {
         const result = await sendEmailCode(email, code);
         if (result.success) {
-            global.verificationCodes.set(email, {
-                code,
-                expires: Date.now() + 10 * 60 * 1000
-            });
+            global.verificationCodes.set(email, { code, expires: Date.now() + 10 * 60 * 1000 });
             res.json({ status: 'success', message: '验证码已发送，请注意查收邮件(含垃圾箱)' });
         } else {
             console.error('Email Fail:', result.message);

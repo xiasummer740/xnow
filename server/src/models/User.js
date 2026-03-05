@@ -4,7 +4,6 @@ import sequelize from '../config/database.js';
 const User = sequelize.define('User', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   phone: { type: DataTypes.STRING(20), unique: true, allowNull: false },
-  // 💡 核心修复：为邮箱注入 unique 约束
   email: { type: DataTypes.STRING(100), unique: true, allowNull: true },
   password_hash: { type: DataTypes.STRING, allowNull: false },
   role: { type: DataTypes.ENUM('user', 'gold', 'agent', 'admin', 'super_admin'), defaultValue: 'user' },
@@ -14,6 +13,8 @@ const User = sequelize.define('User', {
   vip_expire_at: { type: DataTypes.DATE, allowNull: true },
   register_ip: { type: DataTypes.STRING(45), allowNull: true },
   last_login_ip: { type: DataTypes.STRING(45), allowNull: true },
+  // 💡 核心加法：新增最后登录时间字段
+  last_login_at: { type: DataTypes.DATE, allowNull: true },
   inviter_id: { type: DataTypes.INTEGER, allowNull: true },
   total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
   is_banned: { type: DataTypes.BOOLEAN, defaultValue: false },
