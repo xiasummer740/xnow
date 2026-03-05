@@ -3,7 +3,6 @@ import { Config } from '../models/index.js';
 
 export const sendEmailCode = async (toEmail, code) => {
     try {
-        // 全量拉取配置，绕过针对特定键名的限制
         const allConfigs = await Config.findAll();
         const cm = {};
         
@@ -13,7 +12,7 @@ export const sendEmailCode = async (toEmail, code) => {
             }
         });
 
-        // 💡 铁证修复：根据数据库真实的键名精准提取，保留上一版的稳定成果
+        // 精准绑定数据库真实的 smtp_email 键名
         const smtp_host = cm['smtp_host'] || 'smtp.qq.com';
         const smtp_port = parseInt(cm['smtp_port']) || 465;
         const smtp_user = cm['smtp_email'] || cm['smtp_user'] || cm['email_user'];
@@ -33,7 +32,6 @@ export const sendEmailCode = async (toEmail, code) => {
             }
         });
 
-        // 💡 视觉觉醒：完美复原截图中的 XNOW PRO 黑金裂变营销邮件模板
         const mailOptions = {
             from: `"XNOW PRO 验证中心" <${smtp_user}>`,
             to: toEmail,
