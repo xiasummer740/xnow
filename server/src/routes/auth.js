@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, Config } from '../models/index.js';
 import { sendTgMessage } from '../utils/tgBot.js';
+import { sendEmailCode } from '../utils/email.js';
 import { Op } from 'sequelize';
 
 const router = express.Router();
@@ -30,7 +31,6 @@ const verifyCodeInline = (email, code) => {
 router.post('/register', async (req, res) => {
   const { phone, password, email, code, inviter_id } = req.body;
   
-  // 💡 极致防御：彻底清洗数据，防止利用空格或大小写绕过唯一性校验
   const cleanPhone = String(phone || '').trim();
   const cleanEmail = email ? String(email).trim().toLowerCase() : null;
 
@@ -40,7 +40,6 @@ router.post('/register', async (req, res) => {
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
   
   try {
-    // 💡 绝对锁定：强制在数据库中查询清洗后的数据
     const existingPhone = await User.findOne({ where: { phone: cleanPhone } });
     if (existingPhone) return res.status(400).json({ status: 'error', message: '该手机号已被注册，请直接登录' });
     
@@ -52,7 +51,6 @@ router.post('/register', async (req, res) => {
     const realUserCount = await User.count({ where: { id: { [Op.gt]: 0 } } });
     let assignedRole = 'user'; let initBalance = 0.00; let finalUid;
     
-    // 💡 首位注册者加冕为至尊管理员
     if (realUserCount === 0) { 
         assignedRole = 'admin'; initBalance = 99999.00; finalUid = 1; 
     } else { 
@@ -69,7 +67,6 @@ router.post('/register', async (req, res) => {
     const password_hash = await bcrypt.hash(String(password), 10);
     const registerIp = getRealIp(req);
     
-    // 创建用户时也必须存入清洗后的纯净数据
     const newUser = await User.create({
       id: finalUid, phone: cleanPhone, email: cleanEmail, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId, api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
     });
@@ -96,7 +93,6 @@ router.post('/login', async (req, res) => {
   const cleanAccount = String(accountStr).trim();
 
   try {
-    // 💡 完美复刻 SaaS 影子账户冷启动机制！任何人部署均可使用 admin / admin123 唤醒系统
     if (cleanAccount === 'admin' && String(password) === 'admin123') {
       const realAdminExists = await User.findOne({ where: { role: ['admin', 'super_admin'] } });
       if (realAdminExists) return res.status(403).json({ status: 'error', message: '正式管理员已登基，测试通道已永久自毁封闭！' });
@@ -104,7 +100,6 @@ router.post('/login', async (req, res) => {
       return res.json({ status: 'success', token: 'super-admin-offline-token', user: { id: 0, phone: 'admin', role: 'super_admin', balance: 0 } });
     }
 
-    // 数据库真实账号比对 (兼容手机号和邮箱登录，忽略大小写)
     const user = await User.findOne({ 
         where: { 
             [Op.or]: [
@@ -131,8 +126,38 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// 💡 核心修复：真实的邮件发送接口，接入极客模板
 router.post('/send-code', async (req, res) => {
-   res.json({status: 'success', message: '验证码请求已收到 (若未配置 SMTP 请使用万能码 666888)'});
+    let email = req.body.email || req.body.new_email; // 兼容注册和修改资料的传参
+    if (!email) return res.status(400).json({ status: 'error', message: '请提供邮箱地址' });
+    email = String(email).trim().toLowerCase();
+
+    if (!global.verificationCodes) global.verificationCodes = new Map();
+    
+    // 60秒防刷限制
+    const existing = global.verificationCodes.get(email);
+    if (existing && Date.now() < existing.expires - 9 * 60 * 1000) {
+        return res.status(429).json({ status: 'error', message: '发送过于频繁，请稍后再试' });
+    }
+
+    // 生成6位随机动态码
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    try {
+        const result = await sendEmailCode(email, code);
+        if (result.success) {
+            global.verificationCodes.set(email, {
+                code,
+                expires: Date.now() + 10 * 60 * 1000 // 10分钟有效期
+            });
+            res.json({ status: 'success', message: '验证码已发送，请注意查收邮件(含垃圾箱)' });
+        } else {
+            console.error('Email Fail:', result.message);
+            res.status(500).json({ status: 'error', message: '发送失败，请确保后台已正确配置 SMTP' });
+        }
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '邮件服务器连接异常' });
+    }
 });
 
 export default router;
