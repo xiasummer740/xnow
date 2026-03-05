@@ -34,24 +34,33 @@ router.post('/register', async (req, res) => {
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
   
   try {
-    const existingPhone = await User.findOne({ where: { phone } });
-    if (existingPhone) return res.status(400).json({ status: 'error', message: '该手机号已注册' });
+    // 💡 核心防御：API 层面的柔性双重防重校验 (保护生产数据库，不再依赖底层唯一键报错)
+    const existingPhone = await User.findOne({ where: { phone: String(phone) } });
+    if (existingPhone) return res.status(400).json({ status: 'error', message: '该手机号已被注册，请直接登录' });
     
-    if (email) {
-        const existingEmail = await User.findOne({ where: { email } });
-        if (existingEmail) return res.status(400).json({ status: 'error', message: '该邮箱已被注册' });
+    if (email && String(email).trim() !== '') {
+        const existingEmail = await User.findOne({ where: { email: String(email).trim() } });
+        if (existingEmail) return res.status(400).json({ status: 'error', message: '该邮箱已被注册绑定' });
     }
 
+    // 统计目前非影子账户的数量
     const realUserCount = await User.count({ where: { id: { [Op.gt]: 0 } } });
     let assignedRole = 'user'; let initBalance = 0.00; let finalUid;
     
-    if (realUserCount === 0) { assignedRole = 'admin'; initBalance = 99999.00; finalUid = 1; } 
-    else { while (true) { const randId = Math.floor(1000 + Math.random() * 9000); const checkId = await User.findByPk(randId); if (!checkId && randId !== 1) { finalUid = randId; break; } } }
+    if (realUserCount === 0) { 
+        assignedRole = 'admin'; initBalance = 99999.00; finalUid = 1; 
+    } else { 
+        while (true) { 
+            const randId = Math.floor(1000 + Math.random() * 9000); 
+            const checkId = await User.findByPk(randId); 
+            if (!checkId && randId !== 1) { finalUid = randId; break; } 
+        } 
+    }
     
     let finalInviterId = null;
     if (inviter_id) { const inviter = await User.findByPk(inviter_id); if (inviter) finalInviterId = inviter.id; }
     
-    const password_hash = await bcrypt.hash(password, 10);
+    const password_hash = await bcrypt.hash(String(password), 10);
     const registerIp = getRealIp(req);
     const newUser = await User.create({
       id: finalUid, phone, email, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId, api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
@@ -61,36 +70,52 @@ router.post('/register', async (req, res) => {
     const roleName = assignedRole === 'admin' ? '至尊管理员' : '黄金用户';
     sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${phone}</code>\n📧 <b>邮箱:</b> ${email || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🤝 <b>引荐人:</b> ${finalInviterId ? 'UID '+finalInviterId : '无'}\n🌐 <b>IP:</b> <code>${registerIp}</code>`);
     
-    res.json({ status: 'success', message: realUserCount === 0 ? '全站首位【管理员】注册成功！' : '注册成功，欢迎加入。' });
+    res.json({ status: 'success', message: realUserCount === 0 ? '全站首位【至尊管理员】注册成功！' : '注册成功，欢迎加入。' });
   } catch (err) { 
-      res.status(500).json({ status: 'error', message: '服务器注册异常或邮箱已被占用' }); 
+      console.error('Registration Error:', err);
+      res.status(500).json({ status: 'error', message: '服务器注册异常，请稍后重试' }); 
   }
 });
 
 router.post('/login', async (req, res) => {
   const { account, password } = req.body;
+  if (!account || !password) return res.status(400).json({ status: 'error', message: '请输入账号和密码' });
+
   try {
     // 💡 核心修复：完美复刻 SaaS 影子账户冷启动机制！
-    if (account === 'admin' && password === 'admin123') {
-      const realAdminExists = await User.findOne({ where: { role: 'admin' } });
+    if (String(account) === 'admin' && String(password) === 'admin123') {
+      const realAdminExists = await User.findOne({ where: { role: ['admin', 'super_admin'] } });
       if (realAdminExists) return res.status(403).json({ status: 'error', message: '正式管理员已登基，测试通道已永久自毁封闭！' });
       const testToken = jwt.sign({ id: 0, role: 'super_admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
       return res.json({ status: 'success', token: 'super-admin-offline-token', user: { id: 0, phone: 'admin', role: 'super_admin', balance: 0 } });
     }
 
-    const user = await User.findOne({ where: { [Op.or]: [{ phone: account }, { email: account }] } });
+    // 容错查询：兼容手机号或邮箱登录
+    const user = await User.findOne({ 
+        where: { 
+            [Op.or]: [
+                { phone: String(account) }, 
+                { email: String(account) }
+            ] 
+        } 
+    });
+    
     if (!user) return res.status(401).json({ status: 'error', message: '账号或密码错误' });
     if (user.is_banned) return res.status(403).json({ status: 'error', message: `账号已被封禁: ${user.ban_reason || '存在违规行为'}` });
     
-    const isValid = await bcrypt.compare(password, user.password_hash);
+    const isValid = await bcrypt.compare(String(password), String(user.password_hash));
     if (!isValid) return res.status(401).json({ status: 'error', message: '账号或密码错误' });
 
     user.last_login_ip = getRealIp(req);
-    await user.save();
+    // 捕获可能因字段超长导致的非致命错误，防止登录阻断
+    await user.save().catch(e => console.error('Failed to save last_login_ip:', e));
 
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ status: 'success', token, user: { id: user.id, phone: user.phone, role: user.role, balance: user.balance } });
-  } catch (err) { res.status(500).json({ status: 'error', message: '登录异常' }); }
+  } catch (err) { 
+      console.error('Login Error:', err);
+      res.status(500).json({ status: 'error', message: '数据库连接异常或登录态失效，请刷新页面重试: ' + err.message }); 
+  }
 });
 
 router.post('/send-code', async (req, res) => {
