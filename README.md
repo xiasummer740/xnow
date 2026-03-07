@@ -12,7 +12,7 @@
 ├── tools/                  # 🧰 运维工具箱
 │   └── xnow_db_manager.sh  # 🔄 数据库灾备与恢复引擎 (CLI 面板：一键冷冻备份/灾难覆盖还原)
 │
-├── client/                 # 🔵 前端 Vue3 + Vite 项目目录 (基于 Composition API)
+├── client/                 # 🔵 前端 Vue3 + Vite + TypeScript 项目目录 (基于 Composition API)
 │   ├── src/
 │   │   ├── assets/         # 静态资源 (Logo, 自定义字体, CSS 量子背景样式)
 │   │   ├── components/     # 全局复用组件库
@@ -27,7 +27,7 @@
 │   │   │   ├── Vip.vue     # 【特权营销】至尊代理升级大厅 (纯 CSS 黑金炫酷组件)
 │   │   │   └── ...         # 其他前台业务视图
 │   │   ├── App.vue         # 前端根组件 (包含 3D 卡哇伊互动客服组件、量子公式漂浮背景)
-│   │   └── main.js         # 前端应用入口文件、i18n 多语言架构挂载点
+│   │   └── main.ts         # 前端 TypeScript 应用入口文件、i18n 多语言架构挂载点
 │   ├── index.html          # 🕸️ HTML 骨架模板 (内置骨灰级双语 SEO 矩阵与 JSON-LD 富媒体结构)
 │   ├── package.json        # 前端依赖配置
 │   └── vite.config.js      # Vite 构建引擎与反向代理配置
