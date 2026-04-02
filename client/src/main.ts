@@ -2,26 +2,35 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
-import './style.css' // Tailwind 引入点
-import { useUserStore } from './stores/user' // 💡 核心加法：引入 user store 以便调用登出逻辑
+import './style.css' 
+import { useUserStore } from './stores/user' 
 
 const app = createApp(App)
-const pinia = createPinia() // 💡 将 pinia 实例独立出来
+const pinia = createPinia() 
 
 app.use(pinia)
 app.use(router)
 
-// 💡 核心加法：全局 Fetch 拦截器，捕获所有 401 鉴权失败
+// 💡 核心加法：全局 Fetch 拦截器，捕获 401 并处理后端静默续签
 const originalFetch = window.fetch;
 window.fetch = async (input, init) => {
   const response = await originalFetch(input, init);
-  // 拦截后端返回的 401 (未授权/Token失效)，且确保不陷入登录页死循环
+  const userStore = useUserStore(pinia); 
+
+  // 1. 拦截 401 彻底登出
   if (response.status === 401 && window.location.pathname !== '/login') {
-    const userStore = useUserStore(pinia); // 获取 store
-    userStore.logout(); // 执行原有的本地清理逻辑
-    alert('登录状态已失效或过期，请重新登录！\nLogin expired, please login again.'); // 💡 内置基础双语提示
-    router.push('/login'); // 强制回弹到登录页
+    userStore.logout(); 
+    alert('登录状态已失效，您已超过 7 天未活跃，请重新登录！\nLogin expired due to inactivity, please login again.'); 
+    router.push('/login'); 
   }
+
+  // 💡 2. 核心监听：捕获后端偷偷发来的续命 Token (滑动窗口机制)
+  const newToken = response.headers.get('x-new-token');
+  if (newToken) {
+    userStore.setToken(newToken);
+    // 可选：你可以在这里加一句 console.log('Token续期成功') 用于后续调试
+  }
+
   return response;
 };
 
