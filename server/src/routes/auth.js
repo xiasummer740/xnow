@@ -119,7 +119,8 @@ router.post('/login', async (req, res) => {
     user.last_login_at = new Date();
     await user.save().catch(e => console.error('Failed to save login info:', e));
 
-    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    // 💡 核心修改：将 expiresIn 从 '7d' 延长至 '365d' (保持用户长期登录状态)
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '365d' });
     res.json({ status: 'success', token, user: { id: user.id, phone: user.phone, role: user.role, balance: user.balance } });
   } catch (err) { 
       console.error('Login Error:', err);

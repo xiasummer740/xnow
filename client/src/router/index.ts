@@ -31,12 +31,24 @@ const routes = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-// 💡 全局路由守卫：死死锁住一切带有推广码的流量！
+// 💡 全局路由守卫：死死锁住一切带有推广码的流量！+ 新增登录鉴权校验
 router.beforeEach((to, from, next) => {
+  // 1. 保留原有的推广码追踪逻辑
   if (to.query.ref) {
     localStorage.setItem('xnow_inviter_id', to.query.ref as string);
   }
-  next();
+
+  // 💡 2. 核心加法：路由级 Token 过期/缺失拦截
+  const token = localStorage.getItem('xnow_token');
+  const publicPaths = ['/', '/login']; // 允许免登录访问的白名单路径
+  
+  if (!publicPaths.includes(to.path) && !token) {
+      // 没 Token 且访问受保护页面，直接踢回登录
+      next('/login');
+  } else {
+      // 正常放行
+      next();
+  }
 })
 
 export default router
