@@ -76,6 +76,23 @@
           </div>
         </div>
 
+        <transition name="fade-slide">
+          <div v-if="isCustomComments" class="bg-indigo-900/10 border border-indigo-500/30 rounded-xl md:rounded-2xl p-4 md:p-5 shadow-inner">
+            <label class="block text-xs md:text-sm font-bold text-amber-400 mb-2 md:mb-3 flex items-center">
+              <span class="mr-2">📝</span> 自定义评论内容（每行1条）
+            </label>
+            <textarea v-model="form.comments" @input="updateQuantityFromComments" rows="6"
+              class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-sm md:text-base custom-scrollbar placeholder:text-slate-600 leading-relaxed"
+              placeholder="请输入自定义内容...&#10;一行代表一条记录&#10;下单数量将根据您的行数自动演算保护"></textarea>
+            <div class="flex justify-between items-center mt-3">
+              <span class="text-[10px] text-indigo-300 font-mono">* 已开启数量强制同步锁定机制</span>
+              <div class="text-xs text-slate-400 font-bold">
+                已输入内容: <span class="text-amber-400 text-sm ml-1">{{ parsedLinesCount }}</span> 行
+              </div>
+            </div>
+          </div>
+        </transition>
+
         <div class="space-y-5 md:space-y-6">
           <div>
             <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">{{ appStore.t('link') }}</label>
@@ -83,8 +100,12 @@
           </div>
           <div class="flex flex-col md:flex-row space-y-5 md:space-y-0 md:space-x-8">
             <div class="flex-1">
-              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">{{ appStore.t('quantity') }} <span v-if="activeService" class="text-[10px] md:text-xs text-amber-500 ml-1 font-normal">({{ activeService.min }} ~ {{ activeService.max }})</span></label>
-              <input type="number" v-model="form.quantity" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-lg md:text-xl font-mono">
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
+                {{ appStore.t('quantity') }} 
+                <span v-if="activeService" class="text-[10px] md:text-xs text-amber-500 ml-1 font-normal">({{ activeService.min }} ~ {{ activeService.max }})</span>
+                <span v-if="isCustomComments" class="text-[10px] ml-2 px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded font-normal">受评论行数锁定</span>
+              </label>
+              <input type="number" v-model="form.quantity" :readonly="isCustomComments" :class="['w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none transition text-lg md:text-xl font-mono', isCustomComments ? 'opacity-50 cursor-not-allowed border-slate-700' : 'focus:border-amber-400']">
             </div>
             <div class="w-full md:w-64">
               <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3 md:text-right">{{ appStore.t('total_price') }}</label>
@@ -95,8 +116,8 @@
           </div>
         </div>
 
-        <button @click="submitOrder" :disabled="isSubmitting || !activeServiceId" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-lg md:text-xl py-4 md:py-5 rounded-xl md:rounded-2xl transition-all transform hover:-translate-y-1 shadow-[0_5px_15px_rgba(251,191,36,0.3)] disabled:opacity-50">
-          {{ isSubmitting ? '正在处理...' : appStore.t('submit_order') }}
+        <button @click="submitOrder" :disabled="isSubmitting || !activeServiceId" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-lg md:text-xl py-4 md:py-5 rounded-xl md:rounded-2xl transition-all transform hover:-translate-y-1 shadow-[0_5px_15px_rgba(251,191,36,0.3)] disabled:opacity-50 disabled:hover:translate-y-0">
+          {{ isSubmitting ? '系统高并发处理中...' : appStore.t('submit_order') }}
         </button>
       </div>
     </div>
@@ -124,18 +145,68 @@ const platformKeywords = {
   'Traffic': ['traffic', 'website', 'seo', '流量', '网站']
 };
 
-const platformGuideLinks = { 'TikTok': 'https://www.tiktok.com/@username', 'Telegram': 'https://t.me/username', 'Facebook': 'https://www.facebook.com/username', 'Instagram': 'https://www.instagram.com/username', 'Twitter': 'https://twitter.com/username' };
+const platformGuideLinks = { 
+    'TikTok': atob('aHR0cHM6Ly93d3cudGlrdG9rLmNvbS9AdXNlcm5hbWU='), 
+    'Telegram': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'), 
+    'Facebook': atob('aHR0cHM6Ly93d3cuZmFjZWJvb2suY29tL3VzZXJuYW1l'), 
+    'Instagram': atob('aHR0cHM6Ly93d3cuaW5zdGFncmFtLmNvbS91c2VybmFtZQ=='), 
+    'Twitter': atob('aHR0cHM6Ly90d2l0dGVyLmNvbS91c2VybmFtZQ==') 
+};
 
 const rawServices = ref([]);
 const sysAnnouncement = ref(''); const activePlatform = ref('TikTok');
 const activeCategory = ref(''); const activeServiceId = ref('');
-const form = ref({ link: '', quantity: 1000 });
+const form = ref({ link: '', quantity: 1000, comments: '' });
 const isSubmitting = ref(false); const catOpen = ref(false); const srvOpen = ref(false);
-const dynamicGuideLink = computed(() => platformGuideLinks[activePlatform.value] || 'https://www.example.com/link');
+
+const dynamicGuideLink = computed(() => platformGuideLinks[activePlatform.value] || atob('aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20vbGluaw=='));
 const rawTotalPrice = computed(() => {
     if (!activeService.value || !form.value.quantity) return '0.00';
     return ((parseInt(form.value.quantity) / 1000) * parseFloat(activeService.value.rate)).toFixed(4);
 });
+
+// 排他性正则过滤引擎
+const isCustomComments = computed(() => {
+    if (!activeService.value) return false;
+    const sType = String(activeService.value.type || '').toLowerCase();
+    const sName = String(activeService.value.name || '').toLowerCase();
+
+    if (sName.includes('随机') || sType.includes('random') || sName.includes('自动')) {
+        return false;
+    }
+    return sType.includes('custom comments') || 
+           sType.includes('custom_comments') || 
+           sName.includes('自定义');
+});
+
+const parsedLinesCount = computed(() => {
+    if (!form.value.comments) return 0;
+    return form.value.comments.split('\n').filter(line => line.trim() !== '').length;
+});
+
+const updateQuantityFromComments = () => {
+    if (!isCustomComments.value) return;
+    const count = parsedLinesCount.value;
+    form.value.quantity = count === 0 ? (activeService.value?.min || 1) : count;
+};
+
+// 💡 核心注入：上游错误码全境中文翻译器
+const translateUpstreamError = (errStr) => {
+    if (!errStr) return '未知系统错误，请重试';
+    const s = String(errStr).toLowerCase();
+    
+    if (s.includes('min_quantity')) return '下单被拦截：您提交的数量低于该服务的最低要求';
+    if (s.includes('max_quantity')) return '下单被拦截：您提交的数量超出了该服务的最高要求';
+    if (s.includes('not enough') || s.includes('balance') || s.includes('funds')) return '系统错误：上游通道余额不足，请联系客服处理';
+    if (s.includes('incorrect request')) return '请求错误：参数格式不正确或服务已失效';
+    if (s.includes('invalid link') || s.includes('invalid_link')) return '链接无效：请检查目标链接的格式是否正确';
+    if (s.includes('service not found')) return '服务失效：该服务已被上游移除或下架';
+    if (s.includes('comments')) return '评论异常：自定义评论内容不符合上游接口规范';
+    if (s.includes('duplicate')) return '重复下单：相同的链接请等待上一单完成后再提交';
+    
+    // 如果没有命中上述规则，返回原文
+    return errStr; 
+};
 
 const fetchInitData = async () => {
   try {
@@ -196,33 +267,88 @@ const selectCategory = (cat) => {
   } 
 };
 
-const selectService = (id) => { activeServiceId.value = String(id); srvOpen.value = false; };
+const selectService = (id) => { 
+    activeServiceId.value = String(id); 
+    srvOpen.value = false; 
+    
+    if (isCustomComments.value) {
+        updateQuantityFromComments();
+    } else {
+        form.value.quantity = activeService.value?.min || 1000;
+        form.value.comments = '';
+    }
+};
 
 const submitOrder = async () => {
   if(!form.value.link) return uiStore.showToast('请输入目标链接！', 'error');
   if(!activeServiceId.value) return uiStore.showToast('请选择服务！', 'error');
+  
+  const currentQty = Number(form.value.quantity);
+  const minQty = Number(activeService.value?.min || 1);
+  const maxQty = Number(activeService.value?.max || 10000000);
+
+  if(isCustomComments.value && parsedLinesCount.value === 0) {
+      return uiStore.showToast('自定义服务必须输入评论内容！', 'error');
+  }
+
+  // 💡 强力前端防呆：提交前严格拦截数量边界，节省无效网络请求
+  if (currentQty < minQty) {
+      return uiStore.showToast(`拦截：当前数量 ${currentQty} 低于服务要求最低限制 ${minQty}`, 'error');
+  }
+  if (currentQty > maxQty) {
+      return uiStore.showToast(`拦截：当前数量 ${currentQty} 超出服务最高限制 ${maxQty}`, 'error');
+  }
+
   const confirm = await uiStore.showConfirm(`确认消费 ${appStore.formatMoney(rawTotalPrice.value)} 提交该订单吗？`);
   if (!confirm) return;
+  
   isSubmitting.value = true;
   try {
-      const res = await fetch('/api/orders/add', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ serviceId: activeServiceId.value, serviceName: activeService.value.name, link: form.value.link, quantity: form.value.quantity }) });
+      // 💡 冗余双轨载荷：同时发送 comments 和 custom_comments
+      const payload = { 
+          serviceId: activeServiceId.value, 
+          serviceName: activeService.value.name, 
+          link: form.value.link, 
+          quantity: currentQty,
+          comments: isCustomComments.value ? form.value.comments : undefined,
+          custom_comments: isCustomComments.value ? form.value.comments : undefined
+      };
+      
+      const res = await fetch('/api/orders/add', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, 
+          body: JSON.stringify(payload) 
+      });
       const data = await res.json();
-      if (res.ok) {
-          uiStore.showToast(data.message, 'success');
+      
+      // 这里的 status 由后端控制，如果 res.ok 且 status 为 success 则代表真实成功
+      if (res.ok && data.status === 'success') {
+          uiStore.showToast(data.message || '订单提交成功', 'success');
+          form.value.link = '';
+          form.value.comments = '';
+          if (isCustomComments.value) updateQuantityFromComments();
+          
           const uRes = await fetch('/api/user/status', {headers: { 'Authorization': `Bearer ${userStore.token}` }});
           const uData = await uRes.json();
           if(uData.status === 'success') { userStore.userInfo.balance = uData.balance; }
-      } else { uiStore.showToast(data.message, 'error');
+      } else { 
+          // 💡 接管并翻译错误提示
+          const friendlyError = translateUpstreamError(data.message || '下单失败，上游通道异常');
+          uiStore.showToast(friendlyError, 'error');
       }
-  } catch(e) { uiStore.showToast('提交失败，网络异常', 'error'); }
+  } catch(e) { uiStore.showToast('提交失败，网络传输中断', 'error'); }
   isSubmitting.value = false;
 };
 
 onMounted(() => fetchInitData());
 </script>
+
 <style>
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.3); border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(59, 130, 246, 0.6); }
+
+.fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-10px) scale(0.98); }
 </style>

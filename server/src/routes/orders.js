@@ -7,7 +7,8 @@ import { sendTgMessage } from '../utils/tgBot.js';
 const router = express.Router();
 
 router.post('/add', authenticate, async (req, res) => {
-  const { serviceId, link, quantity } = req.body;
+  // 💡 核心修复 1：解除参数封锁，放行 comments 和 custom_comments
+  const { serviceId, link, quantity, comments, custom_comments } = req.body;
   if (!serviceId || !link || !quantity || quantity <= 0) return res.json({ status: 'error', message: '参数非法' });
 
   const t = await sequelize.transaction();
@@ -61,7 +62,11 @@ router.post('/add', authenticate, async (req, res) => {
       await t.rollback(); return res.json({ status: 'error', message: '系统尚未配置上游API密钥' });
     }
 
-    const payload = new URLSearchParams({ key: keyConf.value, action: 'add', service: serviceId, link, quantity });
+    // 💡 核心修复 2：动态组装上游 API 载荷，绝不漏掉评论数据
+    const payloadObj = { key: keyConf.value, action: 'add', service: serviceId, link, quantity };
+    if (comments) payloadObj.comments = comments;
+    if (custom_comments) payloadObj.custom_comments = custom_comments;
+    const payload = new URLSearchParams(payloadObj);
     
     let upRes;
     try {
@@ -88,9 +93,11 @@ router.post('/add', authenticate, async (req, res) => {
       
       await t.commit(); 
 
-      // 💡 核心强化：TG 增加详尽的用户画像
+      // 💡 核心优化：TG 机器人增加对自定义评论的侦测播报
       const roleName = user ? (user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户') : '系统神权';
-      sendTgMessage(`🛒 <b>用户新订单提交</b>\n🆔 <b>UID:</b> <code>${user ? user.id : '0'}</code>\n📱 <b>账号:</b> <code>${user ? user.phone : '最高管理'}</code>\n📧 <b>邮箱:</b> ${user ? (user.email || '未绑定') : '系统'}\n🔰 <b>等级:</b> ${roleName}\n📦 <b>商品:</b> [ID:${serviceId}] ${service.name}\n🔢 <b>数量:</b> ${quantity}\n💸 <b>扣费:</b> ￥${charge}\n🔗 <b>目标:</b> <code>${link}</code>\n🔖 <b>系统单号:</b> <code>${newOrder.order_no}</code>\n📡 <b>上游单号:</b> <code>${upRes.data.order}</code>`);
+      const commentMark = comments ? `\n💬 <b>评论:</b> 包含 ${comments.split('\n').length} 行自定义内容` : '';
+      
+      sendTgMessage(`🛒 <b>用户新订单提交</b>\n🆔 <b>UID:</b> <code>${user ? user.id : '0'}</code>\n📱 <b>账号:</b> <code>${user ? user.phone : '最高管理'}</code>\n📧 <b>邮箱:</b> ${user ? (user.email || '未绑定') : '系统'}\n🔰 <b>等级:</b> ${roleName}\n📦 <b>商品:</b> [ID:${serviceId}] ${service.name}\n🔢 <b>数量:</b> ${quantity}\n💸 <b>扣费:</b> ￥${charge}\n🔗 <b>目标:</b> <code>${link}</code>${commentMark}\n🔖 <b>系统单号:</b> <code>${newOrder.order_no}</code>\n📡 <b>上游单号:</b> <code>${upRes.data.order}</code>`);
 
       res.json({ status: 'success', message: '✅ 订单已秒级提交至全网', order_id: newOrder.order_no });
     } else {
