@@ -16,21 +16,16 @@ function newClientUUID() {
 
 export async function createXXUIClient(baseUrl, apiKey, inboundId, email, uuid, totalGB, expiryTime) {
   const url = `${normUrl(baseUrl)}/panel/remote/inbound/${inboundId}/client`;
+  const totalBytes = totalGB * 1073741824;
   const payload = {
-    clientStats: [{
-      email,
-      enable: true,
-      up: 0,
-      down: 0,
-      expiryTime,
-      total: totalGB * 1073741824, // GB to bytes
-      uuid
-    }],
     settings: JSON.stringify({
       clients: [{
         id: uuid,
         email: email,
-        flow: ""
+        flow: "",
+        totalGB: totalBytes,
+        expiryTime: expiryTime,
+        enable: true
       }]
     })
   };

@@ -132,6 +132,8 @@ const trafficPercent = (c) => {
   return Math.round((used / total) * 100);
 };
 
+const showDetail = (c) => { detail.value = c; };
+
 const detailRows = computed(() => {
   if (!detail.value) return [];
   const rows = [
