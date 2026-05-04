@@ -48,7 +48,7 @@
         <div class="lg:col-span-1 space-y-3">
           <div v-for="n in nodes" :key="n.id" @click="selectedNode = n" :class="['rounded-2xl p-4 border cursor-pointer transition-all', selectedNode?.id === n.id ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.15)]' : 'border-slate-700/50 bg-slate-900/60 hover:border-slate-600']">
             <div class="flex items-center justify-between">
-              <span class="text-lg">{{ n.flag_emoji || '🖥️' }}</span>
+              <span class="text-lg">{{ getFlag(n) }}</span>
               <span v-if="selectedNode?.id === n.id" class="text-emerald-400 text-xs font-bold">✓ 已选</span>
             </div>
             <h3 class="font-bold text-white mt-2">{{ n.name }}</h3>
@@ -135,6 +135,9 @@ import { useUiStore } from '../stores/ui';
 
 const router = useRouter();
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
+
+const FLAG_MAP = { hk: '🇭🇰', hongkong: '🇭🇰', jp: '🇯🇵', japan: '🇯🇵', us: '🇺🇸', usa: '🇺🇸', uk: '🇬🇧', gb: '🇬🇧', sg: '🇸🇬', singapore: '🇸🇬', de: '🇩🇪', germany: '🇩🇪', nl: '🇳🇱', fr: '🇫🇷', kr: '🇰🇷', tw: '🇹🇼', ca: '🇨🇦', au: '🇦🇺', ru: '🇷🇺', tr: '🇹🇷', ae: '🇦🇪', br: '🇧🇷', in: '🇮🇳' };
+const getFlag = (node) => node.flag_emoji || FLAG_MAP[(node.vps_location || '').toLowerCase()] || FLAG_MAP[(node.name || '').toLowerCase()] || '🖥️';
 
 const nodes = ref([]);
 const trafficOptions = ref([100, 200, 500, 1000, 2000]);

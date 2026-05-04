@@ -88,9 +88,9 @@ router.post('/buy', authenticate, async (req, res) => {
       description: `VPN: ${product.name} ${traffic_gb}GB/${dur.label}`
     }, { transaction: t });
 
-    // Create client on XX-UI
-    const now = Math.floor(Date.now() / 1000);
-    const expiryTime = now + (Number(duration_days) * 86400);
+    // Create client on XX-UI (XX-UI uses milliseconds timestamps)
+    const now = Date.now();
+    const expiryTime = now + (Number(duration_days) * 86400 * 1000);
     const email = newClientEmail(product.id, user.id);
     const uuid = newClientUUID();
     const apiKey = await getConfig('xxui_api_key');
