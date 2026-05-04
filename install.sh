@@ -83,10 +83,23 @@ echo "配置 Nginx..."
 rm -rf /etc/nginx/sites-enabled/*
 rm -f /etc/nginx/sites-available/xnow
 
+mkdir -p /etc/nginx/ssl
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/xnow.key -out /etc/nginx/ssl/xnow.crt \
+  -subj "/CN=$DOMAIN" 2>/dev/null
+
 cat > /etc/nginx/sites-available/xnow << NGXEOF
 server {
     listen 80;
     server_name $DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+server {
+    listen 443 ssl http2;
+    server_name $DOMAIN;
+
+    ssl_certificate /etc/nginx/ssl/xnow.crt;
+    ssl_certificate_key /etc/nginx/ssl/xnow.key;
 
     root /var/www/xnow/client/dist;
     index index.html;
@@ -112,12 +125,12 @@ ln -sf /etc/nginx/sites-available/xnow /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 systemctl daemon-reload
 systemctl restart nginx
-echo "  ✓ Nginx 已启动"
+echo "  ✓ Nginx 已启动 (HTTP + HTTPS)"
 
 echo ""
 echo "============================================"
 echo "  部署完成！"
-echo "  http://$DOMAIN"
+echo "  https://$DOMAIN"
 echo ""
-echo "  Cloudflare SSL 设为 Flexible（灵活）"
+echo "  Cloudflare SSL 设为 Full（完全）"
 echo "============================================"
