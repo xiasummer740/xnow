@@ -21,7 +21,7 @@
               <h3 class="text-white font-bold group-hover:text-emerald-300 transition text-sm font-mono truncate max-w-[180px]">{{ c.email }}</h3>
               <button @click="copy(c.email)" class="text-slate-600 hover:text-emerald-400 transition flex-shrink-0" :title="appStore.lang === 'zh' ? '复制' : 'Copy'"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></button>
             </div>
-            <span v-if="c.vps_location" class="text-xs text-slate-500">{{ c.vps_location }}</span>
+            <span v-if="c.vps_location" class="text-xs text-slate-500">{{ c.flag_emoji }} {{ c.vps_location }}</span>
           </div>
           <span :class="['text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0', isExpired(c) ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30']">{{ isExpired(c) ? (appStore.lang === 'zh' ? '已过期' : 'Expired') : (appStore.lang === 'zh' ? '运行中' : 'Active') }}</span>
         </div>
@@ -72,6 +72,12 @@
           </div>
         </div>
 
+        <!-- QR Code -->
+        <div v-if="detail.subscription_url" class="flex flex-col items-center py-2">
+          <img :src="qrcodeUrl(detail.subscription_url)" class="w-48 h-48 rounded-2xl bg-white p-2" alt="QR Code" />
+          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '使用小火箭 / V2Ray / Sing-Box 扫码导入' : 'Scan with Shadowrocket / V2Ray / Sing-Box' }}</p>
+        </div>
+
         <!-- Subscription URL Box -->
         <div v-if="detail.subscription_url" class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
           <div class="text-xs text-emerald-400 font-bold mb-2">{{ appStore.lang === 'zh' ? '📡 订阅链接' : '📡 Subscription Link' }}</div>
@@ -112,8 +118,8 @@ onMounted(async () => {
   if (demoMode.value) {
     const now = Math.floor(Date.now() / 1000);
     clients.value = [
-      { id: 1, email: 'u1_p1_a3f8c2@vpn', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', traffic_gb: 200, traffic_used_up: 32_000_000_000, traffic_used_down: 8_000_000_000, expiry_time: now + 86400 * 75, vps_location: '🇺🇸 洛杉矶', subscription_url: 'https://panel.example.com/sub/abc123', _demo: true },
-      { id: 2, email: 'u1_p2_b7e1d9@vpn', uuid: 'f9e8d7c6-b5a4-3210-fedc-ba9876543210', traffic_gb: 500, traffic_used_up: 0, traffic_used_down: 0, expiry_time: now + 86400 * 10, vps_location: '🇬🇧 伦敦', subscription_url: '', _demo: true },
+      { id: 1, email: 'u1_p1_a3f8c2@vpn', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', traffic_gb: 200, traffic_used_up: 32_000_000_000, traffic_used_down: 8_000_000_000, expiry_time: now + 86400 * 75, vps_location: '洛杉矶', flag_emoji: '🇺🇸', subscription_url: 'https://panel.example.com/sub/abc123', _demo: true },
+      { id: 2, email: 'u1_p2_b7e1d9@vpn', uuid: 'f9e8d7c6-b5a4-3210-fedc-ba9876543210', traffic_gb: 500, traffic_used_up: 0, traffic_used_down: 0, expiry_time: now + 86400 * 10, vps_location: '伦敦', flag_emoji: '🇬🇧', subscription_url: '', _demo: true },
     ];
   }
   loading.value = false;
@@ -133,6 +139,7 @@ const trafficPercent = (c) => {
 };
 
 const showDetail = (c) => { detail.value = c; };
+const qrcodeUrl = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
 
 const detailRows = computed(() => {
   if (!detail.value) return [];

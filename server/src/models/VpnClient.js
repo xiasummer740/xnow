@@ -16,6 +16,7 @@ const VpnClient = sequelize.define('VpnClient', {
   traffic_used_down: { type: DataTypes.BIGINT, defaultValue: 0 },
   expiry_time: { type: DataTypes.BIGINT },
   vps_location: { type: DataTypes.STRING(100) },
+  flag_emoji: { type: DataTypes.STRING(10) },
   status: { type: DataTypes.STRING(20), defaultValue: 'active' }
 });
 
