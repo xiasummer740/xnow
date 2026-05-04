@@ -26,6 +26,14 @@ systemctl start mysql
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || mysql -u root -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null || mysql -u root -p"$DB_PASS" -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null
 
+echo "📥 正在拉取最新源码..."
+mkdir -p /var/www
+if [ -d "/var/www/xnow" ]; then
+  cd /var/www/xnow && git pull
+else
+  git clone https://github.com/xiasummer740/xnow.git /var/www/xnow
+fi
+
 echo "⚙️ 正在构建后端服务基石..."
 cd /var/www/xnow/server
 cat << ENV_EOF > .env
