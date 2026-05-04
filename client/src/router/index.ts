@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
+import VpnLayout from '../layouts/VpnLayout.vue'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import Order from '../views/Order.vue'
@@ -10,6 +11,9 @@ import Vip from '../views/Vip.vue'
 import Admin from '../views/Admin.vue'
 import ApiDoc from '../views/ApiDoc.vue'
 import Affiliate from '../views/Affiliate.vue'
+import VpnShop from '../views/VpnShop.vue'
+import VpnClients from '../views/VpnClients.vue'
+import VpnAdmin from '../views/VpnAdmin.vue'
 
 const routes = [
   { path: '/', component: Home },
@@ -25,6 +29,12 @@ const routes = [
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: ApiDoc },
       { path: 'affiliate', component: Affiliate }
+    ]
+  },
+  { path: '/vpn', component: VpnLayout, children: [
+      { path: '', component: VpnShop },
+      { path: 'clients', component: VpnClients },
+      { path: 'admin', component: VpnAdmin }
     ]
   }
 ]

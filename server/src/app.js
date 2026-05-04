@@ -17,6 +17,7 @@ import userRoutes from './routes/user.js';
 import servicesRoutes from './routes/services.js';
 import ordersRoutes from './routes/orders.js';
 import transactionsRoutes from './routes/transactions.js';
+import vpnRoutes from './routes/vpn.js';
 
 dotenv.config();
 const app = express();
@@ -56,8 +57,9 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/orders', ordersRoutes); 
 app.use('/api/transactions', transactionsRoutes); 
 app.use('/api/pay', payRoutes);
-app.use('/api/admin', adminRoutes); 
-app.use('/api/public', publicRoutes); 
+app.use('/api/admin', adminRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/vpn', vpnRoutes);
 
 const initDatabase = async () => {
   try {
@@ -74,6 +76,8 @@ const initDatabase = async () => {
     } else {
       const existDiscount = await Config.findOne({ where: { key: 'agent_discount' } });
       if (!existDiscount) await Config.create({ key: 'agent_discount', value: '0.8' });
+      const existXXUIKey = await Config.findOne({ where: { key: 'xxui_api_key' } });
+      if (!existXXUIKey) await Config.create({ key: 'xxui_api_key', value: '' });
     }
   } catch (error) { console.error('Database Init Error:', error.message); }
 };
