@@ -3,24 +3,9 @@ import { authenticate } from '../middleware/auth.js';
 import { VpnProduct, VpnClient, Config, Transaction, User, sequelize } from '../models/index.js';
 import { createXXUIClient, newClientEmail, newClientUUID, getXXUIClient, updateXXUIClient } from '../utils/xxui.js';
 import { sendTgMessage } from '../utils/tgBot.js';
+import crypto from 'crypto';
 
 const router = express.Router();
-
-function buildConnectionUrl(protocol, host, port, email, uuid) {
-  // Remove any quotes from host
-  host = (host || '').replace(/"/g, '');
-  const addr = port ? `${host}:${port}` : host;
-  switch ((protocol || '').toLowerCase()) {
-    case 'vless':
-      return `vless://${uuid}@${addr}?encryption=none&security=reality&type=tcp#${encodeURIComponent(email)}`;
-    case 'vmess':
-      return `vmess://${Buffer.from(JSON.stringify({ v: '2', ps: email, add: host, port: port, id: uuid, aid: 0, net: 'tcp', type: 'none', host: '', path: '', tls: 'tls' })).toString('base64')}`;
-    case 'trojan':
-      return `trojan://${uuid}@${addr}?security=tls&type=tcp#${encodeURIComponent(email)}`;
-    default:
-      return `vless://${uuid}@${addr}?encryption=none&type=tcp#${encodeURIComponent(email)}`;
-  }
-}
 
 // Traffic presets users can choose from (GB)
 const TRAFFIC_OPTIONS = [100, 200, 500, 1000, 2000];
@@ -116,25 +101,18 @@ router.post('/buy', authenticate, async (req, res) => {
       return res.json({ status: 'error', message: '节点未完成配置，请联系管理员' });
     }
 
-    const inboundInfo = await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, Number(traffic_gb), expiryTime);
+    // Generate subId for XX-UI subscription URL
+    const subId = crypto.randomBytes(8).toString('hex');
+    await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
 
-    // Build connection URL and subscription URL
-    const baseUrl = (product.xxui_url || '').replace(/\/+$/, '');
-    const subB64 = Buffer.from(JSON.stringify({ email, uuid })).toString('base64url');
-    const subUrl = `${baseUrl}/sub/${subB64}`;
-
-    // Build a direct connection URL from inbound info
-    const remoteHost = new URL(baseUrl).hostname;
-    const protocol = inboundInfo.protocol || '';
-    const port = inboundInfo.port || '';
-    const listen = inboundInfo.listen || remoteHost;
-    const connUrl = buildConnectionUrl(protocol, listen, port, email, uuid);
+    // Build subscription URL: {panel_hostname}:{sub_port}/sub/{subId}
+    const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
+    const subUrl = `https://${panelHost}:${product.sub_port || 2096}/sub/${subId}`;
 
     await VpnClient.create({
       user_id: user.id, product_id: product.id,
-      email, uuid, sub_id: subB64,
+      email, uuid, sub_id: subId,
       subscription_url: subUrl,
-      config_url: connUrl,
       traffic_gb: Number(traffic_gb),
       expiry_time: expiryTime,
       vps_location: product.vps_location,
@@ -146,7 +124,7 @@ router.post('/buy', authenticate, async (req, res) => {
 
     res.json({
       status: 'success',
-      data: { email, uuid, subscription_url: subUrl, config_url: connUrl, expiry_time: expiryTime, traffic_gb: Number(traffic_gb), vps_location: product.vps_location, flag_emoji: product.flag_emoji || '', price: finalPrice }
+      data: { email, uuid, subscription_url: subUrl, expiry_time: expiryTime, traffic_gb: Number(traffic_gb), vps_location: product.vps_location, flag_emoji: product.flag_emoji || '', price: finalPrice }
     });
   } catch (e) {
     await t.rollback();

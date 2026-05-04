@@ -34,12 +34,13 @@
 
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">XX-UI 地址</th><th class="p-3">入站ID</th><th class="p-3">上限</th><th class="p-3">单价/GB</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
+          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">XX-UI 地址</th><th class="p-3">入站ID</th><th class="p-3">订阅端口</th><th class="p-3">单价/GB</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
           <tbody>
             <tr v-for="s in servers" :key="s.id" class="border-t border-slate-800 hover:bg-slate-800/50 transition">
               <td class="p-3 font-bold text-white whitespace-nowrap">{{ s.flag_emoji }} {{ s.name }}</td>
               <td class="p-3 text-slate-400 font-mono text-xs max-w-[140px] truncate" :title="s.xxui_url">{{ s.xxui_url || '—' }}</td>
               <td class="p-3 text-white">{{ s.xxui_inbound_id || '—' }}</td>
+              <td class="p-3 text-white">{{ s.sub_port || 2096 }}</td>
               <td class="p-3 text-white">{{ s.max_traffic_gb }}GB</td>
               <td class="p-3 text-white">¥{{ parseFloat(s.price_per_gb || 0).toFixed(2) }}</td>
               <td class="p-3"><span :class="['px-2 py-0.5 rounded-full text-xs font-bold', s.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-500']">{{ s.active ? '启用' : '禁用' }}</span></td>
@@ -90,6 +91,7 @@
             <div><label class="text-slate-400 text-xs">最大流量(GB)</label><input v-model.number="editing.max_traffic_gb" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"></div>
             <div><label class="text-slate-400 text-xs">单价(¥/GB)</label><input v-model.number="editing.price_per_gb" type="number" step="0.01" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"></div>
           </div>
+          <div><label class="text-slate-400 text-xs">订阅端口 (默认 2096)</label><input v-model.number="editing.sub_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400"></div>
           <label class="flex items-center space-x-2 cursor-pointer"><input v-model="editing.active" type="checkbox" class="w-4 h-4 rounded accent-emerald-500"> <span class="text-slate-400">启用此节点</span></label>
         </div>
         <div class="flex space-x-3 pt-2">
@@ -114,7 +116,7 @@ const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
 const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false);
 const keyMsg = ref(''); const keyMsgOk = ref(false);
-const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, active: true, description: '' });
+const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, active: true, description: '' });
 
 onMounted(() => { fetchData(); fetchApiKey(); });
 
@@ -159,7 +161,7 @@ const fetchData = async () => {
 const editServer = (s) => {
   editErr.value = '';
   editMode.value = true;
-  editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, active: true, description: '' };
+  editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, active: true, description: '' };
 };
 
 const saveServer = async () => {

@@ -72,20 +72,12 @@
           </div>
         </div>
 
-        <!-- QR Code for subscription -->
+        <!-- QR Code -->
         <div v-if="detail.subscription_url" class="flex flex-col items-center py-2">
-          <img :src="qrcodeUrl(detail.subscription_url)" class="w-40 h-40 rounded-2xl bg-white p-2" alt="QR" @error="onQrError" />
-          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '扫码导入订阅 (小火箭/V2Ray/Sing-Box)' : 'Scan to import (Shadowrocket/V2Ray/Sing-Box)' }}</p>
-        </div>
-
-        <!-- Connection URL -->
-        <div v-if="detail.config_url" class="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-4">
-          <div class="text-xs text-cyan-400 font-bold mb-2">{{ appStore.lang === 'zh' ? '🔗 一键连接' : '🔗 Direct Connection' }}</div>
-          <div class="flex items-center space-x-2">
-            <code class="flex-1 text-xs text-white break-all font-mono bg-slate-800 rounded-lg p-2 max-h-16 overflow-y-auto">{{ detail.config_url }}</code>
-            <button @click="copy(detail.config_url)" class="px-3 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold text-xs flex-shrink-0 transition">{{ copied === detail.config_url ? '✓' : (appStore.lang === 'zh' ? '复制' : 'Copy') }}</button>
+          <div class="bg-white rounded-2xl p-2 inline-block">
+            <canvas id="vpn-qr-canvas" width="200" height="200"></canvas>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '复制此链接，在客户端中「导入配置」即可一键连接' : 'Copy and "Import Config" in your client' }}</p>
+          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '扫码导入 (小火箭/V2Ray/Sing-Box)' : 'Scan to import (Shadowrocket/V2Ray/Sing-Box)' }}</p>
         </div>
 
         <!-- Subscription URL Box -->
@@ -108,9 +100,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
+import QRCode from 'qrcode';
 
 const appStore = useAppStore(); const userStore = useUserStore();
 const clients = ref([]); const loading = ref(true); const detail = ref(null);
@@ -148,9 +141,13 @@ const trafficPercent = (c) => {
   return Math.round((used / total) * 100);
 };
 
-const showDetail = (c) => { detail.value = c; };
-const qrcodeUrl = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-const onQrError = (e) => { e.target.style.display = 'none'; };
+const showDetail = (c) => { detail.value = c; nextTick(() => { drawQr(); }); };
+const drawQr = async () => {
+  if (!detail.value?.subscription_url) return;
+  const el = document.getElementById('vpn-qr-canvas');
+  if (!el) return;
+  try { await QRCode.toCanvas(el, detail.value.subscription_url, { width: 200, margin: 2 }); } catch (e) { /* */ }
+};
 
 const detailRows = computed(() => {
   if (!detail.value) return [];

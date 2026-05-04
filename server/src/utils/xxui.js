@@ -14,7 +14,7 @@ function newClientUUID() {
   return crypto.randomUUID();
 }
 
-export async function createXXUIClient(baseUrl, apiKey, inboundId, email, uuid, totalGB, expiryTime) {
+export async function createXXUIClient(baseUrl, apiKey, inboundId, email, uuid, subId, totalGB, expiryTime) {
   const url = `${normUrl(baseUrl)}/panel/remote/inbound/${inboundId}/client`;
   const totalBytes = totalGB * 1073741824;
   const payload = {
@@ -22,6 +22,7 @@ export async function createXXUIClient(baseUrl, apiKey, inboundId, email, uuid, 
       clients: [{
         id: uuid,
         email: email,
+        subId: subId,
         flow: "",
         totalGB: totalBytes,
         expiryTime: expiryTime,
