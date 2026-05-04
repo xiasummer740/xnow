@@ -72,10 +72,20 @@
           </div>
         </div>
 
-        <!-- QR Code -->
+        <!-- QR Code for subscription -->
         <div v-if="detail.subscription_url" class="flex flex-col items-center py-2">
-          <img :src="qrcodeUrl(detail.subscription_url)" class="w-48 h-48 rounded-2xl bg-white p-2" alt="QR Code" />
-          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '使用小火箭 / V2Ray / Sing-Box 扫码导入' : 'Scan with Shadowrocket / V2Ray / Sing-Box' }}</p>
+          <img :src="qrcodeUrl(detail.subscription_url)" class="w-40 h-40 rounded-2xl bg-white p-2" alt="QR" @error="onQrError" />
+          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '扫码导入订阅 (小火箭/V2Ray/Sing-Box)' : 'Scan to import (Shadowrocket/V2Ray/Sing-Box)' }}</p>
+        </div>
+
+        <!-- Connection URL -->
+        <div v-if="detail.config_url" class="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-4">
+          <div class="text-xs text-cyan-400 font-bold mb-2">{{ appStore.lang === 'zh' ? '🔗 一键连接' : '🔗 Direct Connection' }}</div>
+          <div class="flex items-center space-x-2">
+            <code class="flex-1 text-xs text-white break-all font-mono bg-slate-800 rounded-lg p-2 max-h-16 overflow-y-auto">{{ detail.config_url }}</code>
+            <button @click="copy(detail.config_url)" class="px-3 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold text-xs flex-shrink-0 transition">{{ copied === detail.config_url ? '✓' : (appStore.lang === 'zh' ? '复制' : 'Copy') }}</button>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '复制此链接，在客户端中「导入配置」即可一键连接' : 'Copy and "Import Config" in your client' }}</p>
         </div>
 
         <!-- Subscription URL Box -->
@@ -118,8 +128,8 @@ onMounted(async () => {
   if (demoMode.value) {
     const now = Math.floor(Date.now() / 1000);
     clients.value = [
-      { id: 1, email: 'u1_p1_a3f8c2@vpn', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', traffic_gb: 200, traffic_used_up: 32_000_000_000, traffic_used_down: 8_000_000_000, expiry_time: now + 86400 * 75, vps_location: '洛杉矶', flag_emoji: '🇺🇸', subscription_url: 'https://panel.example.com/sub/abc123', _demo: true },
-      { id: 2, email: 'u1_p2_b7e1d9@vpn', uuid: 'f9e8d7c6-b5a4-3210-fedc-ba9876543210', traffic_gb: 500, traffic_used_up: 0, traffic_used_down: 0, expiry_time: now + 86400 * 10, vps_location: '伦敦', flag_emoji: '🇬🇧', subscription_url: '', _demo: true },
+      { id: 1, email: 'u1_p1_a3f8c2@vpn', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', config_url: 'vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@us.example.com:443?encryption=none&security=reality&type=tcp#demo', traffic_gb: 200, traffic_used_up: 32_000_000_000, traffic_used_down: 8_000_000_000, expiry_time: now + 86400 * 75 * 1000, vps_location: '洛杉矶', flag_emoji: '🇺🇸', subscription_url: 'https://panel.example.com/sub/abc123', _demo: true },
+      { id: 2, email: 'u1_p2_b7e1d9@vpn', uuid: 'f9e8d7c6-b5a4-3210-fedc-ba9876543210', config_url: '', traffic_gb: 500, traffic_used_up: 0, traffic_used_down: 0, expiry_time: now + 86400 * 10 * 1000, vps_location: '伦敦', flag_emoji: '🇬🇧', subscription_url: '', _demo: true },
     ];
   }
   loading.value = false;
@@ -140,6 +150,7 @@ const trafficPercent = (c) => {
 
 const showDetail = (c) => { detail.value = c; };
 const qrcodeUrl = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+const onQrError = (e) => { e.target.style.display = 'none'; };
 
 const detailRows = computed(() => {
   if (!detail.value) return [];
