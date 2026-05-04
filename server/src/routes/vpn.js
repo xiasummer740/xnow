@@ -71,6 +71,7 @@ router.post('/buy', authenticate, async (req, res) => {
 
     // Check balance
     const user = await User.findByPk(req.user.id, { transaction: t });
+    if (!user) { await t.rollback(); return res.json({ status: 'error', message: '用户不存在，请重新登录' }); }
     const userBalance = parseFloat(user.balance || 0);
     if (userBalance < finalPrice) {
       await t.rollback();

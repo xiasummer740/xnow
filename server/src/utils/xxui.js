@@ -1,6 +1,10 @@
 import axios from 'axios';
 import crypto from 'crypto';
 
+function normUrl(u) {
+  return (u || '').replace(/\/+$/, '');
+}
+
 function newClientEmail(productId, userId) {
   const shortId = crypto.randomBytes(4).toString('hex');
   return `u${userId}_p${productId}_${shortId}`;
@@ -11,7 +15,7 @@ function newClientUUID() {
 }
 
 export async function createXXUIClient(baseUrl, apiKey, inboundId, email, uuid, totalGB, expiryTime) {
-  const url = `${baseUrl}/panel/remote/inbound/${inboundId}/client`;
+  const url = `${normUrl(baseUrl)}/panel/remote/inbound/${inboundId}/client`;
   const payload = {
     clientStats: [{
       email,
@@ -46,7 +50,7 @@ export async function createXXUIClient(baseUrl, apiKey, inboundId, email, uuid, 
 }
 
 export async function getXXUIClient(baseUrl, apiKey, email) {
-  const url = `${baseUrl}/panel/remote/client/${email}`;
+  const url = `${normUrl(baseUrl)}/panel/remote/client/${email}`;
   const { data } = await axios.get(url, {
     headers: { 'X-API-Key': apiKey },
     timeout: 10000
@@ -58,7 +62,7 @@ export async function getXXUIClient(baseUrl, apiKey, email) {
 }
 
 export async function updateXXUIClient(baseUrl, apiKey, email, totalGB, expiryTime, enable) {
-  const url = `${baseUrl}/panel/remote/client/${email}/traffic`;
+  const url = `${normUrl(baseUrl)}/panel/remote/client/${email}/traffic`;
   const payload = { totalGB, expiryTime, enable };
   const { data } = await axios.post(url, payload, {
     headers: {
