@@ -94,6 +94,11 @@
           </div>
           <div><label class="text-slate-400 text-xs">订阅端口 (默认 2096)</label><input v-model.number="editing.sub_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400"></div>
           <div><label class="text-slate-400 text-xs">节点独立 API Key（可选，留空则用全局密钥）</label><input v-model="editing.xxui_api_key" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-emerald-400" placeholder="留空则使用全局 API Key"></div>
+          <div class="pt-2">
+            <button type="button" @click="testConnection" :disabled="testingConn" class="px-4 py-2 rounded-xl font-bold text-sm transition" :class="connResult && connResult.status === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : connResult ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'">
+              {{ testingConn ? '检测中...' : (connResult ? (connResult.status === 'success' ? '✓ ' + connResult.message : '✗ ' + connResult.message) : (appStore.lang === 'zh' ? '🔍 检测连通性' : '🔍 Test Connection')) }}
+            </button>
+          </div>
           <label class="flex items-center space-x-2 cursor-pointer"><input v-model="editing.active" type="checkbox" class="w-4 h-4 rounded accent-emerald-500"> <span class="text-slate-400">启用此节点</span></label>
         </div>
         <div class="flex space-x-3 pt-2">
@@ -172,11 +177,23 @@ const fetchData = async () => {
 };
 
 const editServer = (s) => {
-  editErr.value = '';
+  editErr.value = ''; connResult.value = null;
   editMode.value = true;
   editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' };
 };
 
+const testingConn = ref(false); const connResult = ref(null);
+const testConnection = async () => {
+  testingConn.value = true; connResult.value = null;
+  try {
+    const r = await fetch('/api/vpn/admin/test-connection', {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ xxui_url: editing.value.xxui_url, api_key: editing.value.xxui_api_key, inbound_id: editing.value.xxui_inbound_id })
+    });
+    connResult.value = await r.json();
+  } catch (e) { connResult.value = { status: 'error', message: '网络异常' }; }
+  testingConn.value = false;
+};
 const saveServer = async () => {
   if (!editing.value.name || !editing.value.xxui_inbound_id) {
     editErr.value = appStore.lang === 'zh' ? '名称和入站 ID 为必填项' : 'Name and inbound ID are required';

@@ -190,6 +190,42 @@ router.get('/client/:id', authenticate, async (req, res) => {
 
 // Admin routes
 
+// Test connection to an XX-UI panel
+router.post('/admin/test-connection', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+  const { xxui_url, api_key, inbound_id } = req.body;
+  if (!xxui_url) return res.json({ status: 'error', message: '缺少面板地址' });
+  const baseUrl = (xxui_url || '').replace(/\/+$/, '');
+  const key = api_key || await getConfig('xxui_api_key');
+  if (!key) return res.json({ status: 'error', message: '未配置 API Key' });
+
+  try {
+    const { default: ax } = await import('axios');
+    // Step 1: Try to list inbounds (tests connectivity + key)
+    const r = await ax.get(`${baseUrl}/panel/remote/inbounds`, {
+      headers: { 'X-API-Key': key }, timeout: 10000
+    });
+    if (!r.data?.success) return res.json({ status: 'error', message: 'API Key 无效或面板无响应' });
+
+    const inbounds = r.data.obj || [];
+    if (inbound_id) {
+      const found = inbounds.find(i => i.id === Number(inbound_id));
+      if (!found) return res.json({ status: 'error', message: `入站 ${inbound_id} 不存在或未开启允许远程管理` });
+      res.json({ status: 'success', message: `✓ 连接成功! 入站 ${inbound_id} (${found.protocol || '?'}:${found.port}) 已就绪`, protocol: found.protocol, port: found.port });
+    } else {
+      const ready = inbounds.filter(i => i.port);
+      res.json({ status: 'success', message: `✓ 连接成功! 发现 ${inbounds.length} 个入站，${ready.length} 个可用`, count: inbounds.length });
+    }
+  } catch (e) {
+    const msg = e.code === 'ECONNREFUSED' ? '无法连接面板，地址或端口错误' :
+                e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' ? '连接超时，请检查地址和网络' :
+                e.response?.status === 403 ? 'API Key 无效' :
+                e.response?.status === 401 ? 'API Key 未配置或无效' :
+                `连接失败: ${e.message}`;
+    res.json({ status: 'error', message: msg });
+  }
+});
+
 // Get/set API key
 router.get('/admin/apikey', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
