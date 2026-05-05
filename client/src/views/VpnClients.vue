@@ -151,7 +151,6 @@ onMounted(async () => {
 });
 
 // Using shared format.js utilities
-};
 
 const detailRows = computed(() => {
   if (!detail.value) return [];
