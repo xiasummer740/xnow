@@ -195,7 +195,7 @@ const startAutoRefresh = () => {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
     clients.value.forEach(c => { if (!c._demo) refreshOne(c); });
-  }, 30000);
+  }, 5000);
 };
 onUnmounted(() => { clearInterval(refreshTimer); });
 
