@@ -154,7 +154,7 @@ const toggleBan = async (u) => {
 
 let refreshTimer = null; watch(() => app.globalRefreshTrigger, () => fetchDashboard(false));
 const fetchVpnStatus = async () => { try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {} };
-const toggleVpnShop = async () => { vpnToggling.value = true; const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') vpnShopEnabled.value = d.enabled; vpnToggling.value = false; };
+const toggleVpnShop = async () => { vpnToggling.value = true; try { const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') { vpnShopEnabled.value = d.enabled; } else { alert(d.message || '操作失败'); } } catch (e) { alert('请求失败，请检查网络'); } finally { vpnToggling.value = false; } };
 onMounted(() => { fetchDashboard(true); fetchVpnStatus(); refreshTimer = setInterval(() => { syncing.value = true; fetchDashboard(false); }, 10000); });
 onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 </script>

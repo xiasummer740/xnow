@@ -200,7 +200,8 @@ router.get('/status', async (req, res) => {
 router.post('/admin/toggle-shop', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '仅管理员可操作' });
   const enabled = req.body.enabled !== false;
-  await Config.upsert({ key: 'vpn_shop_enabled', value: String(enabled) });
+  const [row] = await Config.findOrCreate({ where: { key: 'vpn_shop_enabled' }, defaults: { key: 'vpn_shop_enabled', value: String(enabled) } });
+  if (row) { row.value = String(enabled); await row.save(); }
   res.json({ status: 'success', enabled });
 });
 
