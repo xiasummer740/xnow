@@ -138,8 +138,166 @@ import { useUiStore } from '../stores/ui';
 const router = useRouter();
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 
-const FLAG_MAP = { hk: '🇭🇰', hongkong: '🇭🇰', 香港: '🇭🇰', jp: '🇯🇵', japan: '🇯🇵', 日本: '🇯🇵', us: '🇺🇸', usa: '🇺🇸', 美国: '🇺🇸', uk: '🇬🇧', gb: '🇬🇧', 英国: '🇬🇧', sg: '🇸🇬', singapore: '🇸🇬', 新加坡: '🇸🇬', de: '🇩🇪', germany: '🇩🇪', 德国: '🇩🇪', nl: '🇳🇱', 荷兰: '🇳🇱', fr: '🇫🇷', 法国: '🇫🇷', kr: '🇰🇷', 韩国: '🇰🇷', tw: '🇹🇼', 台湾: '🇹🇼', ca: '🇨🇦', 加拿大: '🇨🇦', au: '🇦🇺', 澳大利亚: '🇦🇺', ru: '🇷🇺', 俄罗斯: '🇷🇺', tr: '🇹🇷', ae: '🇦🇪', br: '🇧🇷', in: '🇮🇳', th: '🇹🇭', 泰国: '🇹🇭', vn: '🇻🇳', 越南: '🇻🇳', my: '🇲🇾', 马来西亚: '🇲🇾', ph: '🇵🇭', 菲律宾: '🇵🇭', id: '🇮🇩', 印尼: '🇮🇩' };
-const getFlag = (node) => node.flag_emoji || FLAG_MAP[(node.vps_location || '').toLowerCase()] || FLAG_MAP[(node.name || '').toLowerCase()] || '🖥️';
+const FLAG_MAP = {
+  // East Asia
+  hk: '🇭🇰', hongkong: '🇭🇰', 香港: '🇭🇰',
+  jp: '🇯🇵', japan: '🇯🇵', 日本: '🇯🇵',
+  kr: '🇰🇷', korea: '🇰🇷', southkorea: '🇰🇷', 韩国: '🇰🇷', 南韩: '🇰🇷',
+  tw: '🇹🇼', taiwan: '🇹🇼', 台湾: '🇹🇼',
+  cn: '🇨🇳', china: '🇨🇳', 中国: '🇨🇳', 大陆: '🇨🇳',
+  mo: '🇲🇴', macau: '🇲🇴', 澳门: '🇲🇴',
+  mn: '🇲🇳', mongolia: '🇲🇳', 蒙古: '🇲🇳',
+  // Southeast Asia
+  sg: '🇸🇬', singapore: '🇸🇬', 新加坡: '🇸🇬',
+  th: '🇹🇭', thailand: '🇹🇭', 泰国: '🇹🇭',
+  vn: '🇻🇳', vietnam: '🇻🇳', 越南: '🇻🇳',
+  my: '🇲🇾', malaysia: '🇲🇾', 马来西亚: '🇲🇾',
+  ph: '🇵🇭', philippines: '🇵🇭', 菲律宾: '🇵🇭',
+  id: '🇮🇩', indonesia: '🇮🇩', 印尼: '🇮🇩', 印度尼西亚: '🇮🇩',
+  kh: '🇰🇭', cambodia: '🇰🇭', 柬埔寨: '🇰🇭',
+  la: '🇱🇦', laos: '🇱🇦', 老挝: '🇱🇦',
+  mm: '🇲🇲', myanmar: '🇲🇲', 缅甸: '🇲🇲',
+  bn: '🇧🇳', brunei: '🇧🇳', 文莱: '🇧🇳',
+  tl: '🇹🇱', timorleste: '🇹🇱', 东帝汶: '🇹🇱',
+  // South Asia
+  in: '🇮🇳', india: '🇮🇳', 印度: '🇮🇳',
+  pk: '🇵🇰', pakistan: '🇵🇰', 巴基斯坦: '🇵🇰',
+  bd: '🇧🇩', bangladesh: '🇧🇩', 孟加拉: '🇧🇩', 孟加拉国: '🇧🇩',
+  lk: '🇱🇰', srilanka: '🇱🇰', 斯里兰卡: '🇱🇰',
+  np: '🇳🇵', nepal: '🇳🇵', 尼泊尔: '🇳🇵',
+  // Central Asia
+  kz: '🇰🇿', kazakhstan: '🇰🇿', 哈萨克斯坦: '🇰🇿', 哈萨克: '🇰🇿',
+  uz: '🇺🇿', uzbekistan: '🇺🇿', 乌兹别克斯坦: '🇺🇿',
+  // Middle East
+  ae: '🇦🇪', uae: '🇦🇪', dubai: '🇦🇪', 阿联酋: '🇦🇪', 迪拜: '🇦🇪',
+  sa: '🇸🇦', saudiarabia: '🇸🇦', 沙特: '🇸🇦', 沙特阿拉伯: '🇸🇦',
+  qa: '🇶🇦', qatar: '🇶🇦', 卡塔尔: '🇶🇦',
+  kw: '🇰🇼', kuwait: '🇰🇼', 科威特: '🇰🇼',
+  bh: '🇧🇭', bahrain: '🇧🇭', 巴林: '🇧🇭',
+  om: '🇴🇲', oman: '🇴🇲', 阿曼: '🇴🇲',
+  il: '🇮🇱', israel: '🇮🇱', 以色列: '🇮🇱',
+  jo: '🇯🇴', jordan: '🇯🇴', 约旦: '🇯🇴',
+  lb: '🇱🇧', lebanon: '🇱🇧', 黎巴嫩: '🇱🇧',
+  iq: '🇮🇶', iraq: '🇮🇶', 伊拉克: '🇮🇶',
+  ir: '🇮🇷', iran: '🇮🇷', 伊朗: '🇮🇷',
+  sy: '🇸🇾', syria: '🇸🇾', 叙利亚: '🇸🇾',
+  tr: '🇹🇷', turkey: '🇹🇷', turkiye: '🇹🇷', 土耳其: '🇹🇷',
+  cy: '🇨🇾', cyprus: '🇨🇾', 塞浦路斯: '🇨🇾',
+  // Europe - West
+  uk: '🇬🇧', gb: '🇬🇧', england: '🇬🇧', britain: '🇬🇧', 英国: '🇬🇧',
+  ie: '🇮🇪', ireland: '🇮🇪', 爱尔兰: '🇮🇪',
+  fr: '🇫🇷', france: '🇫🇷', 法国: '🇫🇷',
+  de: '🇩🇪', germany: '🇩🇪', 德国: '🇩🇪',
+  nl: '🇳🇱', netherlands: '🇳🇱', 荷兰: '🇳🇱',
+  be: '🇧🇪', belgium: '🇧🇪', 比利时: '🇧🇪',
+  lu: '🇱🇺', luxembourg: '🇱🇺', 卢森堡: '🇱🇺',
+  ch: '🇨🇭', switzerland: '🇨🇭', 瑞士: '🇨🇭',
+  at: '🇦🇹', austria: '🇦🇹', 奥地利: '🇦🇹',
+  // Europe - North
+  se: '🇸🇪', sweden: '🇸🇪', 瑞典: '🇸🇪',
+  no: '🇳🇴', norway: '🇳🇴', 挪威: '🇳🇴',
+  dk: '🇩🇰', denmark: '🇩🇰', 丹麦: '🇩🇰',
+  fi: '🇫🇮', finland: '🇫🇮', 芬兰: '🇫🇮',
+  is: '🇮🇸', iceland: '🇮🇸', 冰岛: '🇮🇸',
+  ee: '🇪🇪', estonia: '🇪🇪', 爱沙尼亚: '🇪🇪',
+  lv: '🇱🇻', latvia: '🇱🇻', 拉脱维亚: '🇱🇻',
+  lt: '🇱🇹', lithuania: '🇱🇹', 立陶宛: '🇱🇹',
+  // Europe - South
+  it: '🇮🇹', italy: '🇮🇹', 意大利: '🇮🇹',
+  es: '🇪🇸', spain: '🇪🇸', 西班牙: '🇪🇸',
+  pt: '🇵🇹', portugal: '🇵🇹', 葡萄牙: '🇵🇹',
+  gr: '🇬🇷', greece: '🇬🇷', 希腊: '🇬🇷',
+  mt: '🇲🇹', malta: '🇲🇹', 马耳他: '🇲🇹',
+  // Europe - East
+  pl: '🇵🇱', poland: '🇵🇱', 波兰: '🇵🇱',
+  cz: '🇨🇿', czech: '🇨🇿', czechia: '🇨🇿', 捷克: '🇨🇿',
+  sk: '🇸🇰', slovakia: '🇸🇰', 斯洛伐克: '🇸🇰',
+  hu: '🇭🇺', hungary: '🇭🇺', 匈牙利: '🇭🇺',
+  ro: '🇷🇴', romania: '🇷🇴', 罗马尼亚: '🇷🇴',
+  bg: '🇧🇬', bulgaria: '🇧🇬', 保加利亚: '🇧🇬',
+  hr: '🇭🇷', croatia: '🇭🇷', 克罗地亚: '🇭🇷',
+  si: '🇸🇮', slovenia: '🇸🇮', 斯洛文尼亚: '🇸🇮',
+  rs: '🇷🇸', serbia: '🇷🇸', 塞尔维亚: '🇷🇸',
+  ua: '🇺🇦', ukraine: '🇺🇦', 乌克兰: '🇺🇦',
+  // Europe - East (former USSR)
+  ru: '🇷🇺', russia: '🇷🇺', 俄罗斯: '🇷🇺',
+  by: '🇧🇾', belarus: '🇧🇾', 白俄罗斯: '🇧🇾',
+  md: '🇲🇩', moldova: '🇲🇩', 摩尔多瓦: '🇲🇩',
+  ge: '🇬🇪', georgia: '🇬🇪', 格鲁吉亚: '🇬🇪',
+  am: '🇦🇲', armenia: '🇦🇲', 亚美尼亚: '🇦🇲',
+  az: '🇦🇿', azerbaijan: '🇦🇿', 阿塞拜疆: '🇦🇿',
+  // North America
+  us: '🇺🇸', usa: '🇺🇸', america: '🇺🇸', 美国: '🇺🇸',
+  ca: '🇨🇦', canada: '🇨🇦', 加拿大: '🇨🇦',
+  mx: '🇲🇽', mexico: '🇲🇽', 墨西哥: '🇲🇽',
+  // Central America / Caribbean
+  pa: '🇵🇦', panama: '🇵🇦', 巴拿马: '🇵🇦',
+  cr: '🇨🇷', costarica: '🇨🇷', 哥斯达黎加: '🇨🇷',
+  bz: '🇧🇿', belize: '🇧🇿', 伯利兹: '🇧🇿',
+  gt: '🇬🇹', guatemala: '🇬🇹', 危地马拉: '🇬🇹',
+  sv: '🇸🇻', elsalvador: '🇸🇻', 萨尔瓦多: '🇸🇻',
+  hn: '🇭🇳', honduras: '🇭🇳', 洪都拉斯: '🇭🇳',
+  ni: '🇳🇮', nicaragua: '🇳🇮', 尼加拉瓜: '🇳🇮',
+  cu: '🇨🇺', cuba: '🇨🇺', 古巴: '🇨🇺',
+  jm: '🇯🇲', jamaica: '🇯🇲', 牙买加: '🇯🇲',
+  do: '🇩🇴', dominican: '🇩🇴', 多米尼加: '🇩🇴',
+  pr: '🇵🇷', puertorico: '🇵🇷', 波多黎各: '🇵🇷',
+  bs: '🇧🇸', bahamas: '🇧🇸', 巴哈马: '🇧🇸',
+  // South America
+  br: '🇧🇷', brazil: '🇧🇷', 巴西: '🇧🇷',
+  ar: '🇦🇷', argentina: '🇦🇷', 阿根廷: '🇦🇷',
+  cl: '🇨🇱', chile: '🇨🇱', 智利: '🇨🇱',
+  co: '🇨🇴', colombia: '🇨🇴', 哥伦比亚: '🇨🇴',
+  pe: '🇵🇪', peru: '🇵🇪', 秘鲁: '🇵🇪',
+  ec: '🇪🇨', ecuador: '🇪🇨', 厄瓜多尔: '🇪🇨',
+  ve: '🇻🇪', venezuela: '🇻🇪', 委内瑞拉: '🇻🇪',
+  uy: '🇺🇾', uruguay: '🇺🇾', 乌拉圭: '🇺🇾',
+  py: '🇵🇾', paraguay: '🇵🇾', 巴拉圭: '🇵🇾',
+  bo: '🇧🇴', bolivia: '🇧🇴', 玻利维亚: '🇧🇴',
+  gy: '🇬🇾', guyana: '🇬🇾', 圭亚那: '🇬🇾',
+  // Oceania
+  au: '🇦🇺', australia: '🇦🇺', 澳大利亚: '🇦🇺', 澳洲: '🇦🇺',
+  nz: '🇳🇿', newzealand: '🇳🇿', 新西兰: '🇳🇿',
+  fj: '🇫🇯', fiji: '🇫🇯', 斐济: '🇫🇯',
+  // Africa - North
+  eg: '🇪🇬', egypt: '🇪🇬', 埃及: '🇪🇬',
+  ma: '🇲🇦', morocco: '🇲🇦', 摩洛哥: '🇲🇦',
+  dz: '🇩🇿', algeria: '🇩🇿', 阿尔及利亚: '🇩🇿',
+  tn: '🇹🇳', tunisia: '🇹🇳', 突尼斯: '🇹🇳',
+  ly: '🇱🇾', libya: '🇱🇾', 利比亚: '🇱🇾',
+  // Africa - East
+  ke: '🇰🇪', kenya: '🇰🇪', 肯尼亚: '🇰🇪',
+  tz: '🇹🇿', tanzania: '🇹🇿', 坦桑尼亚: '🇹🇿',
+  ug: '🇺🇬', uganda: '🇺🇬', 乌干达: '🇺🇬',
+  et: '🇪🇹', ethiopia: '🇪🇹', 埃塞俄比亚: '🇪🇹',
+  rw: '🇷🇼', rwanda: '🇷🇼', 卢旺达: '🇷🇼',
+  mu: '🇲🇺', mauritius: '🇲🇺', 毛里求斯: '🇲🇺',
+  sc: '🇸🇨', seychelles: '🇸🇨', 塞舌尔: '🇸🇨',
+  // Africa - South
+  za: '🇿🇦', southafrica: '🇿🇦', 南非: '🇿🇦',
+  ng: '🇳🇬', nigeria: '🇳🇬', 尼日利亚: '🇳🇬',
+  gh: '🇬🇭', ghana: '🇬🇭', 加纳: '🇬🇭',
+  ao: '🇦🇴', angola: '🇦🇴', 安哥拉: '🇦🇴',
+  // Africa - West
+  sn: '🇸🇳', senegal: '🇸🇳', 塞内加尔: '🇸🇳',
+  ci: '🇨🇮', ivorycoast: '🇨🇮', cotedivoire: '🇨🇮', 科特迪瓦: '🇨🇮',
+  cm: '🇨🇲', cameroon: '🇨🇲', 喀麦隆: '🇨🇲',
+  // Africa - Central
+  cd: '🇨🇩', congo: '🇨🇩', drc: '🇨🇩', 刚果: '🇨🇩',
+};
+const getFlag = (node) => {
+  if (node.flag_emoji) return node.flag_emoji;
+  // Try exact match
+  const loc = (node.vps_location || '').toLowerCase();
+  const name = (node.name || '').toLowerCase();
+  if (FLAG_MAP[loc]) return FLAG_MAP[loc];
+  if (FLAG_MAP[name]) return FLAG_MAP[name];
+  // Try partial match against both location and name
+  for (const [k, v] of Object.entries(FLAG_MAP)) {
+    if (loc.includes(k) || name.includes(k)) return v;
+  }
+  return '🖥️';
+};
 
 const nodes = ref([]);
 const trafficOptions = ref([100, 200, 500, 1000, 2000]);
