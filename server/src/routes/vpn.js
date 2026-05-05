@@ -188,7 +188,21 @@ router.get('/client/:id', authenticate, async (req, res) => {
   }
 });
 
+// Check if VPN shop is enabled
+router.get('/status', async (req, res) => {
+  const val = await getConfig('vpn_shop_enabled');
+  res.json({ status: 'success', enabled: val !== 'false' });
+});
+
 // Admin routes
+
+// Toggle VPN shop on/off (super_admin only)
+router.post('/admin/toggle-shop', authenticate, async (req, res) => {
+  if (req.user.role !== 'super_admin') return res.json({ status: 'error', message: '仅超级管理员可操作' });
+  const enabled = req.body.enabled !== false;
+  await Config.upsert({ key: 'vpn_shop_enabled', value: String(enabled) });
+  res.json({ status: 'success', enabled });
+});
 
 // Test connection to an XX-UI panel
 router.post('/admin/test-connection', authenticate, async (req, res) => {

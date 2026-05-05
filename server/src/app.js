@@ -78,6 +78,8 @@ const initDatabase = async () => {
       if (!existDiscount) await Config.create({ key: 'agent_discount', value: '0.8' });
       const existXXUIKey = await Config.findOne({ where: { key: 'xxui_api_key' } });
       if (!existXXUIKey) await Config.create({ key: 'xxui_api_key', value: '' });
+      const existShop = await Config.findOne({ where: { key: 'vpn_shop_enabled' } });
+      if (!existShop) await Config.create({ key: 'vpn_shop_enabled', value: 'true' });
     }
   } catch (error) { console.error('Database Init Error:', error.message); }
 };

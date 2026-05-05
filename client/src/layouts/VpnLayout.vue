@@ -59,14 +59,20 @@
         </div>
       </header>
       <main class="flex-grow p-4 pt-20 md:pt-6 md:p-6 overflow-y-auto relative z-[50] custom-scrollbar scroll-smooth">
-        <router-view :key="$route.fullPath" />
+        <div v-if="!shopEnabled" class="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <div class="text-6xl">🔧</div>
+          <h2 class="text-2xl font-black text-white">{{ appStore.lang === 'zh' ? '商城维护中' : 'Under Maintenance' }}</h2>
+          <p class="text-slate-500 max-w-md">{{ appStore.lang === 'zh' ? '节点商城暂时关闭，请稍后再来。如有疑问请联系管理员。' : 'The VPN shop is temporarily closed. Please check back later.' }}</p>
+          <router-link to="/order" class="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition">{{ appStore.lang === 'zh' ? '返回涨粉服务' : 'Back to SMM' }}</router-link>
+        </div>
+        <router-view v-else :key="$route.fullPath" />
       </main>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
@@ -75,7 +81,11 @@ import { useRoute } from 'vue-router';
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 const route = useRoute(); const isSidebarOpen = ref(false);
 
+const shopEnabled = ref(true);
 const handleNav = (path) => { isSidebarOpen.value = false; if (route.path === path) appStore.triggerRefresh(); };
+onMounted(async () => {
+  try { const r = await fetch('/api/vpn/status'); const d = await r.json(); shopEnabled.value = d.enabled; } catch (e) {}
+});
 const handleLogout = async () => {
   if (await uiStore.showConfirm(appStore.lang === 'zh' ? '确定要安全退出当前账号吗？' : 'Are you sure you want to logout?')) {
     userStore.logout(); window.location.href = '/';

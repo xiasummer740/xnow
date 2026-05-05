@@ -2,6 +2,17 @@
   <div class="min-h-full text-white space-y-6">
     <h1 class="text-2xl md:text-3xl font-black tracking-tight text-white">{{ appStore.lang === 'zh' ? '节点管理密室' : 'Node Admin Panel' }}</h1>
 
+    <!-- Global Toggle (super_admin only) -->
+    <div v-if="userStore.userInfo?.role === 'super_admin'" class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 flex items-center justify-between">
+      <div>
+        <span class="text-white font-bold text-sm">{{ appStore.lang === 'zh' ? '🌐 VPN 节点商城' : '🌐 VPN Shop' }}</span>
+        <span :class="['ml-2 text-xs font-bold', shopEnabled ? 'text-emerald-400' : 'text-red-400']">{{ shopEnabled ? (appStore.lang === 'zh' ? '已开启' : 'ON') : (appStore.lang === 'zh' ? '已关闭' : 'OFF') }}</span>
+      </div>
+      <button @click="toggleShop" class="px-4 py-2 rounded-xl font-bold text-sm transition" :class="shopEnabled ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'">
+        {{ shopEnabled ? (appStore.lang === 'zh' ? '关闭商城' : 'Disable Shop') : (appStore.lang === 'zh' ? '开启商城' : 'Enable Shop') }}
+      </button>
+    </div>
+
     <!-- API Key Config Card -->
     <div class="bg-slate-900/60 border border-amber-500/40 rounded-2xl p-6">
       <h2 class="text-lg font-bold text-amber-400 mb-1">{{ appStore.lang === 'zh' ? '🔑 XX-UI API 密钥' : '🔑 XX-UI API Key' }}</h2>
@@ -130,6 +141,7 @@ import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
 
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
+const shopEnabled = ref(true);
 const servers = ref([]); const clients = ref([]); const usageMap = ref({});
 const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
@@ -137,12 +149,21 @@ const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false)
 const keyMsg = ref(''); const keyMsgOk = ref(false);
 const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' });
 
-onMounted(() => { fetchData(); fetchApiKey(); });
+onMounted(() => { fetchData(); fetchApiKey(); fetchShopStatus(); });
 onUnmounted(() => { clearInterval(syncTimer); });
 
 const apiHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` });
 const getHeaders = () => ({ 'Authorization': `Bearer ${userStore.token}` });
 
+const fetchShopStatus = async () => {
+  try { const r = await fetch('/api/vpn/status'); const d = await r.json(); shopEnabled.value = d.enabled; } catch (e) {}
+};
+const toggleShop = async () => {
+  const h = apiHeaders();
+  const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: h, body: JSON.stringify({ enabled: !shopEnabled.value }) });
+  const d = await r.json();
+  if (d.status === 'success') shopEnabled.value = d.enabled;
+};
 const fetchApiKey = async () => {
   try {
     const r = await fetch('/api/vpn/admin/apikey', { headers: getHeaders() });
