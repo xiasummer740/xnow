@@ -54,7 +54,10 @@
 
     <!-- Recent Orders -->
     <div class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-6">
-      <h2 class="text-lg font-bold text-white mb-4">{{ appStore.lang === 'zh' ? '📋 最近订单' : '📋 Recent Orders' }}</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-white">{{ appStore.lang === 'zh' ? '📋 最近订单' : '📋 Recent Orders' }}</h2>
+        <button @click="syncTraffic" :disabled="syncing" class="px-3 py-1.5 rounded-lg text-xs font-bold transition" :class="syncing ? 'bg-slate-800 text-slate-500' : 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/30'">{{ syncing ? '同步中...' : (appStore.lang === 'zh' ? '🔄 刷新流量' : '🔄 Sync Traffic') }}</button>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">用户ID</th><th class="p-3">Email</th><th class="p-3">已用/总额</th><th class="p-3">位置</th><th class="p-3">到期</th><th class="p-3"></th></tr></thead>
@@ -211,6 +214,25 @@ const saveServer = async () => {
   savingNode.value = false;
 };
 
+const syncing = ref(false);
+const syncTraffic = async () => {
+  syncing.value = true;
+  try {
+    const r = await fetch('/api/vpn/admin/sync-traffic', {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ clients: clients.value.map(c => ({ id: c.id, email: c.email, product_id: c.product_id })) })
+    });
+    const d = await r.json();
+    if (d.status === 'success' && d.data) {
+      d.data.forEach(u => {
+        const c = clients.value.find(x => x.id === u.id);
+        if (c) { c.traffic_used_up = u.up; c.traffic_used_down = u.down; }
+      });
+      uiStore.showToast(appStore.lang === 'zh' ? '流量已刷新' : 'Traffic synced', 'success');
+    }
+  } catch (e) { /* */ }
+  syncing.value = false;
+};
 const deleteClient = async (c) => {
   if (!await uiStore.showConfirm(`确认删除订单「${c.email}」？也会尝试从 XX-UI 删除该客户端。`)) return;
   try {
