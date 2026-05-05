@@ -97,7 +97,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
@@ -172,6 +172,7 @@ onMounted(async () => {
     ];
   }
   loading.value = false;
+  startAutoRefresh();
 });
 
 // Using shared format.js utilities
@@ -187,6 +188,16 @@ const detailRows = computed(() => {
   rows.push({ label: appStore.lang === 'zh' ? '📅 到期' : '📅 Expiry', value: formatExpiry(detail.value.expiry_time), copy: false });
   return rows;
 });
+
+let refreshTimer = null;
+const startAutoRefresh = () => {
+  if (demoMode.value) return;
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    clients.value.forEach(c => { if (!c._demo) refreshOne(c); });
+  }, 30000);
+};
+onUnmounted(() => { clearInterval(refreshTimer); });
 
 const copy = async (text) => {
   try {

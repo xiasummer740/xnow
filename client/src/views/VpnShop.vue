@@ -287,17 +287,20 @@ const FLAG_MAP = {
   cd: '🇨🇩', congo: '🇨🇩', drc: '🇨🇩', 刚果: '🇨🇩',
 };
 const getFlag = (node) => {
-  if (node.flag_emoji) return node.flag_emoji;
-  // Try exact match
+  // Map short codes to emoji
+  const raw = (node.flag_emoji || '').toLowerCase().trim();
+  if (raw && FLAG_MAP[raw]) return FLAG_MAP[raw];
+  // If already an emoji, return as-is
+  if (raw && /^\p{Emoji}/u.test(raw)) return node.flag_emoji;
+  // Try location/name match
   const loc = (node.vps_location || '').toLowerCase();
   const name = (node.name || '').toLowerCase();
   if (FLAG_MAP[loc]) return FLAG_MAP[loc];
   if (FLAG_MAP[name]) return FLAG_MAP[name];
-  // Try partial match against both location and name
   for (const [k, v] of Object.entries(FLAG_MAP)) {
     if (loc.includes(k) || name.includes(k)) return v;
   }
-  return '🖥️';
+  return raw || '🖥️';
 };
 
 const nodes = ref([]);
