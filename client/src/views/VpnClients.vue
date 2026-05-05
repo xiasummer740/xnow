@@ -74,18 +74,12 @@
 
         <!-- Two QR codes: Subscription + Node Connection -->
         <div v-if="detail.subscription_url" class="flex items-start justify-center space-x-4 py-2">
-          <!-- Subscription QR -->
-          <div class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.subscription_url)" :title="appStore.lang === 'zh' ? '点击复制订阅链接' : 'Click to copy subscription'">
-            <div class="bg-white rounded-2xl p-1.5">
-              <canvas :id="'qr-sub-' + detail.id" width="150" height="150"></canvas>
-            </div>
+          <div class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.subscription_url)">
+            <img :src="qrSubDataUri" class="w-36 h-36 bg-white rounded-2xl p-1" alt="QR" />
             <span class="text-[10px] text-slate-400 mt-1 font-bold">{{ appStore.lang === 'zh' ? '📡 订阅' : '📡 Sub' }}</span>
           </div>
-          <!-- Node Connection QR -->
-          <div v-if="detail.config_url" class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.config_url)" :title="appStore.lang === 'zh' ? '点击复制节点链接' : 'Click to copy node link'">
-            <div class="bg-white rounded-2xl p-1.5">
-              <canvas :id="'qr-node-' + detail.id" width="150" height="150"></canvas>
-            </div>
+          <div v-if="detail.config_url" class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.config_url)">
+            <img :src="qrNodeDataUri" class="w-36 h-36 bg-white rounded-2xl p-1" alt="QR" />
             <span class="text-[10px] text-slate-400 mt-1 font-bold">{{ appStore.lang === 'zh' ? '🔗 节点' : '🔗 Node' }}</span>
           </div>
         </div>
@@ -101,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import QRCode from 'qrcode';
@@ -110,6 +104,21 @@ const appStore = useAppStore(); const userStore = useUserStore();
 const clients = ref([]); const loading = ref(true); const detail = ref(null);
 const copied = ref(''); const toast = ref('');
 const demoMode = ref(false);
+
+const qrSubDataUri = ref('');
+const qrNodeDataUri = ref('');
+
+const showDetail = async (c) => {
+  detail.value = c;
+  qrSubDataUri.value = '';
+  qrNodeDataUri.value = '';
+  if (c.subscription_url) {
+    try { qrSubDataUri.value = await QRCode.toDataURL(c.subscription_url, { width: 150, margin: 1 }); } catch (e) {}
+  }
+  if (c.config_url) {
+    try { qrNodeDataUri.value = await QRCode.toDataURL(c.config_url, { width: 150, margin: 1 }); } catch (e) {}
+  }
+};
 
 onMounted(async () => {
   if (!userStore.token) { loading.value = false; return; }
@@ -141,23 +150,6 @@ const trafficPercent = (c) => {
   const total = (c.traffic_gb || 1) * 1073741824;
   return Math.round((used / total) * 100);
 };
-
-const showDetail = (c) => { detail.value = c; };
-
-watch(detail, async (d) => {
-  if (!d) return;
-  await nextTick();
-  setTimeout(async () => {
-    if (d.subscription_url) {
-      const subEl = document.getElementById('qr-sub-' + d.id);
-      if (subEl) try { await QRCode.toCanvas(subEl, d.subscription_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
-    }
-    if (d.config_url) {
-      const nodeEl = document.getElementById('qr-node-' + d.id);
-      if (nodeEl) try { await QRCode.toCanvas(nodeEl, d.config_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
-    }
-  }, 100);
-});
 
 const detailRows = computed(() => {
   if (!detail.value) return [];

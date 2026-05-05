@@ -5,12 +5,11 @@ function normUrl(u) {
   return (u || '').replace(/\/+$/, '');
 }
 
-function newClientEmail(productId, userId, location) {
+function newClientEmail(productId, userId) {
   const now = new Date();
   const dateStr = `${String(now.getFullYear()).slice(2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
   const rand = String(Math.floor(1000 + Math.random() * 9000));
-  const prefix = (location || '').replace(/[^a-zA-Z一-鿿]/g, '').slice(0, 4);
-  return prefix ? `${prefix}${dateStr}${rand}` : `${dateStr}${rand}`;
+  return `${dateStr}${rand}`;
 }
 
 function newClientUUID() {
