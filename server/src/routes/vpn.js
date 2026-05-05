@@ -63,7 +63,8 @@ router.post('/buy', authenticate, async (req, res) => {
     // Check node total capacity: sum of all active clients' traffic must not exceed max_traffic_gb
     const activeClients = await VpnClient.findAll({
       where: { product_id: product.id, expiry_time: { [sequelize.Sequelize.Op.gt]: now } },
-      transaction: t
+      transaction: t,
+      lock: t.LOCK.UPDATE
     });
     const usedTraffic = activeClients.reduce((sum, c) => sum + (c.traffic_gb || 0), 0);
     if (usedTraffic + Number(traffic_gb) > product.max_traffic_gb) {
