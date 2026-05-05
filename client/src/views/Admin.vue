@@ -6,6 +6,7 @@ import { useAppStore } from '../stores/app';
 
 const userStore = useUserStore(); const ui = useUiStore(); const app = useAppStore();
 const loading = ref(false); const syncing = ref(false); const editorRef = ref(null);
+const vpnShopEnabled = ref(true); const vpnToggling = ref(false);
 const data = ref({ upstreamBalance: { balance: '0.00' }, users: [], orders: [], transactions: [], config: {}, totalOrders: 0 });
 
 const form = ref({
@@ -152,7 +153,9 @@ const toggleBan = async (u) => {
 };
 
 let refreshTimer = null; watch(() => app.globalRefreshTrigger, () => fetchDashboard(false));
-onMounted(() => { fetchDashboard(true); refreshTimer = setInterval(() => { syncing.value = true; fetchDashboard(false); }, 10000); });
+const fetchVpnStatus = async () => { try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {} };
+const toggleVpnShop = async () => { vpnToggling.value = true; const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') vpnShopEnabled.value = d.enabled; vpnToggling.value = false; };
+onMounted(() => { fetchDashboard(true); fetchVpnStatus(); refreshTimer = setInterval(() => { syncing.value = true; fetchDashboard(false); }, 10000); });
 onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 </script>
 
@@ -165,6 +168,16 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-amber-500/10 text-8xl">🏦</div><div class="text-slate-400 text-xs font-bold mb-1">本站玩家金库汇总</div><div class="text-3xl font-black text-amber-400 font-mono mt-2">{{ app.formatMoney(data.users ? data.users.reduce((acc, u) => acc + parseFloat(u.balance || 0), 0) : 0) }}</div></div>
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-blue-500/10 text-8xl">📈</div><div class="text-slate-400 text-xs font-bold mb-1">实时汇率 (USD/CNY)</div><div class="text-3xl font-black text-blue-400 font-mono mt-2 flex items-baseline">{{ app.exchangeRate }}</div></div>
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-purple-500/10 text-8xl">📦</div><div class="text-slate-400 text-xs font-bold mb-1">全站累计处理订单</div><div class="text-3xl font-black text-purple-400 font-mono mt-2">{{ data.totalOrders || '0' }}</div></div>
+        </div>
+
+        <div v-if="userStore.userInfo?.role === 'super_admin'" class="bg-slate-800/80 border border-emerald-500/30 p-5 rounded-2xl shadow-lg flex items-center justify-between">
+          <div>
+            <h3 class="text-white font-bold flex items-center"><span class="text-emerald-400 mr-2">🛡️</span> VPN 安全节点商城</h3>
+            <p class="text-xs text-slate-500 mt-1">{{ vpnShopEnabled ? '商城已对全体用户开放' : '商城已关闭，用户无法访问' }}</p>
+          </div>
+          <button @click="toggleVpnShop" :disabled="vpnToggling" class="px-5 py-2.5 rounded-xl font-bold text-sm transition" :class="vpnShopEnabled ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30' : 'bg-emerald-500 text-slate-900 hover:bg-emerald-400'">
+            {{ vpnToggling ? '...' : (vpnShopEnabled ? '关闭商城' : '开启商城') }}
+          </button>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
