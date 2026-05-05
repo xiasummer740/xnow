@@ -58,8 +58,9 @@ router.post('/buy', authenticate, async (req, res) => {
     if (!product) { await t.rollback(); return res.json({ status: 'error', message: '节点不存在' }); }
     if (!product.active) { await t.rollback(); return res.json({ status: 'error', message: '节点暂不可用' }); }
 
-    // Check node total capacity: sum of all active clients' traffic must not exceed max_traffic_gb
     const now = Date.now();
+
+    // Check node total capacity: sum of all active clients' traffic must not exceed max_traffic_gb
     const activeClients = await VpnClient.findAll({
       where: { product_id: product.id, expiry_time: { [sequelize.Sequelize.Op.gt]: now } },
       transaction: t
@@ -98,7 +99,6 @@ router.post('/buy', authenticate, async (req, res) => {
     }, { transaction: t });
 
     // Create client on XX-UI (XX-UI uses milliseconds timestamps)
-    const now = Date.now();
     const expiryTime = now + (Number(duration_days) * 86400 * 1000);
     const email = newClientEmail(product.id, user.id);
     const uuid = newClientUUID();
