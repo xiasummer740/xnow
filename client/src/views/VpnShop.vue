@@ -101,8 +101,9 @@
                 <span class="text-slate-300 text-sm">{{ appStore.lang === 'zh' ? '应付金额' : 'Total' }}</span>
                 <span class="text-3xl font-black text-emerald-400">¥{{ finalPrice.toFixed(2) }}</span>
               </div>
-              <div class="flex justify-between text-xs text-slate-500">
+              <div class="flex justify-between text-xs" :class="parseFloat(userStore.userInfo?.balance || 0) < finalPrice ? 'text-red-400' : 'text-slate-500'">
                 <span>{{ appStore.lang === 'zh' ? '余额' : 'Balance' }}: ¥{{ parseFloat(userStore.userInfo?.balance || 0).toFixed(2) }}</span>
+                <span v-if="parseFloat(userStore.userInfo?.balance || 0) < finalPrice">⚠️ {{ appStore.lang === 'zh' ? '余额不足' : 'Insufficient' }}</span>
               </div>
               <button @click="buy" :disabled="buying" class="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-base transition transform hover:-translate-y-0.5 shadow-[0_5px_20px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ buying ? '...' : (appStore.lang === 'zh' ? '立即购买' : 'Buy Now') }}
@@ -118,6 +119,7 @@
       <div class="bg-slate-900 border-2 border-emerald-500/50 p-8 rounded-3xl shadow-[0_0_60px_rgba(16,185,129,0.2)] max-w-md w-full text-center space-y-4">
         <div class="text-5xl">✅</div>
         <h2 class="text-xl font-black text-white">{{ appStore.lang === 'zh' ? '购买成功！' : 'Purchase Successful!' }}</h2>
+        <p v-if="purchaseResult?.email" class="text-xs text-slate-400 font-mono bg-slate-800 rounded-lg px-3 py-1.5">{{ purchaseResult.email }}</p>
         <p class="text-slate-400 text-sm">{{ appStore.lang === 'zh' ? '节点已创建，可在「我的节点」中查看连接信息。' : 'Your node is ready.' }}</p>
         <button @click="goToClients" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold transition">{{ appStore.lang === 'zh' ? '查看我的节点' : 'View My Nodes' }}</button>
         <button @click="showSuccess = false" class="w-full py-2 text-slate-500 text-sm hover:text-white transition">{{ appStore.lang === 'zh' ? '继续选购' : 'Continue Shopping' }}</button>
@@ -136,7 +138,7 @@ import { useUiStore } from '../stores/ui';
 const router = useRouter();
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 
-const FLAG_MAP = { hk: '🇭🇰', hongkong: '🇭🇰', jp: '🇯🇵', japan: '🇯🇵', us: '🇺🇸', usa: '🇺🇸', uk: '🇬🇧', gb: '🇬🇧', sg: '🇸🇬', singapore: '🇸🇬', de: '🇩🇪', germany: '🇩🇪', nl: '🇳🇱', fr: '🇫🇷', kr: '🇰🇷', tw: '🇹🇼', ca: '🇨🇦', au: '🇦🇺', ru: '🇷🇺', tr: '🇹🇷', ae: '🇦🇪', br: '🇧🇷', in: '🇮🇳' };
+const FLAG_MAP = { hk: '🇭🇰', hongkong: '🇭🇰', 香港: '🇭🇰', jp: '🇯🇵', japan: '🇯🇵', 日本: '🇯🇵', us: '🇺🇸', usa: '🇺🇸', 美国: '🇺🇸', uk: '🇬🇧', gb: '🇬🇧', 英国: '🇬🇧', sg: '🇸🇬', singapore: '🇸🇬', 新加坡: '🇸🇬', de: '🇩🇪', germany: '🇩🇪', 德国: '🇩🇪', nl: '🇳🇱', 荷兰: '🇳🇱', fr: '🇫🇷', 法国: '🇫🇷', kr: '🇰🇷', 韩国: '🇰🇷', tw: '🇹🇼', 台湾: '🇹🇼', ca: '🇨🇦', 加拿大: '🇨🇦', au: '🇦🇺', 澳大利亚: '🇦🇺', ru: '🇷🇺', 俄罗斯: '🇷🇺', tr: '🇹🇷', ae: '🇦🇪', br: '🇧🇷', in: '🇮🇳', th: '🇹🇭', 泰国: '🇹🇭', vn: '🇻🇳', 越南: '🇻🇳', my: '🇲🇾', 马来西亚: '🇲🇾', ph: '🇵🇭', 菲律宾: '🇵🇭', id: '🇮🇩', 印尼: '🇮🇩' };
 const getFlag = (node) => node.flag_emoji || FLAG_MAP[(node.vps_location || '').toLowerCase()] || FLAG_MAP[(node.name || '').toLowerCase()] || '🖥️';
 
 const nodes = ref([]);
@@ -150,6 +152,7 @@ const durationOptions = ref([
 const loading = ref(true);
 const buying = ref(false);
 const showSuccess = ref(false);
+const purchaseResult = ref(null);
 
 const selectedNode = ref(null);
 const selectedTraffic = ref(200);
@@ -209,6 +212,7 @@ const buy = async () => {
     const data = await res.json();
     if (data.status === 'success') {
       if (data.data?.balance) userStore.updateUserInfo({ balance: data.data.balance });
+      purchaseResult.value = data.data;
       showSuccess.value = true;
     } else {
       uiStore.showToast(data.message || (appStore.lang === 'zh' ? '购买失败' : 'Failed'), 'error');
