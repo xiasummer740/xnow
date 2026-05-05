@@ -5,7 +5,7 @@
     <!-- API Key Config Card -->
     <div class="bg-slate-900/60 border border-amber-500/40 rounded-2xl p-6">
       <h2 class="text-lg font-bold text-amber-400 mb-1">{{ appStore.lang === 'zh' ? '🔑 XX-UI API 密钥' : '🔑 XX-UI API Key' }}</h2>
-      <p class="text-xs text-slate-500 mb-4">{{ appStore.lang === 'zh' ? '所有节点共用此密钥。在 XX-UI 面板 → 设置 → 远程访问 → 生成密钥 → 粘贴到下方。' : 'Shared across all nodes. Generate it in XX-UI → Settings → Remote Access.' }}</p>
+      <p class="text-xs text-slate-500 mb-4">{{ appStore.lang === 'zh' ? '全局默认密钥。若多台 VPS 使用相同 API Key，填这里即可。每台 VPS 使用不同 Key 时，在下方节点的「独立 Key」字段单独设定。在 XX-UI 面板 → 设置 → 远程访问 → 生成密钥。' : 'Default key. If all VPS share one key, set it here. For per-VPS keys, fill each node\'s individual key field below.' }}</p>
       <div class="flex space-x-2">
         <input :type="showKey ? 'text' : 'password'" v-model="apiKey" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm outline-none focus:border-amber-400 transition" :placeholder="appStore.lang === 'zh' ? '粘贴 XX-UI 生成的 API Key...' : 'Paste XX-UI API Key...'" />
         <button @click="showKey = !showKey" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 transition text-sm">{{ showKey ? '隐藏' : '显示' }}</button>
@@ -34,11 +34,11 @@
 
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">XX-UI 地址</th><th class="p-3">入站ID</th><th class="p-3">订阅端口</th><th class="p-3">单价/GB</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
+          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">地址</th><th class="p-3">入站</th><th class="p-3">订阅端口</th><th class="p-3">上限</th><th class="p-3">单价</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
           <tbody>
             <tr v-for="s in servers" :key="s.id" class="border-t border-slate-800 hover:bg-slate-800/50 transition">
               <td class="p-3 font-bold text-white whitespace-nowrap">{{ s.flag_emoji }} {{ s.name }}</td>
-              <td class="p-3 text-slate-400 font-mono text-xs max-w-[140px] truncate" :title="s.xxui_url">{{ s.xxui_url || '—' }}</td>
+              <td class="p-3 text-slate-400 font-mono text-xs max-w-[120px] truncate" :title="s.xxui_url">{{ s.xxui_url || '—' }}</td>
               <td class="p-3 text-white">{{ s.xxui_inbound_id || '—' }}</td>
               <td class="p-3 text-white">{{ s.sub_port || 2096 }}</td>
               <td class="p-3 text-white">{{ s.max_traffic_gb }}GB</td>
@@ -46,7 +46,7 @@
               <td class="p-3"><span :class="['px-2 py-0.5 rounded-full text-xs font-bold', s.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-500']">{{ s.active ? '启用' : '禁用' }}</span></td>
               <td class="p-3 space-x-2 whitespace-nowrap"><button @click="editServer(s)" class="text-blue-400 hover:text-blue-300 text-xs">编辑</button><button @click="deleteServer(s)" class="text-red-400 hover:text-red-300 text-xs">删除</button></td>
             </tr>
-            <tr v-if="servers.length === 0"><td colspan="7" class="p-6 text-center text-slate-500">{{ appStore.lang === 'zh' ? '暂无节点，点击"+ 添加节点"按钮添加' : 'No nodes yet' }}</td></tr>
+            <tr v-if="servers.length === 0"><td colspan="8" class="p-6 text-center text-slate-500">{{ appStore.lang === 'zh' ? '暂无节点，点击"+ 添加节点"按钮添加' : 'No nodes yet' }}</td></tr>
           </tbody>
         </table>
       </div>

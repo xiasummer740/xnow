@@ -59,7 +59,7 @@ router.post('/buy', authenticate, async (req, res) => {
     if (!product.active) { await t.rollback(); return res.json({ status: 'error', message: '节点暂不可用' }); }
     if (traffic_gb > product.max_traffic_gb) {
       await t.rollback();
-      return res.json({ status: 'error', message: `该节点单用户流量上限为 ${product.max_traffic_gb}GB` });
+      return res.json({ status: 'error', message: `该节点单用户流量上限为 ${product.max_traffic_gb}GB，如需更大流量请联系客服` });
     }
 
     // Calculate price: price_per_gb * traffic * duration_discount
