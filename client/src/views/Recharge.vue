@@ -98,7 +98,7 @@ const checkStatus = async () => {
 };
 
 const handlePay = async () => {
-    if (amount.value <= 0) return ui.showToast('充值金额无效', 'error');
+    if (amount.value < 10) return ui.showToast('最低充值金额为 10 元', 'error');
     loading.value = true;
 
     try {
@@ -200,7 +200,7 @@ const cleanDescription = (t) => {
 
                     <div>
                         <label class="block text-sm font-bold text-slate-300 mb-3">{{ app.t('recharge_amount') }} ({{ isRMB ? 'CNY' : 'USD' }})</label>
-                        <input type="number" v-model="amount" class="w-full bg-slate-900/80 border border-slate-600 rounded-xl p-4 text-white font-mono text-xl outline-none focus:border-amber-400 transition">
+                        <input type="number" v-model="amount" min="10" class="w-full bg-slate-900/80 border border-slate-600 rounded-xl p-4 text-white font-mono text-xl outline-none focus:border-amber-400 transition">
                     </div>
 
                     <div class="flex items-center justify-between bg-slate-900/50 p-5 rounded-2xl border border-slate-700/50">
