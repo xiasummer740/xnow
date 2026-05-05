@@ -112,15 +112,15 @@ router.post('/buy', authenticate, async (req, res) => {
 
     // Generate subId for XX-UI subscription URL
     const subId = crypto.randomBytes(8).toString('hex');
-    await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
+    const inboundInfo = await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
 
     // Build subscription URL
     const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
     const subUrl = `https://${panelHost}:${product.sub_port || 2096}/sub/${subId}`;
 
     // Build node connection URL from inbound info
-    const protocol = inboundInfo.protocol || 'vless';
-    const inboundPort = inboundInfo.port || product.xxui_inbound_id;
+    const protocol = (inboundInfo && inboundInfo.protocol) || 'vless';
+    const inboundPort = (inboundInfo && inboundInfo.port) || '';
     const nodeUrl = `${protocol}://${uuid}@${panelHost}:${inboundPort}?encryption=none&type=tcp#${encodeURIComponent(email)}`;
 
     await VpnClient.create({
