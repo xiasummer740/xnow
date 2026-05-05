@@ -112,16 +112,22 @@ router.post('/buy', authenticate, async (req, res) => {
 
     // Generate subId for XX-UI subscription URL
     const subId = crypto.randomBytes(8).toString('hex');
-    const inboundInfo = await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
+    await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
 
     // Build subscription URL
     const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
     const subUrl = `https://${panelHost}:${product.sub_port || 2096}/sub/${subId}`;
 
-    // Build node connection URL from inbound info
-    const protocol = (inboundInfo && inboundInfo.protocol) || 'vless';
-    const inboundPort = (inboundInfo && inboundInfo.port) || '';
-    const nodeUrl = `${protocol}://${uuid}@${panelHost}:${inboundPort}?encryption=none&type=tcp#${encodeURIComponent(email)}`;
+    // Get the real node connection URL from XX-UI
+    let nodeUrl = '';
+    try {
+      const baseUrl = (product.xxui_url || '').replace(/\/+$/, '');
+      const { default: ax } = await import('axios');
+      const cr = await ax.get(`${baseUrl}/panel/remote/client/${encodeURIComponent(email)}/connect`, {
+        headers: { 'X-API-Key': apiKey }, timeout: 10000
+      });
+      if (cr.data?.success && cr.data.obj?.url) nodeUrl = cr.data.obj.url;
+    } catch (e) { /* use empty if fails */ }
 
     await VpnClient.create({
       user_id: user.id, product_id: product.id,
