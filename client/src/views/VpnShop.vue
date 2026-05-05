@@ -105,6 +105,7 @@
                 <span>{{ appStore.lang === 'zh' ? '余额' : 'Balance' }}: ¥{{ parseFloat(userStore.userInfo?.balance || 0).toFixed(2) }}</span>
                 <span v-if="parseFloat(userStore.userInfo?.balance || 0) < finalPrice">⚠️ {{ appStore.lang === 'zh' ? '余额不足' : 'Insufficient' }}</span>
               </div>
+              <router-link v-if="parseFloat(userStore.userInfo?.balance || 0) < finalPrice" to="/recharge" class="block text-center text-xs text-amber-400 hover:text-amber-300 py-1">💳 {{ appStore.lang === 'zh' ? '余额不足？点击充值' : 'Low balance? Recharge here' }}</router-link>
               <button @click="buy" :disabled="buying" class="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-base transition transform hover:-translate-y-0.5 shadow-[0_5px_20px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ buying ? '...' : (appStore.lang === 'zh' ? '立即购买' : 'Buy Now') }}
               </button>

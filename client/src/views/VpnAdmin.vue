@@ -2,8 +2,16 @@
   <div class="min-h-full text-white space-y-6">
     <h1 class="text-2xl md:text-3xl font-black tracking-tight text-white">{{ appStore.lang === 'zh' ? '节点管理密室' : 'Node Admin Panel' }}</h1>
 
-    <!-- Global Toggle (super_admin only) -->
-    <div v-if="userStore.userInfo?.role === 'super_admin'" class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 flex items-center justify-between">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 text-center"><div class="text-2xl font-black text-emerald-400">{{ servers.length }}</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang === 'zh' ? '节点' : 'Nodes' }}</div></div>
+      <div class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 text-center"><div class="text-2xl font-black text-cyan-400">{{ clients.length }}</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang === 'zh' ? '订单' : 'Orders' }}</div></div>
+      <div class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 text-center"><div class="text-2xl font-black text-amber-400">{{ activeCount }}</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang === 'zh' ? '活跃' : 'Active' }}</div></div>
+      <div class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 text-center"><div class="text-2xl font-black text-purple-400">{{ totalSold }}</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang === 'zh' ? '已售GB' : 'Sold GB' }}</div></div>
+    </div>
+
+    <!-- Global Toggle -->
+    <div v-if="['admin', 'super_admin'].includes(userStore.userInfo?.role)" class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 flex items-center justify-between">
       <div>
         <span class="text-white font-bold text-sm">{{ appStore.lang === 'zh' ? '🌐 VPN 节点商城' : '🌐 VPN Shop' }}</span>
         <span :class="['ml-2 text-xs font-bold', shopEnabled ? 'text-emerald-400' : 'text-red-400']">{{ shopEnabled ? (appStore.lang === 'zh' ? '已开启' : 'ON') : (appStore.lang === 'zh' ? '已关闭' : 'OFF') }}</span>
@@ -135,7 +143,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
@@ -144,6 +152,8 @@ import { formatTrafficUsed } from '../utils/format.js';
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 const shopEnabled = ref(true);
 const servers = ref([]); const clients = ref([]); const usageMap = ref({});
+const activeCount = computed(() => clients.value.filter(c => c.expiry_time && c.expiry_time > Date.now()).length);
+const totalSold = computed(() => clients.value.reduce((s, c) => s + (c.traffic_gb || 0), 0));
 const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
 const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false);
@@ -279,7 +289,10 @@ const deleteClient = async (c) => {
   } catch (e) { uiStore.showToast('删除失败', 'error'); }
 };
 const deleteServer = async (s) => {
-  if (!await uiStore.showConfirm(`确认删除「${s.name}」？此操作不可恢复。`)) return;
+  const nodeClients = clients.value.filter(c => c.product_id === s.id);
+  const activeNodeClients = nodeClients.filter(c => c.expiry_time && c.expiry_time > Date.now());
+  const warn = activeNodeClients.length > 0 ? `\n⚠️ 该节点有 ${activeNodeClients.length} 个活跃客户端，删除后客户端将无法连接！` : '';
+  if (!await uiStore.showConfirm(`确认删除「${s.name}」？此操作不可恢复。${warn}`)) return;
   try {
     await fetch(`/api/vpn/admin/server/${s.id}`, { method: 'DELETE', headers: getHeaders() });
     fetchData();
