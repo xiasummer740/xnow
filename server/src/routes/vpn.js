@@ -4,6 +4,7 @@ import { VpnProduct, VpnClient, Config, Transaction, User, sequelize } from '../
 import { createXXUIClient, newClientEmail, newClientUUID, getXXUIClient, updateXXUIClient } from '../utils/xxui.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import crypto from 'crypto';
+import axios from 'axios';
 
 const router = express.Router();
 
@@ -16,6 +17,12 @@ const DURATION_OPTIONS = [
   { days: 180, label: '6个月', discount: 0.85 },
   { days: 360, label: '12个月', discount: 0.75 },
 ];
+
+// Admin role middleware
+function requireAdmin(req, res, next) {
+  if (!['admin', 'super_admin'].includes(req.user?.role)) return res.json({ status: 'error', message: '无权限' });
+  next();
+}
 
 // Get config value by key
 async function getConfig(key) {
@@ -117,15 +124,14 @@ router.post('/buy', authenticate, async (req, res) => {
 
     // Build subscription URL
     const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
-    const subPath = (product.sub_path || '/sub/').replace(//+$/, '');
+    const subPath = (product.sub_path || '/sub/').replace(/\/+$/, '');
     const subUrl = `https://${panelHost}:${product.sub_port || 2096}${subPath}/${subId}`;
 
     // Get the real node connection URL from XX-UI
     let nodeUrl = '';
     try {
       const baseUrl = (product.xxui_url || '').replace(/\/+$/, '');
-      const { default: ax } = await import('axios');
-      const cr = await ax.get(`${baseUrl}/panel/remote/client/${encodeURIComponent(email)}/connect`, {
+      const cr = await axios.get(`${baseUrl}/panel/remote/client/${encodeURIComponent(email)}/connect`, {
         headers: { 'X-API-Key': apiKey }, timeout: 10000
       });
       if (cr.data?.success && cr.data.obj?.url) nodeUrl = cr.data.obj.url;
@@ -238,8 +244,7 @@ router.get('/status', async (req, res) => {
 // Admin routes
 
 // Toggle VPN shop on/off (super_admin only)
-router.post('/admin/toggle-shop', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '仅管理员可操作' });
+router.post('/admin/toggle-shop', authenticate, requireAdmin, async (req, res) => {
   const enabled = req.body.enabled !== false;
   const [row] = await Config.findOrCreate({ where: { key: 'vpn_shop_enabled' }, defaults: { key: 'vpn_shop_enabled', value: String(enabled) } });
   if (row) { row.value = String(enabled); await row.save(); }
@@ -247,8 +252,7 @@ router.post('/admin/toggle-shop', authenticate, async (req, res) => {
 });
 
 // Test connection to an XX-UI panel
-router.post('/admin/test-connection', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.post('/admin/test-connection', authenticate, requireAdmin, async (req, res) => {
   const { xxui_url, api_key, inbound_id } = req.body;
   if (!xxui_url) return res.json({ status: 'error', message: '缺少面板地址' });
   const baseUrl = (xxui_url || '').replace(/\/+$/, '');
@@ -256,9 +260,8 @@ router.post('/admin/test-connection', authenticate, async (req, res) => {
   if (!key) return res.json({ status: 'error', message: '未配置 API Key' });
 
   try {
-    const { default: ax } = await import('axios');
-    // Step 1: Try to list inbounds (tests connectivity + key)
-    const r = await ax.get(`${baseUrl}/panel/remote/inbounds`, {
+    // Try to list inbounds (tests connectivity + key)
+    const r = await axios.get(`${baseUrl}/panel/remote/inbounds`, {
       headers: { 'X-API-Key': key }, timeout: 10000
     });
     if (!r.data?.success) return res.json({ status: 'error', message: 'API Key 无效或面板无响应' });
@@ -283,13 +286,11 @@ router.post('/admin/test-connection', authenticate, async (req, res) => {
 });
 
 // Get/set API key
-router.get('/admin/apikey', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.get('/admin/apikey', authenticate, requireAdmin, async (req, res) => {
   const val = await getConfig('xxui_api_key');
   res.json({ status: 'success', data: val });
 });
-router.post('/admin/apikey', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.post('/admin/apikey', authenticate, requireAdmin, async (req, res) => {
   const { apiKey } = req.body;
   if (apiKey === undefined) return res.json({ status: 'error', message: 'Missing apiKey' });
   await Config.upsert({ key: 'xxui_api_key', value: apiKey });
@@ -297,15 +298,13 @@ router.post('/admin/apikey', authenticate, async (req, res) => {
 });
 
 // List all servers (admin)
-router.get('/admin/servers', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.get('/admin/servers', authenticate, requireAdmin, async (req, res) => {
   const servers = await VpnProduct.findAll({ order: [['sort', 'ASC']] });
   res.json({ status: 'success', data: servers });
 });
 
 // Create/update server (admin)
-router.post('/admin/server', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.post('/admin/server', authenticate, requireAdmin, async (req, res) => {
   const { id, name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, max_traffic_gb, price_per_gb, active, description } = req.body;
   try {
     if (id) {
@@ -320,22 +319,19 @@ router.post('/admin/server', authenticate, async (req, res) => {
 });
 
 // Delete server (admin)
-router.delete('/admin/server/:id', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.delete('/admin/server/:id', authenticate, requireAdmin, async (req, res) => {
   await VpnProduct.destroy({ where: { id: req.params.id } });
   res.json({ status: 'success' });
 });
 
 // Get all clients (admin overview)
-router.get('/admin/clients', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.get('/admin/clients', authenticate, requireAdmin, async (req, res) => {
   const clients = await VpnClient.findAll({ order: [['id', 'DESC']], limit: 100 });
   res.json({ status: 'success', data: clients });
 });
 
 // Delete client (admin) - also deletes from XX-UI
-router.delete('/admin/client/:id', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.delete('/admin/client/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const client = await VpnClient.findByPk(req.params.id);
     if (!client) return res.json({ status: 'error', message: '订单不存在' });
@@ -345,7 +341,6 @@ router.delete('/admin/client/:id', authenticate, async (req, res) => {
       const product = await VpnProduct.findByPk(client.product_id);
       const apiKey = product?.xxui_api_key || await getConfig('xxui_api_key');
       if (product?.xxui_url && apiKey) {
-        const { default: axios } = await import('axios');
         const url = `${(product.xxui_url || '').replace(/\/+$/, '')}/panel/remote/client/${encodeURIComponent(client.email)}/delete`;
         await axios.post(url, {}, { headers: { 'X-API-Key': apiKey }, timeout: 10000 });
       }
@@ -359,8 +354,7 @@ router.delete('/admin/client/:id', authenticate, async (req, res) => {
 });
 
 // Sync live traffic from XX-UI for one client
-router.post('/admin/sync-traffic', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+router.post('/admin/sync-traffic', authenticate, requireAdmin, async (req, res) => {
   try {
     const updated = [];
     for (const c of req.body.clients || []) {
