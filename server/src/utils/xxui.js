@@ -6,8 +6,10 @@ function normUrl(u) {
 }
 
 function newClientEmail(productId, userId) {
-  const shortId = crypto.randomBytes(4).toString('hex');
-  return `u${userId}_p${productId}_${shortId}`;
+  const now = new Date();
+  const dateStr = `${String(now.getFullYear()).slice(2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const rand = String(Math.floor(1000 + Math.random() * 9000));
+  return `${dateStr}${rand}`;
 }
 
 function newClientUUID() {

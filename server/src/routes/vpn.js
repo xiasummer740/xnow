@@ -229,4 +229,55 @@ router.get('/admin/clients', authenticate, async (req, res) => {
   res.json({ status: 'success', data: clients });
 });
 
+// Delete client (admin) - also deletes from XX-UI
+router.delete('/admin/client/:id', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+  try {
+    const client = await VpnClient.findByPk(req.params.id);
+    if (!client) return res.json({ status: 'error', message: '订单不存在' });
+
+    // Try to delete from XX-UI
+    try {
+      const product = await VpnProduct.findByPk(client.product_id);
+      const apiKey = product?.xxui_api_key || await getConfig('xxui_api_key');
+      if (product?.xxui_url && apiKey) {
+        const { default: axios } = await import('axios');
+        const url = `${(product.xxui_url || '').replace(/\/+$/, '')}/panel/remote/client/${encodeURIComponent(client.email)}/delete`;
+        await axios.post(url, {}, { headers: { 'X-API-Key': apiKey }, timeout: 10000 });
+      }
+    } catch (e) { /* XX-UI delete might fail, continue */ }
+
+    await client.destroy();
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.json({ status: 'error', message: '删除失败' });
+  }
+});
+
+// Sync live traffic from XX-UI for one client
+router.post('/admin/sync-traffic', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '无权限' });
+  try {
+    const updated = [];
+    for (const c of req.body.clients || []) {
+      try {
+        const product = await VpnProduct.findByPk(c.product_id);
+        const apiKey = product?.xxui_api_key || await getConfig('xxui_api_key');
+        if (!product?.xxui_url || !apiKey) continue;
+        const traffic = await getXXUIClient(product.xxui_url, apiKey, c.email);
+        if (traffic) {
+          await VpnClient.update(
+            { traffic_used_up: traffic.up || 0, traffic_used_down: traffic.down || 0 },
+            { where: { id: c.id } }
+          );
+          updated.push({ id: c.id, up: traffic.up || 0, down: traffic.down || 0 });
+        }
+      } catch (e) { /* skip individual failures */ }
+    }
+    res.json({ status: 'success', data: updated });
+  } catch (e) {
+    res.json({ status: 'error', message: '同步失败' });
+  }
+});
+
 export default router;

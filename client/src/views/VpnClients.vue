@@ -72,12 +72,20 @@
           </div>
         </div>
 
-        <!-- QR Code -->
-        <div v-if="detail.subscription_url" class="flex flex-col items-center py-2">
-          <div class="bg-white rounded-2xl p-2 inline-block">
-            <canvas id="vpn-qr-canvas" width="200" height="200"></canvas>
+        <!-- QR Code + Copy row -->
+        <div v-if="detail.subscription_url" class="flex items-center justify-center space-x-4 py-2">
+          <div class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.subscription_url)" :title="appStore.lang === 'zh' ? '点击复制订阅链接' : 'Click to copy'">
+            <div class="bg-white rounded-2xl p-1.5">
+              <canvas id="vpn-qr-canvas" width="160" height="160"></canvas>
+            </div>
+            <span class="text-[10px] text-slate-500 mt-1">{{ appStore.lang === 'zh' ? '扫码导入' : 'Scan' }}</span>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '扫码导入 (小火箭/V2Ray/Sing-Box)' : 'Scan to import (Shadowrocket/V2Ray/Sing-Box)' }}</p>
+          <div class="flex flex-col items-center space-y-2">
+            <button @click="copy(detail.subscription_url)" class="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold text-xs hover:bg-emerald-500/30 transition">
+              {{ copied === detail.subscription_url ? '✓ ' + (appStore.lang === 'zh' ? '已复制' : 'Copied') : (appStore.lang === 'zh' ? '📋 复制订阅链接' : '📋 Copy Link') }}
+            </button>
+            <p class="text-[10px] text-slate-500 text-center max-w-[160px]">{{ appStore.lang === 'zh' ? '点击二维码或按钮复制，粘贴到小火箭/V2Ray/Sing-Box' : 'Tap QR or button to copy' }}</p>
+          </div>
         </div>
 
         <!-- Subscription URL Box -->

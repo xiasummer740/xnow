@@ -57,14 +57,15 @@
       <h2 class="text-lg font-bold text-white mb-4">{{ appStore.lang === 'zh' ? '📋 最近订单' : '📋 Recent Orders' }}</h2>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">用户ID</th><th class="p-3">Email</th><th class="p-3">流量</th><th class="p-3">位置</th><th class="p-3">到期</th></tr></thead>
+          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">用户ID</th><th class="p-3">Email</th><th class="p-3">已用/总额</th><th class="p-3">位置</th><th class="p-3">到期</th><th class="p-3"></th></tr></thead>
           <tbody>
             <tr v-for="c in clients" :key="c.id" class="border-t border-slate-800 hover:bg-slate-800/50 transition">
               <td class="p-3 text-white">{{ c.user_id }}</td>
               <td class="p-3 text-slate-400 font-mono text-xs">{{ c.email }}</td>
-              <td class="p-3 text-white">{{ c.traffic_gb }}GB</td>
+              <td class="p-3 text-white text-xs">{{ formatUsed(c) }} / {{ c.traffic_gb }}GB</td>
               <td class="p-3 text-slate-400">{{ c.vps_location }}</td>
-              <td class="p-3" :class="(c.expiry_time*1000) < Date.now() ? 'text-red-400' : 'text-slate-400'">{{ formatDate(c.expiry_time) }}</td>
+              <td class="p-3" :class="c.expiry_time < Date.now() ? 'text-red-400' : 'text-slate-400'">{{ formatDate(c.expiry_time) }}</td>
+              <td class="p-3"><button @click="deleteClient(c)" class="text-red-400 hover:text-red-300 text-xs">删除</button></td>
             </tr>
             <tr v-if="clients.length === 0"><td colspan="5" class="p-6 text-center text-slate-500">{{ appStore.lang === 'zh' ? '暂无订单' : 'No orders yet' }}</td></tr>
           </tbody>
@@ -193,6 +194,13 @@ const saveServer = async () => {
   savingNode.value = false;
 };
 
+const deleteClient = async (c) => {
+  if (!await uiStore.showConfirm(`确认删除订单「${c.email}」？也会尝试从 XX-UI 删除该客户端。`)) return;
+  try {
+    await fetch(`/api/vpn/admin/client/${c.id}`, { method: 'DELETE', headers: getHeaders() });
+    fetchData();
+  } catch (e) { uiStore.showToast('删除失败', 'error'); }
+};
 const deleteServer = async (s) => {
   if (!await uiStore.showConfirm(`确认删除「${s.name}」？此操作不可恢复。`)) return;
   try {
@@ -202,4 +210,8 @@ const deleteServer = async (s) => {
 };
 
 const formatDate = (ts) => ts ? new Date(ts).toLocaleDateString('zh-CN') : '--';
+const formatUsed = (c) => {
+  const bytes = (parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0));
+  return bytes > 0 ? (bytes / 1073741824).toFixed(2) + 'GB' : '0';
+};
 </script>
