@@ -208,6 +208,7 @@ const buy = async () => {
     });
     const data = await res.json();
     if (data.status === 'success') {
+      if (data.data?.balance) userStore.updateUserInfo({ balance: data.data.balance });
       showSuccess.value = true;
     } else {
       uiStore.showToast(data.message || (appStore.lang === 'zh' ? '购买失败' : 'Failed'), 'error');

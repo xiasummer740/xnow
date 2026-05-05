@@ -114,14 +114,20 @@ router.post('/buy', authenticate, async (req, res) => {
     const subId = crypto.randomBytes(8).toString('hex');
     await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
 
-    // Build subscription URL: {panel_hostname}:{sub_port}/sub/{subId}
+    // Build subscription URL
     const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
     const subUrl = `https://${panelHost}:${product.sub_port || 2096}/sub/${subId}`;
+
+    // Build node connection URL from inbound info
+    const protocol = inboundInfo.protocol || 'vless';
+    const inboundPort = inboundInfo.port || product.xxui_inbound_id;
+    const nodeUrl = `${protocol}://${uuid}@${panelHost}:${inboundPort}?encryption=none&type=tcp#${encodeURIComponent(email)}`;
 
     await VpnClient.create({
       user_id: user.id, product_id: product.id,
       email, uuid, sub_id: subId,
       subscription_url: subUrl,
+      config_url: nodeUrl,
       traffic_gb: Number(traffic_gb),
       expiry_time: expiryTime,
       vps_location: product.vps_location,
@@ -133,7 +139,7 @@ router.post('/buy', authenticate, async (req, res) => {
 
     res.json({
       status: 'success',
-      data: { email, uuid, subscription_url: subUrl, expiry_time: expiryTime, traffic_gb: Number(traffic_gb), vps_location: product.vps_location, flag_emoji: product.flag_emoji || '', price: finalPrice }
+      data: { email, uuid, subscription_url: subUrl, config_url: nodeUrl, expiry_time: expiryTime, traffic_gb: Number(traffic_gb), vps_location: product.vps_location, flag_emoji: product.flag_emoji || '', price: finalPrice, balance: user.balance }
     });
   } catch (e) {
     await t.rollback();

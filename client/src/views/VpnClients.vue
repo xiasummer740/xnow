@@ -72,21 +72,24 @@
           </div>
         </div>
 
-        <!-- QR Code + Copy row -->
-        <div v-if="detail.subscription_url" class="flex items-center justify-center space-x-4 py-2">
-          <div class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.subscription_url)" :title="appStore.lang === 'zh' ? '点击复制订阅链接' : 'Click to copy'">
+        <!-- Two QR codes: Subscription + Node Connection -->
+        <div v-if="detail.subscription_url" class="flex items-start justify-center space-x-4 py-2">
+          <!-- Subscription QR -->
+          <div class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.subscription_url)" :title="appStore.lang === 'zh' ? '点击复制订阅链接' : 'Click to copy subscription'">
             <div class="bg-white rounded-2xl p-1.5">
-              <canvas id="vpn-qr-canvas" width="160" height="160"></canvas>
+              <canvas :id="'qr-sub-' + detail.id" width="150" height="150"></canvas>
             </div>
-            <span class="text-[10px] text-slate-500 mt-1">{{ appStore.lang === 'zh' ? '扫码导入' : 'Scan' }}</span>
+            <span class="text-[10px] text-slate-400 mt-1 font-bold">{{ appStore.lang === 'zh' ? '📡 订阅' : '📡 Sub' }}</span>
           </div>
-          <div class="flex flex-col items-center space-y-2">
-            <button @click="copy(detail.subscription_url)" class="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold text-xs hover:bg-emerald-500/30 transition">
-              {{ copied === detail.subscription_url ? '✓ ' + (appStore.lang === 'zh' ? '已复制' : 'Copied') : (appStore.lang === 'zh' ? '📋 复制订阅链接' : '📋 Copy Link') }}
-            </button>
-            <p class="text-[10px] text-slate-500 text-center max-w-[160px]">{{ appStore.lang === 'zh' ? '点击二维码或按钮复制，粘贴到小火箭/V2Ray/Sing-Box' : 'Tap QR or button to copy' }}</p>
+          <!-- Node Connection QR -->
+          <div v-if="detail.config_url" class="flex flex-col items-center cursor-pointer hover:opacity-80 transition" @click="copy(detail.config_url)" :title="appStore.lang === 'zh' ? '点击复制节点链接' : 'Click to copy node link'">
+            <div class="bg-white rounded-2xl p-1.5">
+              <canvas :id="'qr-node-' + detail.id" width="150" height="150"></canvas>
+            </div>
+            <span class="text-[10px] text-slate-400 mt-1 font-bold">{{ appStore.lang === 'zh' ? '🔗 节点' : '🔗 Node' }}</span>
           </div>
         </div>
+        <p v-if="detail.subscription_url" class="text-[10px] text-slate-500 text-center">{{ appStore.lang === 'zh' ? '点击二维码自动复制链接' : 'Tap QR to copy link' }}</p>
 
         <!-- Subscription URL Box -->
         <div v-if="detail.subscription_url" class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
@@ -129,8 +132,8 @@ onMounted(async () => {
   if (demoMode.value) {
     const now = Math.floor(Date.now() / 1000);
     clients.value = [
-      { id: 1, email: 'u1_p1_a3f8c2@vpn', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', config_url: 'vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@us.example.com:443?encryption=none&security=reality&type=tcp#demo', traffic_gb: 200, traffic_used_up: 32_000_000_000, traffic_used_down: 8_000_000_000, expiry_time: now + 86400 * 75 * 1000, vps_location: '洛杉矶', flag_emoji: '🇺🇸', subscription_url: 'https://panel.example.com/sub/abc123', _demo: true },
-      { id: 2, email: 'u1_p2_b7e1d9@vpn', uuid: 'f9e8d7c6-b5a4-3210-fedc-ba9876543210', config_url: '', traffic_gb: 500, traffic_used_up: 0, traffic_used_down: 0, expiry_time: now + 86400 * 10 * 1000, vps_location: '伦敦', flag_emoji: '🇬🇧', subscription_url: '', _demo: true },
+      { id: 1, email: 'demo@vpn', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', config_url: 'vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@us.example.com:443?encryption=none&type=tcp#demo', traffic_gb: 200, traffic_used_up: 32_000_000_000, traffic_used_down: 8_000_000_000, expiry_time: now + 86400 * 75 * 1000, vps_location: '洛杉矶', flag_emoji: '🇺🇸', subscription_url: 'https://panel.example.com:2096/sub/demo123', _demo: true },
+      { id: 2, email: 'demo2@vpn', uuid: 'f9e8d7c6-b5a4-3210-fedc-ba9876543210', config_url: 'vless://f9e8d7c6-b5a4-3210-fedc-ba9876543210@uk.example.com:443?encryption=none&type=tcp#demo2', traffic_gb: 500, traffic_used_up: 0, traffic_used_down: 0, expiry_time: now + 86400 * 10 * 1000, vps_location: '伦敦', flag_emoji: '🇬🇧', subscription_url: 'https://panel.example.com:2096/sub/demo2', _demo: true },
     ];
   }
   loading.value = false;
@@ -151,10 +154,16 @@ const trafficPercent = (c) => {
 
 const showDetail = (c) => { detail.value = c; nextTick(() => { drawQr(); }); };
 const drawQr = async () => {
-  if (!detail.value?.subscription_url) return;
-  const el = document.getElementById('vpn-qr-canvas');
-  if (!el) return;
-  try { await QRCode.toCanvas(el, detail.value.subscription_url, { width: 200, margin: 2 }); } catch (e) { /* */ }
+  const d = detail.value;
+  if (!d) return;
+  if (d.subscription_url) {
+    const el = document.getElementById('qr-sub-' + d.id);
+    if (el) try { await QRCode.toCanvas(el, d.subscription_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
+  }
+  if (d.config_url) {
+    const el = document.getElementById('qr-node-' + d.id);
+    if (el) try { await QRCode.toCanvas(el, d.config_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
+  }
 };
 
 const detailRows = computed(() => {
