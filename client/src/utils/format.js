@@ -1,14 +1,14 @@
 // Shared formatting utilities
 
-export function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return '0';
-  const gb = bytes / 1073741824;
-  return gb >= 1 ? gb.toFixed(2) + ' GB' : (bytes / 1048576).toFixed(1) + ' MB';
-}
-
 export function formatTrafficUsed(c) {
   const bytes = (parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0));
-  return formatBytes(bytes);
+  if (!bytes || bytes === 0) return '0';
+  const gb = bytes / 1073741824;
+  return gb >= 1 ? gb.toFixed(2) : (bytes / 1048576).toFixed(1);
+}
+
+export function formatBytes(bytes) {
+  return formatTrafficUsed({ traffic_used_up: bytes, traffic_used_down: 0 });
 }
 
 export function formatExpiry(ts) {
