@@ -170,7 +170,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-purple-500/10 text-8xl">📦</div><div class="text-slate-400 text-xs font-bold mb-1">全站累计处理订单</div><div class="text-3xl font-black text-purple-400 font-mono mt-2">{{ data.totalOrders || '0' }}</div></div>
         </div>
 
-        <div v-if="userStore.userInfo?.role === 'super_admin'" class="bg-slate-800/80 border border-emerald-500/30 p-5 rounded-2xl shadow-lg flex items-center justify-between">
+        <div v-if="['admin', 'super_admin'].includes(userStore.userInfo?.role)" class="bg-slate-800/80 border border-emerald-500/30 p-5 rounded-2xl shadow-lg flex items-center justify-between">
           <div>
             <h3 class="text-white font-bold flex items-center"><span class="text-emerald-400 mr-2">🛡️</span> VPN 安全节点商城</h3>
             <p class="text-xs text-slate-500 mt-1">{{ vpnShopEnabled ? '商城已对全体用户开放' : '商城已关闭，用户无法访问' }}</p>

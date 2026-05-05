@@ -198,7 +198,7 @@ router.get('/status', async (req, res) => {
 
 // Toggle VPN shop on/off (super_admin only)
 router.post('/admin/toggle-shop', authenticate, async (req, res) => {
-  if (req.user.role !== 'super_admin') return res.json({ status: 'error', message: '仅超级管理员可操作' });
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.json({ status: 'error', message: '仅管理员可操作' });
   const enabled = req.body.enabled !== false;
   await Config.upsert({ key: 'vpn_shop_enabled', value: String(enabled) });
   res.json({ status: 'success', enabled });
