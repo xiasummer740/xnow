@@ -134,9 +134,11 @@ router.post('/buy', authenticate, async (req, res) => {
     if (!clientCreated) throw new Error('Failed to create client after retries');
 
     // Build subscription URL
-    const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
+    const panelParsed = new URL((product.xxui_url || '').replace(/\/+$/, ''));
+    const panelHost = panelParsed.hostname;
+    const subProto = panelParsed.protocol || 'https:';
     const subPath = (product.sub_path || '/sub/').replace(/\/+$/, '');
-    const subUrl = `https://${panelHost}:${product.sub_port || 2096}${subPath}/${subId}`;
+    const subUrl = `${subProto}//${panelHost}:${product.sub_port || 2096}${subPath}/${subId}`;
 
     // Get the real node connection URL from XX-UI
     let nodeUrl = '';
@@ -355,7 +357,7 @@ router.delete('/admin/client/:id', authenticate, requireAdmin, async (req, res) 
         const url = `${(product.xxui_url || '').replace(/\/+$/, '')}/panel/remote/client/${encodeURIComponent(client.email)}/delete`;
         await axios.post(url, {}, { headers: { 'X-API-Key': apiKey }, timeout: 10000 });
       }
-    } catch (e) { console.error('XX-UI delete failed:', e.message); }
+    } catch (e) { console.error(`XX-UI delete failed for ${client.email}: ${e.response?.status || e.message}`); }
 
     // Mark related transactions as refunded
     try {

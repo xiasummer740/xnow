@@ -85,7 +85,7 @@
             <tr v-for="c in clients" :key="c.id" class="border-t border-slate-800 hover:bg-slate-800/50 transition">
               <td class="p-3 text-white">{{ c.user_id }}</td>
               <td class="p-3 text-slate-400 font-mono text-xs">{{ c.email }}</td>
-              <td class="p-3 text-white text-xs">{{ formatUsed(c) }} / {{ c.traffic_gb }}GB</td>
+              <td class="p-3 text-white text-xs">{{ formatTrafficUsed(c) }} / {{ c.traffic_gb }}GB</td>
               <td class="p-3 text-slate-400">{{ c.vps_location }}</td>
               <td class="p-3" :class="c.expiry_time < Date.now() ? 'text-red-400' : 'text-slate-400'">{{ formatDate(c.expiry_time) }}</td>
               <td class="p-3"><button @click="deleteClient(c)" class="text-red-400 hover:text-red-300 text-xs">删除</button></td>
@@ -139,6 +139,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
+import { formatTrafficUsed } from '../utils/format.js';
 
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 const shopEnabled = ref(true);
@@ -201,7 +202,7 @@ const fetchData = async () => {
       const now = Date.now();
       const map = {};
       d.data.forEach(c => {
-        if (c.expiry_time && c.expiry_time > now) {
+        if (c.product_id && c.expiry_time && c.expiry_time > now) {
           map[c.product_id] = (map[c.product_id] || 0) + (c.traffic_gb || 0);
         }
       });
@@ -286,8 +287,4 @@ const deleteServer = async (s) => {
 };
 
 const formatDate = (ts) => ts ? new Date(ts).toLocaleDateString('zh-CN') : '--';
-const formatUsed = (c) => {
-  const bytes = (parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0));
-  return bytes > 0 ? (bytes / 1073741824).toFixed(2) + 'GB' : '0';
-};
 </script>

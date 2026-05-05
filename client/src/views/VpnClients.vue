@@ -100,6 +100,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import QRCode from 'qrcode';
+import { formatTrafficUsed, formatExpiry, isExpired, trafficPercent } from '../utils/format.js';
 
 const appStore = useAppStore(); const userStore = useUserStore();
 const clients = ref([]); const loading = ref(true); const detail = ref(null);
@@ -149,17 +150,7 @@ onMounted(async () => {
   loading.value = false;
 });
 
-const isExpired = (c) => !c.expiry_time || Date.now() > c.expiry_time;
-const formatExpiry = (ts) => ts ? new Date(ts).toLocaleDateString('zh-CN') : '--';
-const formatTrafficUsed = (c) => {
-  const used = (parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0));
-  const usedGB = (used / 1073741824).toFixed(2);
-  return usedGB;
-};
-const trafficPercent = (c) => {
-  const used = parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0);
-  const total = (c.traffic_gb || 1) * 1073741824;
-  return Math.round((used / total) * 100);
+// Using shared format.js utilities
 };
 
 const detailRows = computed(() => {
