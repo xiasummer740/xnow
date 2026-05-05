@@ -56,7 +56,16 @@
     <div class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold text-white">{{ appStore.lang === 'zh' ? '📋 最近订单' : '📋 Recent Orders' }}</h2>
-        <button @click="syncTraffic" :disabled="syncing" class="px-3 py-1.5 rounded-lg text-xs font-bold transition" :class="syncing ? 'bg-slate-800 text-slate-500' : 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/30'">{{ syncing ? '同步中...' : (appStore.lang === 'zh' ? '🔄 刷新流量' : '🔄 Sync Traffic') }}</button>
+        <div class="flex items-center space-x-2">
+          <select v-model="syncInterval" @change="startAutoSync" class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-400 outline-none focus:border-cyan-400">
+            <option :value="0">{{ appStore.lang === 'zh' ? '关闭自动' : 'Off' }}</option>
+            <option :value="5">5s</option>
+            <option :value="10">10s</option>
+            <option :value="30">30s</option>
+            <option :value="60">60s</option>
+          </select>
+          <button @click="syncTraffic" :disabled="syncing" class="px-3 py-1.5 rounded-lg text-xs font-bold transition" :class="syncing ? 'bg-slate-800 text-slate-500' : 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/30'">{{ syncing ? '...' : (appStore.lang === 'zh' ? '🔄' : '🔄') }}</button>
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -115,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
@@ -129,6 +138,7 @@ const keyMsg = ref(''); const keyMsgOk = ref(false);
 const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' });
 
 onMounted(() => { fetchData(); fetchApiKey(); });
+onUnmounted(() => { clearInterval(syncTimer); });
 
 const apiHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` });
 const getHeaders = () => ({ 'Authorization': `Bearer ${userStore.token}` });
@@ -214,8 +224,8 @@ const saveServer = async () => {
   savingNode.value = false;
 };
 
-const syncing = ref(false);
-const syncTraffic = async () => {
+const syncing = ref(false); const syncInterval = ref(0); let syncTimer = null;
+const doSync = async () => {
   syncing.value = true;
   try {
     const r = await fetch('/api/vpn/admin/sync-traffic', {
@@ -228,10 +238,16 @@ const syncTraffic = async () => {
         const c = clients.value.find(x => x.id === u.id);
         if (c) { c.traffic_used_up = u.up; c.traffic_used_down = u.down; }
       });
-      uiStore.showToast(appStore.lang === 'zh' ? '流量已刷新' : 'Traffic synced', 'success');
     }
   } catch (e) { /* */ }
   syncing.value = false;
+};
+const syncTraffic = async () => { await doSync(); };
+const startAutoSync = () => {
+  clearInterval(syncTimer);
+  if (syncInterval.value > 0) {
+    syncTimer = setInterval(doSync, syncInterval.value * 1000);
+  }
 };
 const deleteClient = async (c) => {
   if (!await uiStore.showConfirm(`确认删除订单「${c.email}」？也会尝试从 XX-UI 删除该客户端。`)) return;
