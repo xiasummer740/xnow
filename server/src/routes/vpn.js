@@ -100,7 +100,7 @@ router.post('/buy', authenticate, async (req, res) => {
 
     // Create client on XX-UI (XX-UI uses milliseconds timestamps)
     const expiryTime = now + (Number(duration_days) * 86400 * 1000);
-    const email = newClientEmail(product.id, user.id);
+    const email = newClientEmail(product.id, user.id, product.name);
     const uuid = newClientUUID();
     // Use per-node API key if set, otherwise fall back to global
     const apiKey = product.xxui_api_key || await getConfig('xxui_api_key');

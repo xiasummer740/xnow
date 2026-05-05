@@ -91,16 +91,6 @@
         </div>
         <p v-if="detail.subscription_url" class="text-[10px] text-slate-500 text-center">{{ appStore.lang === 'zh' ? '点击二维码自动复制链接' : 'Tap QR to copy link' }}</p>
 
-        <!-- Subscription URL Box -->
-        <div v-if="detail.subscription_url" class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
-          <div class="text-xs text-emerald-400 font-bold mb-2">{{ appStore.lang === 'zh' ? '📡 订阅链接' : '📡 Subscription Link' }}</div>
-          <div class="flex items-center space-x-2">
-            <code class="flex-1 text-xs text-white break-all font-mono bg-slate-800 rounded-lg p-2">{{ detail.subscription_url }}</code>
-            <button @click="copy(detail.subscription_url)" class="px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold text-xs flex-shrink-0 transition">{{ copied === detail.subscription_url ? '✓' : (appStore.lang === 'zh' ? '复制' : 'Copy') }}</button>
-          </div>
-          <p class="text-[10px] text-slate-500 mt-2">{{ appStore.lang === 'zh' ? '将此链接导入 V2Ray / Clash / Sing-Box 等客户端即可使用' : 'Import this link into V2Ray / Clash / Sing-Box clients' }}</p>
-        </div>
-
         <button @click="detail = null" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition">{{ appStore.lang === 'zh' ? '关闭' : 'Close' }}</button>
       </div>
     </div>
@@ -111,7 +101,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 import QRCode from 'qrcode';
@@ -152,19 +142,22 @@ const trafficPercent = (c) => {
   return Math.round((used / total) * 100);
 };
 
-const showDetail = (c) => { detail.value = c; nextTick(() => { drawQr(); }); };
-const drawQr = async () => {
-  const d = detail.value;
+const showDetail = (c) => { detail.value = c; };
+
+watch(detail, async (d) => {
   if (!d) return;
-  if (d.subscription_url) {
-    const el = document.getElementById('qr-sub-' + d.id);
-    if (el) try { await QRCode.toCanvas(el, d.subscription_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
-  }
-  if (d.config_url) {
-    const el = document.getElementById('qr-node-' + d.id);
-    if (el) try { await QRCode.toCanvas(el, d.config_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
-  }
-};
+  await nextTick();
+  setTimeout(async () => {
+    if (d.subscription_url) {
+      const subEl = document.getElementById('qr-sub-' + d.id);
+      if (subEl) try { await QRCode.toCanvas(subEl, d.subscription_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
+    }
+    if (d.config_url) {
+      const nodeEl = document.getElementById('qr-node-' + d.id);
+      if (nodeEl) try { await QRCode.toCanvas(nodeEl, d.config_url, { width: 150, margin: 1 }); } catch (e) { /* */ }
+    }
+  }, 100);
+});
 
 const detailRows = computed(() => {
   if (!detail.value) return [];
