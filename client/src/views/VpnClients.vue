@@ -44,6 +44,7 @@
 
         <div class="flex items-center space-x-2">
           <button @click="refreshOne(c)" class="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold text-xs transition" :title="appStore.lang === 'zh' ? '刷新流量' : 'Refresh'">🔄</button>
+          <button @click="renewClient(c)" class="py-2 px-3 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold text-xs hover:bg-amber-500/30 transition">{{ appStore.lang === 'zh' ? '续费' : 'Renew' }}</button>
           <button @click="showDetail(c)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition">{{ appStore.lang === 'zh' ? '连接信息' : 'Connect Info' }}</button>
         </div>
       </div>
@@ -99,10 +100,11 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
+import { useUiStore } from '../stores/ui';
 import QRCode from 'qrcode';
 import { formatTrafficUsed, formatExpiry, isExpired, trafficPercent } from '../utils/format.js';
 
-const appStore = useAppStore(); const userStore = useUserStore();
+const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 const clients = ref([]); const loading = ref(true); const detail = ref(null);
 const copied = ref(''); const toast = ref('');
 const demoMode = ref(false);
@@ -110,6 +112,28 @@ const demoMode = ref(false);
 const qrSubDataUri = ref('');
 const qrNodeDataUri = ref('');
 
+const renewClient = async (c) => {
+  const addDays = prompt(appStore.lang === 'zh' ? '续费天数 (30/90/180/360):' : 'Days to extend (30/90/180/360):', '30');
+  if (!addDays) return;
+  const addTraffic = prompt(appStore.lang === 'zh' ? '追加流量 GB (0=不追加):' : 'Additional traffic GB (0=none):', '0');
+  if (addTraffic === null) return;
+  try {
+    const r = await fetch(`/api/vpn/client/${c.id}/renew`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ traffic_gb: parseInt(addTraffic) || 0, duration_days: parseInt(addDays) || 30 })
+    });
+    const d = await r.json();
+    if (d.status === 'success') {
+      c.traffic_gb = d.data.traffic_gb;
+      c.expiry_time = d.data.expiry_time;
+      if (d.data.balance) userStore.updateUserInfo({ balance: d.data.balance });
+      uiStore.showToast(appStore.lang === 'zh' ? '续费成功' : 'Renewed', 'success');
+    } else {
+      uiStore.showToast(d.message || (appStore.lang === 'zh' ? '续费失败' : 'Failed'), 'error');
+    }
+  } catch (e) { uiStore.showToast(appStore.lang === 'zh' ? '网络异常' : 'Network error', 'error'); }
+};
 const refreshOne = async (c) => {
   try {
     const r = await fetch(`/api/vpn/client/${c.id}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });

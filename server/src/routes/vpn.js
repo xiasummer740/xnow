@@ -221,7 +221,10 @@ router.post("/client/:id/renew", authenticate, async (req, res) => {
   const addTraffic = Number(traffic_gb || 0);
   const addDays = Number(duration_days || 0);
   const pricePerGb = parseFloat(product.price_per_gb || 0.5);
-  let totalPrice = pricePerGb * addTraffic * (addDays > 0 ? (addDays / 30) : 1);
+  const months = addDays > 0 ? (addDays / 30) : 1;
+  let totalPrice = pricePerGb * addTraffic * months;
+  // Duration-only renewal: charge at least 10 CNY base
+  if (addTraffic === 0 && addDays > 0) totalPrice = Math.max(10, pricePerGb * 10 * months);
   if (totalPrice < 10 && totalPrice > 0) totalPrice = 10;
   const user = await User.findByPk(req.user.id);
   const userBalance = parseFloat(user.balance || 0);
