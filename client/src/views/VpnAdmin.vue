@@ -92,6 +92,7 @@
             <div><label class="text-slate-400 text-xs">单价(¥/GB)</label><input v-model.number="editing.price_per_gb" type="number" step="0.01" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"></div>
           </div>
           <div><label class="text-slate-400 text-xs">订阅端口 (默认 2096)</label><input v-model.number="editing.sub_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400"></div>
+          <div><label class="text-slate-400 text-xs">节点独立 API Key（可选，留空则用全局密钥）</label><input v-model="editing.xxui_api_key" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-emerald-400" placeholder="留空则使用全局 API Key"></div>
           <label class="flex items-center space-x-2 cursor-pointer"><input v-model="editing.active" type="checkbox" class="w-4 h-4 rounded accent-emerald-500"> <span class="text-slate-400">启用此节点</span></label>
         </div>
         <div class="flex space-x-3 pt-2">
@@ -116,7 +117,7 @@ const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
 const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false);
 const keyMsg = ref(''); const keyMsgOk = ref(false);
-const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, active: true, description: '' });
+const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' });
 
 onMounted(() => { fetchData(); fetchApiKey(); });
 
@@ -161,7 +162,7 @@ const fetchData = async () => {
 const editServer = (s) => {
   editErr.value = '';
   editMode.value = true;
-  editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, active: true, description: '' };
+  editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' };
 };
 
 const saveServer = async () => {

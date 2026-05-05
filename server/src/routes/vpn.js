@@ -94,7 +94,8 @@ router.post('/buy', authenticate, async (req, res) => {
     const expiryTime = now + (Number(duration_days) * 86400 * 1000);
     const email = newClientEmail(product.id, user.id);
     const uuid = newClientUUID();
-    const apiKey = await getConfig('xxui_api_key');
+    // Use per-node API key if set, otherwise fall back to global
+    const apiKey = product.xxui_api_key || await getConfig('xxui_api_key');
 
     if (!product.xxui_url || !product.xxui_inbound_id || !apiKey) {
       await t.rollback();
