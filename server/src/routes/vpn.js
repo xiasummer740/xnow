@@ -116,7 +116,8 @@ router.post('/buy', authenticate, async (req, res) => {
 
     // Build subscription URL
     const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
-    const subUrl = `https://${panelHost}:${product.sub_port || 2096}/sub/${subId}`;
+    const subPath = (product.sub_path || '/sub/').replace(//+$/, '');
+    const subUrl = `https://${panelHost}:${product.sub_port || 2096}${subPath}/${subId}`;
 
     // Get the real node connection URL from XX-UI
     let nodeUrl = '';
@@ -174,7 +175,7 @@ router.get('/client/:id', authenticate, async (req, res) => {
     try {
       const product = await VpnProduct.findByPk(client.product_id);
       if (product?.xxui_url) {
-        const apiKey = await getConfig('xxui_api_key');
+        const apiKey = product?.xxui_api_key || await getConfig('xxui_api_key');
         if (apiKey) {
           const traffic = await getXXUIClient(product.xxui_url, apiKey, client.email);
           if (traffic) liveTraffic = { up: traffic.up || 0, down: traffic.down || 0, total: traffic.total || 0 };
@@ -188,6 +189,45 @@ router.get('/client/:id', authenticate, async (req, res) => {
   }
 });
 
+
+// Renew/extend a client
+router.post("/client/:id/renew", authenticate, async (req, res) => {
+  const { traffic_gb, duration_days } = req.body;
+  if (!traffic_gb && !duration_days) return res.json({ status: "error", message: "请选择续费流量或时长" });
+  const client = await VpnClient.findOne({ where: { id: req.params.id, user_id: req.user.id } });
+  if (!client) return res.json({ status: "error", message: "节点不存在" });
+  const product = await VpnProduct.findByPk(client.product_id);
+  if (!product) return res.json({ status: "error", message: "节点配置丢失" });
+  const addTraffic = Number(traffic_gb || 0);
+  const addDays = Number(duration_days || 0);
+  const pricePerGb = parseFloat(product.price_per_gb || 0.5);
+  let totalPrice = pricePerGb * addTraffic * (addDays > 0 ? (addDays / 30) : 1);
+  if (totalPrice < 10 && totalPrice > 0) totalPrice = 10;
+  const user = await User.findByPk(req.user.id);
+  const userBalance = parseFloat(user.balance || 0);
+  if (userBalance < totalPrice) return res.json({ status: "error", message: "余额不足" });
+  if (addTraffic > 0) {
+    const now = Date.now();
+    const active = await VpnClient.findAll({ where: { product_id: client.product_id, expiry_time: { [sequelize.Sequelize.Op.gt]: now } } });
+    const used = active.reduce((s, c) => s + (c.id === client.id ? 0 : c.traffic_gb || 0), 0);
+    if (used + (client.traffic_gb || 0) + addTraffic > product.max_traffic_gb) return res.json({ status: "error", message: "节点容量不足" });
+  }
+  const t = await sequelize.transaction();
+  try {
+    user.balance = (userBalance - totalPrice).toFixed(6);
+    await user.save({ transaction: t });
+    await Transaction.create({ user_id: user.id, phone: user.phone, amount: -totalPrice, balance: user.balance, type: "VPN续费", description: "VPN续费: " + client.email }, { transaction: t });
+    if (addTraffic > 0) client.traffic_gb = (client.traffic_gb || 0) + addTraffic;
+    if (addDays > 0) client.expiry_time = Math.max(client.expiry_time || Date.now(), Date.now()) + addDays * 86400 * 1000;
+    try {
+      const ak = product.xxui_api_key || await getConfig("xxui_api_key");
+      if (product.xxui_url && ak) await updateXXUIClient(product.xxui_url, ak, client.email, client.traffic_gb, client.expiry_time, true);
+    } catch (e) {}
+    await client.save({ transaction: t });
+    await t.commit();
+    res.json({ status: "success", data: { traffic_gb: client.traffic_gb, expiry_time: client.expiry_time, price: totalPrice, balance: user.balance } });
+  } catch (e) { await t.rollback(); res.json({ status: "error", message: "续费失败" }); }
+});
 // Check if VPN shop is enabled
 router.get('/status', async (req, res) => {
   const val = await getConfig('vpn_shop_enabled');

@@ -115,7 +115,7 @@
             <div><label class="text-slate-400 text-xs">最大流量(GB)</label><input v-model.number="editing.max_traffic_gb" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"></div>
             <div><label class="text-slate-400 text-xs">单价(¥/GB)</label><input v-model.number="editing.price_per_gb" type="number" step="0.01" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"></div>
           </div>
-          <div><label class="text-slate-400 text-xs">订阅端口 (默认 2096)</label><input v-model.number="editing.sub_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400"></div>
+          <div class="grid grid-cols-2 gap-3"><div><label class="text-slate-400 text-xs">订阅端口</label><input v-model.number="editing.sub_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400"></div><div><label class="text-slate-400 text-xs">订阅路径</label><input v-model="editing.sub_path" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400" placeholder="/sub/"></div></div>
           <div><label class="text-slate-400 text-xs">节点独立 API Key（可选，留空则用全局密钥）</label><input v-model="editing.xxui_api_key" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-emerald-400" placeholder="留空则使用全局 API Key"></div>
           <div class="pt-2">
             <button type="button" @click="testConnection" :disabled="testingConn" class="px-4 py-2 rounded-xl font-bold text-sm transition" :class="connResult && connResult.status === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : connResult ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'">
@@ -147,7 +147,7 @@ const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
 const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false);
 const keyMsg = ref(''); const keyMsgOk = ref(false);
-const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' });
+const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '' });
 
 onMounted(() => { fetchData(); fetchApiKey(); fetchShopStatus(); });
 onUnmounted(() => { clearInterval(syncTimer); });
@@ -213,7 +213,7 @@ const fetchData = async () => {
 const editServer = (s) => {
   editErr.value = ''; connResult.value = null;
   editMode.value = true;
-  editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, xxui_api_key: '', active: true, description: '' };
+  editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '' };
 };
 
 const testingConn = ref(false); const connResult = ref(null);

@@ -12,6 +12,7 @@ const VpnProduct = sequelize.define('VpnProduct', {
   xxui_url: { type: DataTypes.STRING(500) },
   xxui_inbound_id: { type: DataTypes.INTEGER },
   sub_port: { type: DataTypes.INTEGER, defaultValue: 2096 },
+  sub_path: { type: DataTypes.STRING(50), defaultValue: '/sub/' },
   xxui_api_key: { type: DataTypes.STRING(200), defaultValue: '' },
   max_traffic_gb: { type: DataTypes.INTEGER, defaultValue: 2000 },
   price_per_gb: { type: DataTypes.DECIMAL(10, 4), defaultValue: 0.5000 },

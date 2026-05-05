@@ -5,11 +5,11 @@ function normUrl(u) {
   return (u || '').replace(/\/+$/, '');
 }
 
-function newClientEmail(productId, userId) {
+function newClientEmail() {
   const now = new Date();
-  const dateStr = `${String(now.getFullYear()).slice(2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
-  const rand = String(Math.floor(1000 + Math.random() * 9000));
-  return `${dateStr}${rand}`;
+  const d = `${String(now.getFullYear()).slice(2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const uid = crypto.randomUUID().split('-')[0];
+  return `${d}${uid}`;
 }
 
 function newClientUUID() {

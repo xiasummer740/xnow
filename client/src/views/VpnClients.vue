@@ -43,6 +43,7 @@
         </div>
 
         <div class="flex items-center space-x-2">
+          <button @click="refreshOne(c)" class="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold text-xs transition" :title="appStore.lang === 'zh' ? '刷新流量' : 'Refresh'">🔄</button>
           <button @click="showDetail(c)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition">{{ appStore.lang === 'zh' ? '连接信息' : 'Connect Info' }}</button>
         </div>
       </div>
@@ -108,6 +109,16 @@ const demoMode = ref(false);
 const qrSubDataUri = ref('');
 const qrNodeDataUri = ref('');
 
+const refreshOne = async (c) => {
+  try {
+    const r = await fetch(`/api/vpn/client/${c.id}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const d = await r.json();
+    if (d.status === 'success' && d.data?.liveTraffic) {
+      c.traffic_used_up = d.data.liveTraffic.up;
+      c.traffic_used_down = d.data.liveTraffic.down;
+    }
+  } catch (e) {}
+};
 const showDetail = async (c) => {
   detail.value = c;
   qrSubDataUri.value = '';
