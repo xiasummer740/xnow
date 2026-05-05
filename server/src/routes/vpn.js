@@ -57,9 +57,17 @@ router.post('/buy', authenticate, async (req, res) => {
     const product = await VpnProduct.findByPk(product_id, { transaction: t });
     if (!product) { await t.rollback(); return res.json({ status: 'error', message: '节点不存在' }); }
     if (!product.active) { await t.rollback(); return res.json({ status: 'error', message: '节点暂不可用' }); }
-    if (traffic_gb > product.max_traffic_gb) {
+
+    // Check node total capacity: sum of all active clients' traffic must not exceed max_traffic_gb
+    const now = Date.now();
+    const activeClients = await VpnClient.findAll({
+      where: { product_id: product.id, expiry_time: { [sequelize.Sequelize.Op.gt]: now } },
+      transaction: t
+    });
+    const usedTraffic = activeClients.reduce((sum, c) => sum + (c.traffic_gb || 0), 0);
+    if (usedTraffic + Number(traffic_gb) > product.max_traffic_gb) {
       await t.rollback();
-      return res.json({ status: 'error', message: `该节点单用户流量上限为 ${product.max_traffic_gb}GB，如需更大流量请联系客服` });
+      return res.json({ status: 'error', message: `该节点总流量上限 ${product.max_traffic_gb}GB，已售 ${usedTraffic}GB，剩余 ${product.max_traffic_gb - usedTraffic}GB，无法购买 ${traffic_gb}GB。请联系客服扩容。` });
     }
 
     // Calculate price: price_per_gb * traffic * duration_discount

@@ -34,14 +34,14 @@
 
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">地址</th><th class="p-3">入站</th><th class="p-3">订阅端口</th><th class="p-3">上限</th><th class="p-3">单价</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
+          <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">地址</th><th class="p-3">入站</th><th class="p-3">订阅端口</th><th class="p-3">已售/上限</th><th class="p-3">单价</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
           <tbody>
             <tr v-for="s in servers" :key="s.id" class="border-t border-slate-800 hover:bg-slate-800/50 transition">
               <td class="p-3 font-bold text-white whitespace-nowrap">{{ s.flag_emoji }} {{ s.name }}</td>
               <td class="p-3 text-slate-400 font-mono text-xs max-w-[120px] truncate" :title="s.xxui_url">{{ s.xxui_url || '—' }}</td>
               <td class="p-3 text-white">{{ s.xxui_inbound_id || '—' }}</td>
               <td class="p-3 text-white">{{ s.sub_port || 2096 }}</td>
-              <td class="p-3 text-white">{{ s.max_traffic_gb }}GB</td>
+              <td class="p-3"><span :class="(usageMap[s.id] || 0) >= s.max_traffic_gb ? 'text-red-400' : 'text-white'">{{ usageMap[s.id] || 0 }} / {{ s.max_traffic_gb }}GB</span></td>
               <td class="p-3 text-white">¥{{ parseFloat(s.price_per_gb || 0).toFixed(2) }}</td>
               <td class="p-3"><span :class="['px-2 py-0.5 rounded-full text-xs font-bold', s.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-500']">{{ s.active ? '启用' : '禁用' }}</span></td>
               <td class="p-3 space-x-2 whitespace-nowrap"><button @click="editServer(s)" class="text-blue-400 hover:text-blue-300 text-xs">编辑</button><button @click="deleteServer(s)" class="text-red-400 hover:text-red-300 text-xs">删除</button></td>
@@ -112,7 +112,7 @@ import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
 
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
-const servers = ref([]); const clients = ref([]);
+const servers = ref([]); const clients = ref([]); const usageMap = ref({});
 const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
 const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false);
@@ -155,7 +155,18 @@ const fetchData = async () => {
   try {
     const r = await fetch('/api/vpn/admin/clients', { headers: getHeaders() });
     const d = await r.json();
-    if (d.status === 'success') clients.value = d.data;
+    if (d.status === 'success') {
+      clients.value = d.data;
+      // Compute per-node usage: sum of traffic_gb for active (non-expired) clients
+      const now = Date.now();
+      const map = {};
+      d.data.forEach(c => {
+        if (c.expiry_time && c.expiry_time > now) {
+          map[c.product_id] = (map[c.product_id] || 0) + (c.traffic_gb || 0);
+        }
+      });
+      usageMap.value = map;
+    }
   } catch (e) {}
 };
 
@@ -190,5 +201,5 @@ const deleteServer = async (s) => {
   } catch (e) { uiStore.showToast(appStore.lang === 'zh' ? '删除失败' : 'Delete failed', 'error'); }
 };
 
-const formatDate = (ts) => ts ? new Date(ts * 1000).toLocaleDateString('zh-CN') : '--';
+const formatDate = (ts) => ts ? new Date(ts).toLocaleDateString('zh-CN') : '--';
 </script>
