@@ -118,9 +118,20 @@ router.post('/buy', authenticate, async (req, res) => {
       return res.json({ status: 'error', message: '节点未完成配置，请联系管理员' });
     }
 
-    // Generate subId for XX-UI subscription URL
-    const subId = crypto.randomBytes(8).toString('hex');
-    await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
+    // Generate subId (retry on collision)
+    let subId, clientCreated = false;
+    for (let retry = 0; retry < 3; retry++) {
+      subId = crypto.randomBytes(8).toString('hex');
+      try {
+        await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, Number(traffic_gb), expiryTime);
+        clientCreated = true;
+        break;
+      } catch (e) {
+        if (e.message?.includes('Duplicate') || e.message?.includes('duplicate')) continue;
+        throw e;
+      }
+    }
+    if (!clientCreated) throw new Error('Failed to create client after retries');
 
     // Build subscription URL
     const panelHost = new URL((product.xxui_url || '').replace(/\/+$/, '')).hostname;
@@ -135,7 +146,7 @@ router.post('/buy', authenticate, async (req, res) => {
         headers: { 'X-API-Key': apiKey }, timeout: 10000
       });
       if (cr.data?.success && cr.data.obj?.url) nodeUrl = cr.data.obj.url;
-    } catch (e) { /* use empty if fails */ }
+    } catch (e) { console.error('VPN connect URL fetch failed:', e.message); }
 
     await VpnClient.create({
       user_id: user.id, product_id: product.id,
@@ -344,7 +355,15 @@ router.delete('/admin/client/:id', authenticate, requireAdmin, async (req, res) 
         const url = `${(product.xxui_url || '').replace(/\/+$/, '')}/panel/remote/client/${encodeURIComponent(client.email)}/delete`;
         await axios.post(url, {}, { headers: { 'X-API-Key': apiKey }, timeout: 10000 });
       }
-    } catch (e) { /* XX-UI delete might fail, continue */ }
+    } catch (e) { console.error('XX-UI delete failed:', e.message); }
+
+    // Mark related transactions as refunded
+    try {
+      await Transaction.update(
+        { description: sequelize.literal("CONCAT(description, ' [已删除退款]')") },
+        { where: { user_id: client.user_id, description: { [sequelize.Sequelize.Op.like]: '%' + client.email + '%' } } }
+      );
+    } catch (e) {}
 
     await client.destroy();
     res.json({ status: 'success' });
