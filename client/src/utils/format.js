@@ -2,11 +2,14 @@
 
 export function formatTrafficUsed(c) {
   const bytes = (parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0));
-  if (!bytes || bytes === 0) return '0 MB';
-  if (bytes >= 1073741824) {
-    return (bytes / 1073741824).toFixed(2) + ' GB';
-  }
-  return (bytes / 1048576).toFixed(2) + ' MB';
+  if (!bytes || bytes === 0) return '0';
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2);
+  return (bytes / 1048576).toFixed(2);
+}
+export function formatTrafficUnit(c) {
+  const bytes = (parseInt(c.traffic_used_up || 0) + parseInt(c.traffic_used_down || 0));
+  if (!bytes || bytes === 0) return 'MB';
+  return bytes >= 1073741824 ? 'GB' : 'MB';
 }
 
 export function formatBytes(bytes) {

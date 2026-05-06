@@ -27,7 +27,7 @@
         </div>
 
         <div class="mb-3">
-          <div class="flex justify-between text-xs mb-1"><span style="color:var(--xui-text-dim)">流量</span><span class="font-mono text-xs">{{ formatTrafficUsed(c) }} / {{ c.traffic_gb }}GB</span></div>
+          <div class="flex justify-between text-xs mb-1"><span style="color:var(--xui-text-dim)">流量</span><span class="font-mono text-xs">{{ formatTrafficUsed(c) }} {{ formatTrafficUnit(c) }} / {{ c.traffic_gb }} GB</span></div>
           <div class="xui-bar"><div class="xui-bar-fill" :class="trafficPercent(c)>90?'crit':trafficPercent(c)>70?'warn':'ok'" :style="{width:trafficPercent(c)+'%'}"></div></div>
         </div>
 
@@ -37,7 +37,7 @@
 
         <div class="flex items-center gap-2">
           <button @click="refreshOne(c)" class="xui-btn xui-btn-ghost text-xs" style="padding:0.4rem 0.75rem">🔄</button>
-          <button @click="renewClient(c)" class="xui-btn xui-btn-ghost text-xs" style="padding:0.4rem 0.75rem">续费</button>
+          <button @click="openRenew(c)" class="xui-btn xui-btn-ghost text-xs" style="padding:0.4rem 0.75rem">续费</button>
           <button @click="showDetail(c)" class="xui-btn text-xs flex-1" style="padding:0.4rem 0.75rem">连接信息</button>
         </div>
       </div>
@@ -66,6 +66,27 @@
       </div>
     </div>
 
+    <!-- Renew Modal -->
+    <div v-if="renewModal" class="xui-overlay" @click.self="renewModal=null">
+      <div class="xui-modal space-y-4">
+        <h3 style="font-size:1.1rem;font-weight:900">续费 {{ renewModal.email }}</h3>
+        <div>
+          <div style="font-size:0.75rem;color:var(--xui-text-dim);margin-bottom:0.5rem">追加流量 (GB)</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem">
+            <button v-for="g in [0,100,200,500]" :key="g" @click="renewForm.traffic=g" class="xui-card" :class="{selected:renewForm.traffic===g}" style="padding:0.5rem;text-align:center;cursor:pointer;font-size:0.8rem;font-weight:700;border:none">{{ g===0?"不追加":g+"GB" }}</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.75rem;color:var(--xui-text-dim);margin-bottom:0.5rem">续费时长</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem">
+            <button v-for="d in [{d:30,l:"1月"},{d:90,l:"3月·9折"},{d:180,l:"6月·85折"},{d:360,l:"12月·75折"}]" :key="d.d" @click="renewForm.days=d.d" class="xui-card" :class="{selected:renewForm.days===d.d}" style="padding:0.5rem;text-align:center;cursor:pointer;font-size:0.8rem;font-weight:700;border:none">{{ d.l }}</button>
+          </div>
+        </div>
+        <button @click="doRenew" class="xui-btn w-full">确认续费</button>
+        <button @click="renewModal=null" class="xui-btn xui-btn-ghost w-full">取消</button>
+      </div>
+    </div>
+
     <div v-if="toast" class="fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold z-[10001] shadow-lg" style="background:var(--xui-primary);color:#fff">{{ toast }}</div>
   </div>
 </template>
@@ -74,7 +95,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../stores/app'; import { useUserStore } from '../stores/user'; import { useUiStore } from '../stores/ui';
 import QRCode from 'qrcode';
-import { formatTrafficUsed, formatExpiry, isExpired, trafficPercent } from '../utils/format.js';
+import { formatTrafficUsed, formatTrafficUnit, formatExpiry, isExpired, trafficPercent } from '../utils/format.js';
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 const clients = ref([]); const loading = ref(true); const detail = ref(null); const copied = ref(''); const toast = ref(''); const demoMode = ref(false);
 const qrSubDataUri = ref(''); const qrNodeDataUri = ref('');
@@ -82,13 +103,14 @@ const qrSubDataUri = ref(''); const qrNodeDataUri = ref('');
 const FC2 = { hk:'hk',jp:'jp',kr:'kr',tw:'tw',sg:'sg',th:'th',vn:'vn',my:'my',ph:'ph',id:'id',in:'in',ae:'ae',us:'us',ca:'ca',uk:'gb',gb:'gb',de:'de',nl:'nl',fr:'fr',ru:'ru',au:'au',br:'br',ar:'ar',za:'za',mx:'mx' };
 const getClientFlagUrl = (c) => { const f=(c.flag_emoji||'').toLowerCase().trim(); const code=FC2[f]||FC2[(c.vps_location||'').toLowerCase()]||FC2[(c.vps_location||'').toLowerCase().split(' ')[0]]; return code?`https://flagcdn.com/w80/${code}.png`:''; };
 
-const renewClient = async (c) => {
-  const addDays = prompt('续费天数 (30/90/180/360):', '30'); if (!addDays) return;
-  const addTraffic = prompt('追加流量 GB (0=不追加):', '0'); if (addTraffic === null) return;
+const renewModal = ref(null); const renewForm = ref({ traffic: 0, days: 30 });
+const openRenew = (c) => { renewModal.value = c; renewForm.value = { traffic: 0, days: 30 }; };
+const doRenew = async () => {
+  const c = renewModal.value; if (!c) return;
   try {
-    const r = await fetch(`/api/vpn/client/${c.id}/renew`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`}, body:JSON.stringify({traffic_gb:parseInt(addTraffic)||0,duration_days:parseInt(addDays)||30}) });
+    const r = await fetch(`/api/vpn/client/${c.id}/renew`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`}, body:JSON.stringify({traffic_gb:renewForm.value.traffic,duration_days:renewForm.value.days}) });
     const d = await r.json();
-    if (d.status==='success') { c.traffic_gb=d.data.traffic_gb; c.expiry_time=d.data.expiry_time; if(d.data.balance)userStore.updateUserInfo({balance:d.data.balance}); uiStore.showToast('续费成功','success'); }
+    if (d.status==='success') { c.traffic_gb=d.data.traffic_gb; c.expiry_time=d.data.expiry_time; if(d.data.balance)userStore.updateUserInfo({balance:d.data.balance}); uiStore.showToast('续费成功','success'); renewModal.value=null; }
     else uiStore.showToast(d.message||'Failed','error');
   } catch(e) { uiStore.showToast('Network error','error'); }
 };
