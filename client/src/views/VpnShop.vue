@@ -42,9 +42,12 @@
             <div>
               <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--xui-text-dim);margin-bottom:0.75rem">② {{ appStore.lang === 'zh' ? '流量配额' : 'Traffic' }}</div>
               <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem">
-                <button v-for="g in trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000))" :key="g" @click="selectedTraffic=g" class="xui-card" :class="{ selected: selectedTraffic===g }" style="padding:0.75rem;text-align:center;cursor:pointer;font-weight:700;font-size:0.875rem;border:none">
-                  {{ g>=1000?(g/1000).toFixed(1)+'TB':g+'GB' }}
-                </button>
+                <template v-if="trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000)).length>0">
+                  <button v-for="g in trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000))" :key="g" @click="selectedTraffic=g" class="xui-card" :class="{ selected: selectedTraffic===g }" style="padding:0.75rem;text-align:center;cursor:pointer;font-weight:700;font-size:0.875rem;border:none">
+                    {{ g>=1000?(g/1000).toFixed(1)+'TB':g+'GB' }}
+                  </button>
+                </template>
+                <div v-else style="grid-column:1/-1;font-size:0.75rem;color:var(--xui-warning);text-align:center;padding:0.75rem">此节点已达容量上限</div>
               </div>
             </div>
             <div>
@@ -121,11 +124,19 @@ onMounted(async () => {
   loading.value=false;
 });
 
-const selectNode = (n) => { selectedNode.value = n; };
+const selectNode = (n) => {
+  selectedNode.value = n;
+  // Reset traffic to first valid option within node's limit
+  const valid = trafficOptions.value.filter(t => t <= (n.max_traffic_gb || 2000));
+  if (valid.length > 0 && !valid.includes(selectedTraffic.value)) {
+    selectedTraffic.value = valid[0];
+  }
+};
 const buy = async () => {
   if(!selectedNode.value)return; const nd=selectedNode.value;
   if(nd._demo)return uiStore.showToast('演示模式','error');
   if(!userStore.token)return uiStore.showToast('请先登录','error');
+  if(parseFloat(userStore.userInfo?.balance||0) < finalPrice.value) return uiStore.showToast('余额不足，请先充值','error');
   if(!await uiStore.showConfirm(`确认购买 ${nd.name} · ${selectedTraffic.value}GB · ${selectedDuration.value.label}？¥${finalPrice.value.toFixed(2)}`,'确认订单'))return;
   buying.value=true;
   try{const r=await fetch('/api/vpn/buy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`},body:JSON.stringify({product_id:nd.id,traffic_gb:selectedTraffic.value,duration_days:selectedDuration.value.days})});const d=await r.json();if(d.status==='success'){if(d.data?.balance)userStore.updateUserInfo({balance:d.data.balance});purchaseResult.value=d.data;showSuccess.value=true}else uiStore.showToast(d.message||'Failed','error')}catch(e){uiStore.showToast('Network error','error')}

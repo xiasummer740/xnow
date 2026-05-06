@@ -50,11 +50,11 @@
         </div>
       </header>
       <main class="flex-grow p-4 pt-20 md:pt-6 md:p-6 overflow-y-auto relative z-[50] custom-scrollbar scroll-smooth">
-        <div v-if="!shopEnabled" class="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <div class="text-6xl">🔧</div>
-          <h2 class="text-2xl font-black text-white">{{ appStore.lang === 'zh' ? '商城维护中' : 'Under Maintenance' }}</h2>
-          <p class="text-slate-500 max-w-md">{{ appStore.lang === 'zh' ? '节点商城暂时关闭，请稍后再来。如有疑问请联系管理员。' : 'The VPN shop is temporarily closed. Please check back later.' }}</p>
-          <router-link to="/order" class="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition">{{ appStore.lang === 'zh' ? '返回涨粉服务' : 'Back to SMM' }}</router-link>
+        <div v-if="!shopEnabled" class="xui-empty" style="min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div class="xui-empty-icon">🔧</div>
+          <h2 style="font-size:1.5rem;font-weight:900;color:var(--xui-text);margin-bottom:0.5rem">{{ appStore.lang === 'zh' ? '商城维护中' : 'Under Maintenance' }}</h2>
+          <p style="color:var(--xui-text-dim);max-width:400px;margin-bottom:1rem">{{ appStore.lang === 'zh' ? '节点商城暂时关闭，请稍后再来。' : 'VPN shop temporarily closed.' }}</p>
+          <router-link to="/order" class="xui-btn">{{ appStore.lang === 'zh' ? '返回涨粉服务' : 'Back to SMM' }}</router-link>
         </div>
         <router-view v-else :key="$route.fullPath" />
       </main>
