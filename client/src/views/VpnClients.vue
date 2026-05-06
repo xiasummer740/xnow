@@ -79,7 +79,7 @@
         <div>
           <div style="font-size:0.75rem;color:var(--xui-text-dim);margin-bottom:0.5rem">续费时长</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem">
-            <button v-for="d in [{d:30,l:"1月"},{d:90,l:"3月·9折"},{d:180,l:"6月·85折"},{d:360,l:"12月·75折"}]" :key="d.d" @click="renewForm.days=d.d" class="xui-card" :class="{selected:renewForm.days===d.d}" style="padding:0.5rem;text-align:center;cursor:pointer;font-size:0.8rem;font-weight:700;border:none">{{ d.l }}</button>
+            <button v-for="d in renewOptions" :key="d.d" @click="renewForm.days=d.d" class="xui-card" :class="{selected:renewForm.days===d.d}" style="padding:0.5rem;text-align:center;cursor:pointer;font-size:0.8rem;font-weight:700;border:none">{{ d.l }}</button>
           </div>
         </div>
         <button @click="doRenew" class="xui-btn w-full">确认续费</button>
@@ -103,6 +103,7 @@ const qrSubDataUri = ref(''); const qrNodeDataUri = ref('');
 const FC2 = { hk:'hk',jp:'jp',kr:'kr',tw:'tw',sg:'sg',th:'th',vn:'vn',my:'my',ph:'ph',id:'id',in:'in',ae:'ae',us:'us',ca:'ca',uk:'gb',gb:'gb',de:'de',nl:'nl',fr:'fr',ru:'ru',au:'au',br:'br',ar:'ar',za:'za',mx:'mx' };
 const getClientFlagUrl = (c) => { const f=(c.flag_emoji||'').toLowerCase().trim(); const code=FC2[f]||FC2[(c.vps_location||'').toLowerCase()]||FC2[(c.vps_location||'').toLowerCase().split(' ')[0]]; return code?`https://flagcdn.com/w80/${code}.png`:''; };
 
+const renewOptions = [{d:30,l:"1月"},{d:90,l:"3月·9折"},{d:180,l:"6月·85折"},{d:360,l:"12月·75折"}];
 const renewModal = ref(null); const renewForm = ref({ traffic: 0, days: 30 });
 const openRenew = (c) => { renewModal.value = c; renewForm.value = { traffic: 0, days: 30 }; };
 const doRenew = async () => {
