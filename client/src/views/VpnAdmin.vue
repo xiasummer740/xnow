@@ -112,27 +112,35 @@
           <div class="grid grid-cols-2 gap-3">
             <div><label class="text-slate-400 text-xs">名称 *</label><input v-model="editing.name" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400" placeholder="例如: 日本东京"></div>
             <div>
-              <label class="text-slate-400 text-xs">旗帜 Emoji</label>
-              <div class="flex flex-wrap gap-1 mb-1">
-                <button v-for="f in ['🇭🇰','🇯🇵','🇰🇷','🇸🇬','🇺🇸','🇬🇧','🇩🇪','🇳🇱','🇫🇷','🇨🇦','🇦🇺','🇹🇼','🇹🇭','🇻🇳','🇦🇪','🇧🇷','🇮🇳','🇷🇺']" :key="f" @click="editing.flag_emoji = f" class="px-1.5 py-0.5 rounded text-sm hover:bg-slate-700 transition" :class="editing.flag_emoji === f ? 'bg-slate-600' : 'bg-slate-800'">{{ f }}</button>
-              </div>
-              <input v-model="editing.flag_emoji" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs" placeholder="或手动输入 emoji">
+              <label class="text-slate-400 text-xs">旗帜 + 地区</label>
+              <select v-model="editing.flag_emoji" @change="onFlagChange" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400 text-sm">
+                <option value="">-- 选择地区 --</option>
+                <optgroup v-for="g in flagGroups" :key="g.label" :label="g.label">
+                  <option v-for="f in g.items" :key="f.emoji" :value="f.emoji">{{ f.emoji }} {{ f.name }}</option>
+                </optgroup>
+              </select>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-slate-400 text-xs">位置描述</label>
-              <div class="flex flex-wrap gap-1 mb-1">
-                <button v-for="l in locationPresets" :key="l" @click="editing.vps_location = l" class="px-1.5 py-0.5 rounded text-[10px] hover:bg-slate-700 transition bg-slate-800 text-slate-400">{{ l.split('·')[0] }}</button>
-              </div>
-              <input v-model="editing.vps_location" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs" placeholder="日本东京 · BGP">
+              <select v-model="editing.vps_location" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400 text-sm">
+                <option value="">-- 选择位置 --</option>
+                <optgroup v-for="g in flagGroups" :key="'loc_'+g.label" :label="g.label">
+                  <option v-for="f in g.items" :key="'loc_'+f.emoji" :value="f.location">{{ f.location }}</option>
+                </optgroup>
+                <option value="">--- 自定义 ---</option>
+              </select>
+              <input v-model="editing.vps_location" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs mt-1" placeholder="或手动输入...">
             </div>
             <div>
-              <label class="text-slate-400 text-xs">节点描述</label>
-              <div class="flex flex-wrap gap-1 mb-1">
-                <button v-for="d in descPresets" :key="d" @click="editing.description = d" class="px-1.5 py-0.5 rounded text-[10px] hover:bg-slate-700 transition bg-slate-800 text-slate-400">{{ d }}</button>
-              </div>
-              <input v-model="editing.description" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs" placeholder="BGP 高速线路...">
+              <label class="text-slate-400 text-xs">线路类型</label>
+              <select v-model="editing.description" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-400 text-sm">
+                <option value="">-- 选择线路 --</option>
+                <option v-for="d in descPresets" :key="d" :value="d">{{ d }}</option>
+                <option value="">--- 自定义 ---</option>
+              </select>
+              <input v-model="editing.description" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs mt-1" placeholder="或手动输入...">
             </div>
           </div>
           <div><label class="text-slate-400 text-xs">XX-UI 面板地址 *</label><input v-model="editing.xxui_url" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-emerald-400" placeholder="https://panel.yourdomain.com"></div>
@@ -239,14 +247,70 @@ const fetchData = async () => {
   } catch (e) {}
 };
 
+const onFlagChange = () => {
+  const sel = editing.value.flag_emoji;
+  for (const g of flagGroups) {
+    const found = g.items.find(i => i.emoji === sel);
+    if (found) { editing.value.vps_location = found.location; break; }
+  }
+};
 const editServer = (s) => {
   editErr.value = ''; connResult.value = null;
   editMode.value = true;
   editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '' };
 };
 
-const locationPresets = ['香港 · BGP', '香港 · CN2 GIA', '日本东京 · BGP', '日本东京 · IIJ', '韩国首尔 · BGP', '新加坡 · BGP', '新加坡 · CN2 GIA', '美国洛杉矶 · CN2 GIA', '美国洛杉矶 · 9929', '美国圣何塞 · BGP', '英国伦敦 · 9929', '德国法兰克福 · 9929', '荷兰阿姆斯特丹 · BGP', '法国巴黎 · BGP', '加拿大多伦多 · BGP', '澳大利亚悉尼 · BGP', '台湾台北 · BGP', '泰国曼谷 · BGP', '越南胡志明 · BGP', '阿联酋迪拜 · BGP', '巴西圣保罗 · BGP', '印度孟买 · BGP', '俄罗斯莫斯科 · BGP'];
-const descPresets = ['BGP 高速线路', 'CN2 GIA 优质线路', '9929 精品线路', 'IIJ 日本直连', 'CMIN2 移动优化', '软银 日本专线', 'HKT 家宽', 'HGC 商宽', 'NTT 国际线路', 'HE 国际线路', 'Cogent 国际线路'];
+const flagGroups = [
+  { label: '东亚', items: [
+    { emoji: '🇭🇰', name: '香港', location: '香港 · BGP' },
+    { emoji: '🇯🇵', name: '日本', location: '日本东京 · BGP' },
+    { emoji: '🇰🇷', name: '韩国', location: '韩国首尔 · BGP' },
+    { emoji: '🇹🇼', name: '台湾', location: '台湾台北 · BGP' },
+  ]},
+  { label: '东南亚', items: [
+    { emoji: '🇸🇬', name: '新加坡', location: '新加坡 · BGP' },
+    { emoji: '🇹🇭', name: '泰国', location: '泰国曼谷 · BGP' },
+    { emoji: '🇻🇳', name: '越南', location: '越南胡志明 · BGP' },
+    { emoji: '🇲🇾', name: '马来西亚', location: '马来西亚吉隆坡 · BGP' },
+    { emoji: '🇵🇭', name: '菲律宾', location: '菲律宾马尼拉 · BGP' },
+    { emoji: '🇮🇩', name: '印度尼西亚', location: '印尼雅加达 · BGP' },
+  ]},
+  { label: '南亚', items: [
+    { emoji: '🇮🇳', name: '印度', location: '印度孟买 · BGP' },
+  ]},
+  { label: '中东', items: [
+    { emoji: '🇦🇪', name: '阿联酋', location: '阿联酋迪拜 · BGP' },
+    { emoji: '🇸🇦', name: '沙特阿拉伯', location: '沙特利雅得 · BGP' },
+    { emoji: '🇹🇷', name: '土耳其', location: '土耳其伊斯坦布尔 · BGP' },
+  ]},
+  { label: '北美', items: [
+    { emoji: '🇺🇸', name: '美国', location: '美国洛杉矶 · CN2 GIA' },
+    { emoji: '🇨🇦', name: '加拿大', location: '加拿大多伦多 · BGP' },
+  ]},
+  { label: '欧洲', items: [
+    { emoji: '🇬🇧', name: '英国', location: '英国伦敦 · 9929' },
+    { emoji: '🇩🇪', name: '德国', location: '德国法兰克福 · 9929' },
+    { emoji: '🇳🇱', name: '荷兰', location: '荷兰阿姆斯特丹 · BGP' },
+    { emoji: '🇫🇷', name: '法国', location: '法国巴黎 · BGP' },
+    { emoji: '🇷🇺', name: '俄罗斯', location: '俄罗斯莫斯科 · BGP' },
+    { emoji: '🇸🇪', name: '瑞典', location: '瑞典斯德哥尔摩 · BGP' },
+    { emoji: '🇨🇭', name: '瑞士', location: '瑞士苏黎世 · BGP' },
+    { emoji: '🇮🇹', name: '意大利', location: '意大利米兰 · BGP' },
+    { emoji: '🇪🇸', name: '西班牙', location: '西班牙马德里 · BGP' },
+    { emoji: '🇵🇱', name: '波兰', location: '波兰华沙 · BGP' },
+  ]},
+  { label: '大洋洲', items: [
+    { emoji: '🇦🇺', name: '澳大利亚', location: '澳大利亚悉尼 · BGP' },
+  ]},
+  { label: '南美', items: [
+    { emoji: '🇧🇷', name: '巴西', location: '巴西圣保罗 · BGP' },
+    { emoji: '🇦🇷', name: '阿根廷', location: '阿根廷布宜诺斯艾利斯 · BGP' },
+  ]},
+  { label: '非洲', items: [
+    { emoji: '🇿🇦', name: '南非', location: '南非约翰内斯堡 · BGP' },
+  ]},
+];
+const descPresets = ['BGP 高速线路', 'CN2 GIA 优质线路', '9929 精品线路', 'CMIN2 移动优化', 'IIJ 日本直连', '软银 日本专线', 'HKT 家宽', 'HGC 商宽', 'NTT 国际线路', 'HE 国际线路', 'Cogent 国际线路', 'GTT 国际线路', 'Lumen 国际线路', 'Telstra 澳洲线路'];
 const testingConn = ref(false); const connResult = ref(null);
 const testConnection = async () => {
   testingConn.value = true; connResult.value = null;
