@@ -287,20 +287,22 @@ const FLAG_MAP = {
   cd: '🇨🇩', congo: '🇨🇩', drc: '🇨🇩', 刚果: '🇨🇩',
 };
 const getFlag = (node) => {
-  // Map short codes to emoji
+  // 1. Short code → emoji
   const raw = (node.flag_emoji || '').toLowerCase().trim();
   if (raw && FLAG_MAP[raw]) return FLAG_MAP[raw];
-  // If already an emoji, return as-is
-  if (raw && /^\p{Emoji}/u.test(raw)) return node.flag_emoji;
-  // Try location/name match
+  if (raw && raw.length <= 4 && FLAG_MAP[raw]) return FLAG_MAP[raw];
+  // 2. Already a valid emoji
+  if (raw && /^\p{Emoji}/u.test(raw) && raw.length <= 8) return node.flag_emoji;
+  // 3. Location/name exact match
   const loc = (node.vps_location || '').toLowerCase();
   const name = (node.name || '').toLowerCase();
   if (FLAG_MAP[loc]) return FLAG_MAP[loc];
   if (FLAG_MAP[name]) return FLAG_MAP[name];
+  // 4. Partial match
   for (const [k, v] of Object.entries(FLAG_MAP)) {
-    if (loc.includes(k) || name.includes(k)) return v;
+    if (k.length > 2 && (loc.includes(k) || name.includes(k))) return v;
   }
-  return raw || '🖥️';
+  return '🖥️';
 };
 
 const nodes = ref([]);

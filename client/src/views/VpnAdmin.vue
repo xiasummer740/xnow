@@ -56,7 +56,7 @@
           <thead><tr class="text-left text-slate-500 text-xs uppercase tracking-wider"><th class="p-3">名称</th><th class="p-3">地址</th><th class="p-3">入站</th><th class="p-3">订阅端口</th><th class="p-3">已售/上限</th><th class="p-3">单价</th><th class="p-3">状态</th><th class="p-3"></th></tr></thead>
           <tbody>
             <tr v-for="s in servers" :key="s.id" class="border-t border-slate-800 hover:bg-slate-800/50 transition">
-              <td class="p-3 font-bold text-white whitespace-nowrap">{{ s.flag_emoji }} {{ s.name }}</td>
+              <td class="p-3 font-bold text-white whitespace-nowrap">{{ getNodeFlag(s) }} {{ s.name }}</td>
               <td class="p-3 text-slate-400 font-mono text-xs max-w-[120px] truncate" :title="s.xxui_url">{{ s.xxui_url || '—' }}</td>
               <td class="p-3 text-white">{{ s.xxui_inbound_id || '—' }}</td>
               <td class="p-3 text-white">{{ s.sub_port || 2096 }}</td>
@@ -364,6 +364,13 @@ const startAutoSync = () => {
   if (syncInterval.value > 0) {
     syncTimer = setInterval(doSync, syncInterval.value * 1000);
   }
+};
+const F2 = { hk:'🇭🇰',hongkong:'🇭🇰',jp:'🇯🇵',japan:'🇯🇵',kr:'🇰🇷',korea:'🇰🇷',tw:'🇹🇼',taiwan:'🇹🇼',cn:'🇨🇳',china:'🇨🇳',sg:'🇸🇬',singapore:'🇸🇬',th:'🇹🇭',thailand:'🇹🇭',vn:'🇻🇳',vietnam:'🇻🇳',my:'🇲🇾',malaysia:'🇲🇾',ph:'🇵🇭',philippines:'🇵🇭',id:'🇮🇩',indonesia:'🇮🇩',in:'🇮🇳',india:'🇮🇳',ae:'🇦🇪',uae:'🇦🇪',sa:'🇸🇦',tr:'🇹🇷',us:'🇺🇸',usa:'🇺🇸',ca:'🇨🇦',canada:'🇨🇦',uk:'🇬🇧',gb:'🇬🇧',de:'🇩🇪',germany:'🇩🇪',nl:'🇳🇱',netherlands:'🇳🇱',fr:'🇫🇷',france:'🇫🇷',ru:'🇷🇺',russia:'🇷🇺',se:'🇸🇪',sweden:'🇸🇪',ch:'🇨🇭',switzerland:'🇨🇭',it:'🇮🇹',italy:'🇮🇹',es:'🇪🇸',spain:'🇪🇸',pl:'🇵🇱',poland:'🇵🇱',au:'🇦🇺',australia:'🇦🇺',br:'🇧🇷',brazil:'🇧🇷',ar:'🇦🇷',argentina:'🇦🇷',za:'🇿🇦',southafrica:'🇿🇦',mx:'🇲🇽',mexico:'🇲🇽'};
+const getNodeFlag = (s) => {
+  const f = (s.flag_emoji || '').toLowerCase().trim();
+  if (F2[f]) return F2[f];
+  if (f && /^\p{Emoji}/u.test(s.flag_emoji)) return s.flag_emoji;
+  return '🖥️';
 };
 const deleteClient = async (c) => {
   if (!await uiStore.showConfirm(`确认删除订单「${c.email}」？也会尝试从 XX-UI 删除该客户端。`)) return;
