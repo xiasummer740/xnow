@@ -287,13 +287,19 @@ const FLAG_MAP = {
   cd: '🇨🇩', congo: '🇨🇩', drc: '🇨🇩', 刚果: '🇨🇩',
 };
 const FLAG_CODE = { hk:'hk',hongkong:'hk',jp:'jp',japan:'jp',kr:'kr',korea:'kr',tw:'tw',taiwan:'tw',cn:'cn',china:'cn',sg:'sg',singapore:'sg',th:'th',thailand:'th',vn:'vn',vietnam:'vn',my:'my',malaysia:'my',ph:'ph',philippines:'ph',id:'id',indonesia:'id',in:'in',india:'in',ae:'ae',uae:'ae',sa:'sa',tr:'tr',us:'us',usa:'us',ca:'ca',canada:'ca',uk:'gb',gb:'gb',de:'de',germany:'de',nl:'nl',netherlands:'nl',fr:'fr',france:'fr',ru:'ru',russia:'ru',se:'se',sweden:'se',ch:'ch',switzerland:'ch',it:'it',italy:'it',es:'es',spain:'es',pl:'pl',poland:'pl',au:'au',australia:'au',br:'br',brazil:'br',ar:'ar',argentina:'ar',za:'za',southafrica:'za',mx:'mx',mexico:'mx',pt:'pt',portugal:'pt',dk:'dk',denmark:'dk',fi:'fi',finland:'fi',no:'no',norway:'no',ie:'ie',ireland:'ie',at:'at',austria:'at',be:'be',belgium:'be',cz:'cz',czech:'cz',hu:'hu',hungary:'hu',ro:'ro',romania:'ro',gr:'gr',greece:'gr',eg:'eg',egypt:'eg',cl:'cl',chile:'cl',co:'co',colombia:'co',pe:'pe',peru:'pe',nz:'nz',newzealand:'nz',pk:'pk',pakistan:'pk',bd:'bd',bangladesh:'bd',lk:'lk',srilanka:'lk',ke:'ke',kenya:'ke',ng:'ng',nigeria:'ng',il:'il',israel:'il',ir:'ir',iran:'ir',ua:'ua',ukraine:'ua'};
+const EMOJI_TO_CODE = { '🇭🇰':'hk','🇯🇵':'jp','🇰🇷':'kr','🇹🇼':'tw','🇨🇳':'cn','🇲🇴':'mo','🇸🇬':'sg','🇹🇭':'th','🇻🇳':'vn','🇲🇾':'my','🇵🇭':'ph','🇮🇩':'id','🇮🇳':'in','🇦🇪':'ae','🇸🇦':'sa','🇹🇷':'tr','🇺🇸':'us','🇨🇦':'ca','🇬🇧':'gb','🇩🇪':'de','🇳🇱':'nl','🇫🇷':'fr','🇷🇺':'ru','🇸🇪':'se','🇨🇭':'ch','🇮🇹':'it','🇪🇸':'es','🇵🇱':'pl','🇦🇺':'au','🇧🇷':'br','🇦🇷':'ar','🇿🇦':'za','🇲🇽':'mx','🇵🇹':'pt','🇳🇴':'no','🇩🇰':'dk','🇫🇮':'fi','🇮🇪':'ie','🇦🇹':'at','🇧🇪':'be','🇨🇿':'cz','🇭🇺':'hu','🇷🇴':'ro','🇬🇷':'gr','🇪🇬':'eg','🇨🇱':'cl','🇨🇴':'co','🇵🇪':'pe','🇳🇿':'nz','🇵🇰':'pk','🇰🇪':'ke','🇳🇬':'ng','🇮🇱':'il','🇮🇷':'ir','🇺🇦':'ua' };
 const getFlagCode = (node) => {
-  const raw = (node.flag_emoji || '').toLowerCase().trim();
-  if (FLAG_CODE[raw] && raw.length <= 4) return FLAG_CODE[raw];
+  const raw = node.flag_emoji || '';
+  // Direct country code match
+  const lower = raw.toLowerCase().trim();
+  if (FLAG_CODE[lower] && lower.length <= 4) return FLAG_CODE[lower];
+  // Emoji to code reverse lookup
+  if (EMOJI_TO_CODE[raw]) return EMOJI_TO_CODE[raw];
+  // Location/name fallback
   const loc = (node.vps_location || '').toLowerCase();
   const name = (node.name || '').toLowerCase();
   for (const [k, v] of Object.entries(FLAG_CODE)) {
-    if (loc.includes(k) || name.includes(k)) return v;
+    if (k.length > 2 && (loc.startsWith(k) || name.startsWith(k))) return v;
   }
   return null;
 };
