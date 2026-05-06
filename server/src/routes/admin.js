@@ -19,8 +19,14 @@ const upload = multer({ storage });
 
 router.post('/config/update', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
+  // Whitelist: only SMM config keys allowed here. VPN keys managed via /vpn/admin.
+  const ALLOWED_KEYS = ['global_multiplier', 'agent_discount', 'announcement', 'site_name', 'site_logo',
+    'upstream_url', 'upstream_key', 'tg_bot_token', 'tg_chat_id', 'tg_bot_link',
+    'cryptomus_id', 'cryptomus_key', 'bufpay_id', 'bufpay_key',
+    'smtp_host', 'smtp_port', 'smtp_email', 'smtp_pass', 'usdt_image_url', 'ip_blacklist'];
   try {
     for (const [key, value] of Object.entries(req.body)) {
+      if (!ALLOWED_KEYS.includes(key)) continue;
       if (value !== undefined && value !== null) await Config.upsert({ key, value: String(value) });
     }
     res.json({ status: 'success', message: '配置已保存' });
