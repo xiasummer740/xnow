@@ -1,15 +1,25 @@
 <template>
   <div class="vpn-page min-h-full">
     <section class="xui-hero">
-      <div class="xui-hero-badge">Xray Core · VLESS/Trojan/VMess · 余额支付 · 秒级开通</div>
+      <div class="xui-hero-badge">Xray Core · VLESS/VMess/Trojan/SS · 余额支付 · 秒级开通</div>
       <h1 class="xui-hero-title">{{ appStore.lang === 'zh' ? '全球高速网络，一键连接' : 'Borderless Internet' }}</h1>
       <p class="xui-hero-sub">{{ appStore.lang === 'zh' ? '选择节点位置，配置流量和时长，余额支付后即刻获取加密隧道。' : 'Pick a location, configure traffic, pay with balance, get connected.' }}</p>
+      <div style="display:flex;justify-content:center;gap:1.5rem;margin-top:1.25rem;flex-wrap:wrap">
+        <div class="xui-trust-item"><div class="xui-trust-num">{{ nodes.length||'—' }}</div><div class="xui-trust-label">{{ appStore.lang==='zh'?'全球节点':'Nodes' }}</div></div>
+        <div class="xui-trust-item"><div class="xui-trust-num">99.9%</div><div class="xui-trust-label">{{ appStore.lang==='zh'?'在线率':'Uptime' }}</div></div>
+        <div class="xui-trust-item"><div class="xui-trust-num">24/7</div><div class="xui-trust-label">{{ appStore.lang==='zh'?'技术支持':'Support' }}</div></div>
+        <div class="xui-trust-item"><div class="xui-trust-num">🔐</div><div class="xui-trust-label">TLS+Reality</div></div>
+      </div>
     </section>
 
     <div v-if="loading" class="xui-spinner"></div>
 
     <template v-else>
       <div style="max-width:880px;margin:0 auto;padding:0 1rem 3rem">
+        <!-- Protocol Bar -->
+        <div style="display:flex;justify-content:center;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
+          <span v-for="p in ['VLESS','VMess','Trojan','Shadowsocks','Hysteria']" :key="p" style="font-size:0.65rem;font-weight:700;color:var(--xui-text-dim);background:var(--xui-surface);border:1px solid var(--xui-border);border-radius:9999px;padding:0.2rem 0.7rem">{{ p }}</span>
+        </div>
         <!-- Step 1: Location -->
         <div style="margin-bottom:1.5rem">
           <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--xui-text-dim);margin-bottom:0.75rem">{{ appStore.lang === 'zh' ? '① 选择节点位置' : '① Select Location' }}</div>
@@ -40,7 +50,8 @@
             <div>
               <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--xui-text-dim);margin-bottom:0.75rem">③ {{ appStore.lang === 'zh' ? '使用时长' : 'Duration' }}</div>
               <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.5rem">
-                <button v-for="d in durationOptions" :key="d.days" @click="selectedDuration=d" class="xui-card" :class="{ selected: selectedDuration?.days===d.days }" style="padding:0.75rem;text-align:center;cursor:pointer;border:none">
+                <button v-for="d in durationOptions" :key="d.days" @click="selectedDuration=d" class="xui-card" :class="{ selected: selectedDuration?.days===d.days }" style="padding:0.75rem;text-align:center;cursor:pointer;border:none;position:relative;overflow:visible">
+                  <div v-if="d.discount<=0.75" style="position:absolute;top:-6px;right:-6px;background:#f37b24;color:#fff;font-size:0.55rem;font-weight:900;padding:0.15rem 0.4rem;border-radius:9999px;line-height:1.2">最划算</div>
                   <div style="font-weight:700;font-size:0.875rem">{{ d.label }}</div>
                   <div v-if="d.discount<1" style="font-size:0.6rem;color:var(--xui-primary);margin-top:0.15rem">{{Math.round((1-d.discount)*100)}}% OFF</div>
                 </button>
