@@ -1,105 +1,224 @@
-/* ── XX-UI VPN Shop Light Theme ── */
+/* ── XX-UI Design System for VPN Shop ── */
 :root {
-  --vpn-bg: #f5f7fa;
-  --vpn-surface: #ffffff;
-  --vpn-surface2: #eef1f5;
-  --vpn-border: #e2e6ed;
-  --vpn-accent: #008771;
-  --vpn-accent-light: #00a88c;
-  --vpn-text: #1a2233;
-  --vpn-text-dim: #7b8498;
-  --vpn-danger: #cd3838;
-  --vpn-warning: #f37b24;
-  --vpn-radius: 1.25rem;
-  --vpn-radius-sm: 0.75rem;
+  --xui-primary: #008771;
+  --xui-primary-hover: #009980;
+  --xui-primary-light: #e8f4f2;
+  --xui-bg: #f8fafb;
+  --xui-surface: #ffffff;
+  --xui-border: #e2e6ed;
+  --xui-text: #1a2233;
+  --xui-text-dim: #7b8498;
+  --xui-danger: #cd3838;
+  --xui-warning: #f37b24;
+  --xui-radius: 1.25rem;
+  --xui-radius-sm: 0.75rem;
+  --xui-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  --xui-shadow-hover: 0 4px 20px rgba(0,135,113,0.10);
+  --xui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Base */
 .vpn-page {
-  background: linear-gradient(180deg, #e8f5f0 0%, #f5f7fa 30%);
-  color: var(--vpn-text);
+  background: linear-gradient(180deg, #e8f4f2 0%, var(--xui-bg) 25%);
+  color: var(--xui-text);
   min-height: 100vh;
+  font-family: var(--xui-font);
 }
 
 /* Cards */
-.vpn-card {
-  background: var(--vpn-surface);
-  border: 1px solid var(--vpn-border);
-  border-radius: var(--vpn-radius);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  transition: border-color 0.2s, box-shadow 0.2s;
+.xui-card {
+  background: var(--xui-surface);
+  border: 1px solid var(--xui-border);
+  border-radius: var(--xui-radius);
+  box-shadow: var(--xui-shadow);
+  transition: all 0.2s;
 }
-.vpn-card:hover {
-  border-color: var(--vpn-accent);
-  box-shadow: 0 4px 20px rgba(0,135,113,0.1);
+.xui-card:hover {
+  border-color: var(--xui-primary);
+  box-shadow: var(--xui-shadow-hover);
+}
+.xui-card.selected {
+  border-color: var(--xui-primary);
+  background: var(--xui-primary-light);
+  box-shadow: 0 0 0 3px rgba(0,135,113,0.1);
 }
 
 /* Buttons */
-.vpn-btn {
-  background: var(--vpn-accent);
+.xui-btn {
+  background: var(--xui-primary);
   color: #fff;
   border: none;
-  border-radius: var(--vpn-radius-sm);
-  padding: 0.7rem 1.5rem;
+  border-radius: var(--xui-radius-sm);
+  padding: 0.625rem 1.25rem;
   font-weight: 700;
+  font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
-.vpn-btn:hover {
-  background: var(--vpn-accent-light);
+.xui-btn:hover {
+  background: var(--xui-primary-hover);
   box-shadow: 0 4px 16px rgba(0,135,113,0.25);
+  transform: translateY(-1px);
 }
-.vpn-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.vpn-btn-ghost {
-  background: var(--vpn-surface);
-  border: 1px solid var(--vpn-border);
-  color: var(--vpn-text);
+.xui-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.xui-btn-ghost {
+  background: var(--xui-surface);
+  border: 1px solid var(--xui-border);
+  color: var(--xui-text);
 }
-.vpn-btn-ghost:hover {
-  background: var(--vpn-surface2);
-  border-color: var(--vpn-accent);
+.xui-btn-ghost:hover {
+  background: var(--xui-primary-light);
+  border-color: var(--xui-primary);
+  transform: none;
   box-shadow: none;
 }
 
-/* Pricing */
-.vpn-price {
-  font-size: 1.75rem;
+/* Hero */
+.xui-hero {
+  text-align: center;
+  padding: 3rem 1rem 2rem;
+  position: relative;
+}
+.xui-hero-badge {
+  display: inline-block;
+  padding: 0.3rem 1rem;
+  border-radius: 9999px;
+  background: rgba(0,135,113,0.08);
+  border: 1px solid rgba(0,135,113,0.2);
+  color: var(--xui-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 1rem;
+}
+.xui-hero-title {
+  font-size: 2rem;
   font-weight: 900;
-  color: var(--vpn-accent);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 0.75rem;
+  color: var(--xui-text);
+}
+.xui-hero-sub {
+  color: var(--xui-text-dim);
+  font-size: 0.95rem;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+@media (min-width: 768px) { .xui-hero-title { font-size: 2.5rem; } }
+
+/* Trust Bar */
+.xui-trust {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1.25rem 1rem;
+  margin: 0 auto 1.5rem;
+  max-width: 600px;
+  flex-wrap: wrap;
+}
+.xui-trust-item {
+  text-align: center;
+}
+.xui-trust-num {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--xui-primary);
   font-variant-numeric: tabular-nums;
+}
+.xui-trust-label {
+  font-size: 0.7rem;
+  color: var(--xui-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Plan Grid */
+.xui-plan-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+@media (min-width: 640px) { .xui-plan-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .xui-plan-grid { grid-template-columns: repeat(3, 1fr); } }
+
+/* Plan Card */
+.xui-plan {
+  padding: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+.xui-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+}
+.xui-plan-flag { width: 1.75rem; height: 1.25rem; border-radius: 2px; object-fit: cover; }
+.xui-plan-name { font-weight: 700; font-size: 0.95rem; }
+.xui-plan-loc { font-size: 0.7rem; color: var(--xui-text-dim); }
+.xui-plan-specs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.xui-plan-spec {
+  background: #f5f7f9;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  flex: 1;
+}
+.xui-plan-spec-val { font-weight: 800; font-size: 0.9rem; }
+.xui-plan-spec-lbl { font-size: 0.6rem; color: var(--xui-text-dim); margin-top: 0.1rem; }
+.xui-plan-bottom {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.xui-plan-price { font-size: 1.5rem; font-weight: 900; color: var(--xui-primary); }
+.xui-plan-price-unit { font-size: 0.75rem; color: var(--xui-text-dim); }
+.xui-plan-check {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--xui-primary); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
 }
 
 /* Tags */
-.vpn-tag {
+.xui-tag {
   display: inline-flex; align-items: center;
-  padding: 0.2rem 0.6rem; border-radius: 9999px;
-  font-size: 0.7rem; font-weight: 700;
-  background: rgba(0,135,113,0.08);
-  border: 1px solid rgba(0,135,113,0.2);
-  color: var(--vpn-accent);
+  padding: 0.15rem 0.5rem; border-radius: 9999px;
+  font-size: 0.65rem; font-weight: 700;
 }
-.vpn-tag.expired {
-  background: rgba(205,56,56,0.06);
-  border-color: rgba(205,56,56,0.2);
-  color: var(--vpn-danger);
-}
-.vpn-tag.active {
-  background: rgba(0,135,113,0.08);
-  border-color: rgba(0,135,113,0.2);
-  color: var(--vpn-accent);
-}
+.xui-tag-green { background: rgba(0,135,113,0.08); color: var(--xui-primary); }
+.xui-tag-red { background: rgba(205,56,56,0.06); color: var(--xui-danger); }
 
 /* Traffic bar */
-.vpn-traffic-bar { height: 6px; border-radius: 9999px; background: var(--vpn-surface2); overflow: hidden; }
-.vpn-traffic-bar-fill { height: 100%; border-radius: 9999px; transition: width 0.5s ease; }
-.vpn-traffic-bar-fill.good { background: linear-gradient(90deg, #008771, #00a88c); }
-.vpn-traffic-bar-fill.warn { background: linear-gradient(90deg, #f37b24, #f59e4b); }
-.vpn-traffic-bar-fill.crit { background: linear-gradient(90deg, #cd3838, #e84545); }
-
-/* Flag */
-.vpn-flag { width: 1.75rem; height: 1.25rem; border-radius: 2px; object-fit: cover; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+.xui-bar { height: 5px; border-radius: 9999px; background: #eee; overflow: hidden; }
+.xui-bar-fill { height: 100%; border-radius: 9999px; transition: width 0.5s ease; }
+.xui-bar-fill.ok { background: var(--xui-primary); }
+.xui-bar-fill.warn { background: var(--xui-warning); }
+.xui-bar-fill.crit { background: var(--xui-danger); }
 
 /* Modal */
-.vpn-modal-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); padding: 1rem; }
-.vpn-modal { background: #fff; border: 1px solid var(--vpn-border); border-radius: var(--vpn-radius); padding: 2rem; max-width: 420px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+.xui-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); padding: 1rem; }
+.xui-modal { background: #fff; border-radius: var(--xui-radius); padding: 2rem; max-width: 420px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.12); }
+
+/* Spinner */
+.xui-spinner { width: 32px; height: 32px; border: 3px solid rgba(0,135,113,0.15); border-top-color: var(--xui-primary); border-radius: 50%; animation: xui-spin 0.7s linear infinite; margin: 3rem auto; }
+@keyframes xui-spin { to { transform: rotate(360deg); } }
+
+/* Empty state */
+.xui-empty { text-align: center; padding: 3rem 1rem; color: var(--xui-text-dim); }
+.xui-empty-icon { font-size: 3rem; margin-bottom: 0.75rem; }
