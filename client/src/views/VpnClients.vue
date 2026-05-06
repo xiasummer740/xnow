@@ -21,7 +21,7 @@
               <h3 class="text-white font-bold group-hover:text-emerald-300 transition text-sm font-mono truncate max-w-[180px]">{{ c.email }}</h3>
               <button @click="copy(c.email)" class="text-slate-600 hover:text-emerald-400 transition flex-shrink-0" :title="appStore.lang === 'zh' ? '复制' : 'Copy'"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></button>
             </div>
-            <span v-if="c.vps_location" class="text-xs text-slate-500">{{ c.flag_emoji }} {{ c.vps_location }}</span>
+            <span v-if="c.vps_location" class="text-xs text-slate-500 flex items-center gap-1"><img :src="getClientFlagUrl(c)" class="w-5 h-3.5 rounded-sm" @error="e=>e.target.style.display='none'" />{{ c.vps_location }}</span>
           </div>
           <span :class="['text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0', isExpired(c) ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30']">{{ isExpired(c) ? (appStore.lang === 'zh' ? '已过期' : 'Expired') : (appStore.lang === 'zh' ? '运行中' : 'Active') }}</span>
         </div>
@@ -143,6 +143,12 @@ const refreshOne = async (c) => {
       c.traffic_used_down = d.data.liveTraffic.down;
     }
   } catch (e) {}
+};
+const FC = { hk:'hk',hongkong:'hk',jp:'jp',japan:'jp',kr:'kr',korea:'kr',tw:'tw',taiwan:'tw',sg:'sg',singapore:'sg',th:'th',thailand:'th',vn:'vn',vietnam:'vn',my:'my',malaysia:'my',ph:'ph',philippines:'ph',id:'id',indonesia:'id',in:'in',india:'in',ae:'ae',uae:'ae',us:'us',usa:'us',ca:'ca',canada:'ca',uk:'gb',gb:'gb',de:'de',germany:'de',nl:'nl',netherlands:'nl',fr:'fr',france:'fr',ru:'ru',russia:'ru',au:'au',australia:'au',br:'br',brazil:'br',ar:'ar',argentina:'ar',za:'za',southafrica:'za',mx:'mx',mexico:'mx' };
+const getClientFlagUrl = (c) => {
+  const f = (c.flag_emoji || '').toLowerCase().trim();
+  const code = FC[f] || FC[(c.vps_location || '').toLowerCase()] || FC[(c.vps_location || '').toLowerCase().split(' ')[0]];
+  return code ? `https://flagcdn.com/w80/${code}.png` : '';
 };
 const showDetail = async (c) => {
   detail.value = c;

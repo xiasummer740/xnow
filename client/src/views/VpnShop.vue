@@ -48,7 +48,7 @@
         <div class="lg:col-span-1 space-y-3">
           <div v-for="n in nodes" :key="n.id" @click="selectedNode = n" :class="['rounded-2xl p-4 border cursor-pointer transition-all', selectedNode?.id === n.id ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.15)]' : 'border-slate-700/50 bg-slate-900/60 hover:border-slate-600']">
             <div class="flex items-center justify-between">
-              <span class="text-lg">{{ getFlag(n) }}</span>
+              <img :src="getFlagUrl(n)" class="w-7 h-5 rounded shadow-sm object-cover" :alt="n.vps_location" @error="e=>e.target.style.display='none'" />
               <span v-if="selectedNode?.id === n.id" class="text-emerald-400 text-xs font-bold">✓ 已选</span>
             </div>
             <h3 class="font-bold text-white mt-2">{{ n.name }}</h3>
@@ -285,6 +285,21 @@ const FLAG_MAP = {
   cm: '🇨🇲', cameroon: '🇨🇲', 喀麦隆: '🇨🇲',
   // Africa - Central
   cd: '🇨🇩', congo: '🇨🇩', drc: '🇨🇩', 刚果: '🇨🇩',
+};
+const FLAG_CODE = { hk:'hk',hongkong:'hk',jp:'jp',japan:'jp',kr:'kr',korea:'kr',tw:'tw',taiwan:'tw',cn:'cn',china:'cn',sg:'sg',singapore:'sg',th:'th',thailand:'th',vn:'vn',vietnam:'vn',my:'my',malaysia:'my',ph:'ph',philippines:'ph',id:'id',indonesia:'id',in:'in',india:'in',ae:'ae',uae:'ae',sa:'sa',tr:'tr',us:'us',usa:'us',ca:'ca',canada:'ca',uk:'gb',gb:'gb',de:'de',germany:'de',nl:'nl',netherlands:'nl',fr:'fr',france:'fr',ru:'ru',russia:'ru',se:'se',sweden:'se',ch:'ch',switzerland:'ch',it:'it',italy:'it',es:'es',spain:'es',pl:'pl',poland:'pl',au:'au',australia:'au',br:'br',brazil:'br',ar:'ar',argentina:'ar',za:'za',southafrica:'za',mx:'mx',mexico:'mx',pt:'pt',portugal:'pt',dk:'dk',denmark:'dk',fi:'fi',finland:'fi',no:'no',norway:'no',ie:'ie',ireland:'ie',at:'at',austria:'at',be:'be',belgium:'be',cz:'cz',czech:'cz',hu:'hu',hungary:'hu',ro:'ro',romania:'ro',gr:'gr',greece:'gr',eg:'eg',egypt:'eg',cl:'cl',chile:'cl',co:'co',colombia:'co',pe:'pe',peru:'pe',nz:'nz',newzealand:'nz',pk:'pk',pakistan:'pk',bd:'bd',bangladesh:'bd',lk:'lk',srilanka:'lk',ke:'ke',kenya:'ke',ng:'ng',nigeria:'ng',il:'il',israel:'il',ir:'ir',iran:'ir',ua:'ua',ukraine:'ua'};
+const getFlagCode = (node) => {
+  const raw = (node.flag_emoji || '').toLowerCase().trim();
+  if (FLAG_CODE[raw] && raw.length <= 4) return FLAG_CODE[raw];
+  const loc = (node.vps_location || '').toLowerCase();
+  const name = (node.name || '').toLowerCase();
+  for (const [k, v] of Object.entries(FLAG_CODE)) {
+    if (loc.includes(k) || name.includes(k)) return v;
+  }
+  return null;
+};
+const getFlagUrl = (node) => {
+  const code = getFlagCode(node);
+  return code ? `https://flagcdn.com/w80/${code}.png` : '';
 };
 const getFlag = (node) => {
   // 1. Short code → emoji
