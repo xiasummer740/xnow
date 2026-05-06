@@ -321,12 +321,12 @@ router.get('/admin/servers', authenticate, requireAdmin, async (req, res) => {
 
 // Create/update server (admin)
 router.post('/admin/server', authenticate, requireAdmin, async (req, res) => {
-  const { id, name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, max_traffic_gb, price_per_gb, active, description } = req.body;
+  const { id, name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port, sub_path, xxui_api_key, max_traffic_gb, price_per_gb, active, description } = req.body;
   try {
     if (id) {
-      await VpnProduct.update({ name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, max_traffic_gb, price_per_gb, active, description }, { where: { id } });
+      await VpnProduct.update({ name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port, sub_path, xxui_api_key, max_traffic_gb, price_per_gb, active, description }, { where: { id } });
     } else {
-      await VpnProduct.create({ name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, max_traffic_gb: max_traffic_gb || 2000, price_per_gb: price_per_gb || 0.5, active, description });
+      await VpnProduct.create({ name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port: sub_port || 2096, sub_path: sub_path || '/sub/', xxui_api_key: xxui_api_key || '', max_traffic_gb: max_traffic_gb || 2000, price_per_gb: price_per_gb || 0.5, active, description });
     }
     res.json({ status: 'success' });
   } catch (e) {
