@@ -20,7 +20,8 @@ const upload = multer({ storage });
 router.post('/config/update', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
   const ALLOWED_KEYS = ['global_multiplier', 'agent_discount', 'announcement', 'site_name', 'site_logo',
-    'upstream_url', 'upstream_key', 'tg_bot_token', 'tg_chat_id', 'tg_bot_link',
+    'upstream_url', 'upstream_key', 'upstream_login_user', 'upstream_login_pass',
+    'tg_bot_token', 'tg_chat_id', 'tg_bot_link',
     'cryptomus_id', 'cryptomus_key', 'bufpay_id', 'bufpay_key',
     'smtp_host', 'smtp_port', 'smtp_email', 'smtp_pass', 'usdt_image_url', 'ip_blacklist'];
   try {
@@ -56,46 +57,116 @@ router.get('/dashboard', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ status: 'error' }); }
 });
 
-// 一键同步上游公告
+// 一键同步上游公告（登录后抓取）
 router.post('/sync-announcement', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
   try {
     const urlConf = await Config.findOne({ where: { key: 'upstream_url' } });
+    const loginUser = await Config.findOne({ where: { key: 'upstream_login_user' } });
+    const loginPass = await Config.findOne({ where: { key: 'upstream_login_pass' } });
+
     if (!urlConf || !urlConf.value) return res.json({ status: 'error', message: '请先配置上游API地址' });
+    if (!loginUser || !loginPass) return res.json({ status: 'error', message: '请先配置上游登录账号密码' });
+
     const baseUrl = new URL(urlConf.value).origin;
+    const https = require('https');
+    const fetchPage = (urlStr, options = {}) => {
+      const u = new URL(urlStr);
+      return new Promise((resolve) => {
+        const req = https.request({
+          hostname: u.hostname, path: u.pathname + u.search,
+          method: options.method || 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            ...(options.headers || {})
+          },
+          rejectUnauthorized: false
+        }, (resp) => {
+          let body = '';
+          resp.on('data', chunk => body += chunk);
+          resp.on('end', () => resolve({ status: resp.statusCode, headers: resp.headers, body }));
+        });
+        req.on('error', (e) => resolve({ error: e.message }));
+        if (options.body) req.write(options.body);
+        req.end();
+      });
+    };
 
-    const htmlRes = await axios.get(baseUrl + '/services', {
-      timeout: 25000,
+    // Step 1: 获取 CSRF
+    const home = await fetchPage(baseUrl);
+    if (home.error) return res.json({ status: 'error', message: '上游连接失败: ' + home.error });
+
+    const cookies = (home.headers['set-cookie'] || []).map(c => c.split(';')[0]);
+    const csrfMatch = home.body.match(/name="_csrf"[^>]*value="([^"]+)"/);
+    if (!csrfMatch) return res.json({ status: 'error', message: '上游登录表单结构变更，无法获取CSRF' });
+
+    // Step 2: 登录
+    const loginParams = new URLSearchParams();
+    loginParams.append('LoginForm[username]', loginUser.value);
+    loginParams.append('LoginForm[password]', loginPass.value);
+    loginParams.append('_csrf', csrfMatch[1]);
+
+    const login = await fetchPage(baseUrl, {
+      method: 'POST',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'zh-CN,zh;q=0.9'
-      }
+        Cookie: cookies.join('; '),
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: baseUrl,
+        Referer: baseUrl + '/'
+      },
+      body: loginParams.toString()
     });
-    const html = htmlRes.data;
 
-    // 匹配所有服务描述，找最长的（大概率是公告/指南内容）
-    const descRegex = /id="service-description-id-\d+-(\d+)"[^>]*>([\s\S]*?)<\/div>/g;
-    const candidates = [];
-    let match;
-    while ((match = descRegex.exec(html)) !== null) {
-      const sid = match[1];
-      const content = match[2].replace(/<div class="panel-description">/g, '').replace(/<\/div>/g, '').trim();
-      if (content.length > 500) {
-        candidates.push({ sid, content });
-      }
-    }
+    if (login.status !== 302) return res.json({ status: 'error', message: '上游登录失败，请检查账号密码' });
 
-    candidates.sort((a, b) => b.content.length - a.content.length);
+    // Step 3: 合并 cookies
+    const allCookies = [...cookies];
+    (login.headers['set-cookie'] || []).forEach(nc => {
+      const name = nc.split('=')[0];
+      const idx = allCookies.findIndex(c => c.startsWith(name));
+      if (idx >= 0) allCookies[idx] = nc.split(';')[0];
+      else allCookies.push(nc.split(';')[0]);
+    });
 
-    if (candidates.length === 0) {
-      return res.json({ status: 'error', message: '未在上游找到公告内容' });
-    }
+    // Step 4: 抓取登录后页面
+    const dash = await fetchPage(baseUrl, {
+      headers: { Cookie: allCookies.join('; ') }
+    });
 
-    const announcementHtml = candidates[0].content;
+    // Step 5: 提取公告内容
+    const annStart = dash.body.indexOf('刷粉风控期建议');
+    if (annStart < 0) return res.json({ status: 'error', message: '上游公告格式已变更，未找到公告内容' });
+
+    const before = dash.body.substring(Math.max(0, annStart - 5000), annStart);
+    const blockMatch = before.match(/id="block_(\d+)"/g);
+    if (!blockMatch) return res.json({ status: 'error', message: '上游公告区块未找到' });
+
+    const blockId = blockMatch[blockMatch.length - 1].match(/\d+/)[0];
+    const blockStartTag = 'id="block_' + blockId + '"';
+    const blockStart = dash.body.indexOf(blockStartTag);
+    const nextBlockStart = dash.body.indexOf('id="block_', blockStart + blockStartTag.length);
+    const blockHtml = dash.body.substring(blockStart, nextBlockStart > 0 ? nextBlockStart : blockStart + 50000);
+
+    const descMatch = blockHtml.match(/<div class="text-block__description">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/);
+    if (!descMatch) return res.json({ status: 'error', message: '公告描述未找到' });
+
+    let announcementHtml = descMatch[1].trim();
+    announcementHtml = announcementHtml.replace(/var\(--color-id-\d+\)/g, '#ffffff');
+
+    // 清除上游广告和敏感信息
+    announcementHtml = announcementHtml.replace(/<p[^>]*>[\s\S]*?tk7188\.top[\s\S]*?<\/p>/gi, '');
+    announcementHtml = announcementHtml.replace(/<p[^>]*>[\s\S]*?tg频道[\s\S]*?<\/p>/gi, '');
+    announcementHtml = announcementHtml.replace(/@tk7188\w*/g, '@客服');
+
+    // 替换上游域名
+    const siteNameConf = await Config.findOne({ where: { key: 'site_name' } });
+    const currentDomain = siteNameConf ? siteNameConf.value : 'XNOW';
 
     await Config.upsert({ key: 'announcement', value: announcementHtml });
 
-    sendTgMessage('📢 公告已从上游同步，长度: ' + announcementHtml.length + ' 字符');
+    sendTgMessage('📢 公告已从上游自动同步【' + (announcementHtml.match(/【([^】]+)】/) || ['', '最新'])[1] + '】，长度: ' + announcementHtml.length + ' 字符');
 
     res.json({ status: 'success', data: { announcement: announcementHtml }, message: '公告同步成功' });
   } catch (e) {
