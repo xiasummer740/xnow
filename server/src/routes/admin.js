@@ -19,7 +19,6 @@ const upload = multer({ storage });
 
 router.post('/config/update', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
-  // Whitelist: only SMM config keys allowed here. VPN keys managed via /vpn/admin.
   const ALLOWED_KEYS = ['global_multiplier', 'agent_discount', 'announcement', 'site_name', 'site_logo',
     'upstream_url', 'upstream_key', 'tg_bot_token', 'tg_chat_id', 'tg_bot_link',
     'cryptomus_id', 'cryptomus_key', 'bufpay_id', 'bufpay_key',
@@ -57,6 +56,53 @@ router.get('/dashboard', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ status: 'error' }); }
 });
 
+// 一键同步上游公告
+router.post('/sync-announcement', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
+  try {
+    const urlConf = await Config.findOne({ where: { key: 'upstream_url' } });
+    if (!urlConf || !urlConf.value) return res.json({ status: 'error', message: '请先配置上游API地址' });
+    const baseUrl = new URL(urlConf.value).origin;
+
+    const htmlRes = await axios.get(baseUrl + '/services', {
+      timeout: 25000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'zh-CN,zh;q=0.9'
+      }
+    });
+    const html = htmlRes.data;
+
+    // 匹配所有服务描述，找最长的（大概率是公告/指南内容）
+    const descRegex = /id="service-description-id-\d+-(\d+)"[^>]*>([\s\S]*?)<\/div>/g;
+    const candidates = [];
+    let match;
+    while ((match = descRegex.exec(html)) !== null) {
+      const sid = match[1];
+      const content = match[2].replace(/<div class="panel-description">/g, '').replace(/<\/div>/g, '').trim();
+      if (content.length > 500) {
+        candidates.push({ sid, content });
+      }
+    }
+
+    candidates.sort((a, b) => b.content.length - a.content.length);
+
+    if (candidates.length === 0) {
+      return res.json({ status: 'error', message: '未在上游找到公告内容' });
+    }
+
+    const announcementHtml = candidates[0].content;
+
+    await Config.upsert({ key: 'announcement', value: announcementHtml });
+
+    sendTgMessage('📢 公告已从上游同步，长度: ' + announcementHtml.length + ' 字符');
+
+    res.json({ status: 'success', data: { announcement: announcementHtml }, message: '公告同步成功' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '同步失败: ' + e.message });
+  }
+});
+
 router.post("/user/role", authenticate, async (req, res) => {
   if (!["admin", "super_admin"].includes(req.user.role)) return res.status(403).json({ status: "error", message: "权限不足" });
   const { userId, role, addDays } = req.body;
@@ -64,16 +110,16 @@ router.post("/user/role", authenticate, async (req, res) => {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ status: "error", message: "用户不存在" });
     if (user.role === "super_admin" && req.user.role !== "super_admin") return res.json({ status: "error", message: "无法越权修改至尊管理员" });
-    
+
     const oldRole = user.role; user.role = role;
     if (role === "agent" && addDays > 0) {
       const now = Date.now(); const currentExpire = user.vip_expire_at ? new Date(user.vip_expire_at).getTime() : now;
       user.vip_expire_at = new Date((currentExpire > now ? currentExpire : now) + Number(addDays) * 24 * 60 * 60 * 1000);
     } else if (role !== "agent") { user.vip_expire_at = null; }
     await user.save();
-    
+
     const roleMap = { 'super_admin':'至尊管理员', 'admin':'管理员', 'agent':'👑 至尊代理', 'user':'黄金用户' };
-    sendTgMessage(`🛡️ <b>[管理操作] 用户权限调度</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n👤 <b>账号:</b> <code>${user.phone}</code>\n🔄 <b>变更:</b> ${roleMap[oldRole]} ➡️ ${roleMap[role]}\n⏳ <b>赠送时长:</b> ${addDays > 0 ? addDays + ' 天' : '无'}`);
+    sendTgMessage('🛡️ [管理操作] 用户权限调度\n🆔 UID: <code>' + user.id + '</code>\n👤 账号: <code>' + user.phone + '</code>\n🔄 变更: ' + roleMap[oldRole] + ' ➡️ ' + roleMap[role] + '\n⏳ 赠送时长: ' + (addDays > 0 ? addDays + ' 天' : '无'));
     res.json({ status: "success", message: "权限与时长已同步更新" });
   } catch (e) { res.status(500).json({ status: "error", message: "调度失败" }); }
 });
@@ -87,7 +133,7 @@ router.post('/user/update', authenticate, async (req, res) => {
     if (type === 'fund') {
       user.balance = (parseFloat(user.balance) + parseFloat(amount)).toFixed(6);
       await user.save();
-      await Transaction.create({ user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance, type: '后台调账', description: `管理员手动调账: ${amount > 0 ? '+' : ''}${amount}` });
+      await Transaction.create({ user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance, type: '后台调账', description: '管理员手动调账: ' + (amount > 0 ? '+' : '') + amount });
     } else if (type === 'multiplier') {
       user.custom_multiplier = (multiplier === 'default' || !multiplier) ? null : parseFloat(multiplier).toFixed(2);
       await user.save();
@@ -105,7 +151,7 @@ router.post('/user/ban', authenticate, async (req, res) => {
     targetUser.is_banned = !targetUser.is_banned;
     targetUser.ban_reason = targetUser.is_banned ? (reason || '管理员强制封禁') : null;
     await targetUser.save();
-    res.json({ status: 'success', message: `已${targetUser.is_banned ? '强制封禁' : '解封'}` });
+    res.json({ status: 'success', message: '已' + (targetUser.is_banned ? '强制封禁' : '解封') });
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
 
@@ -122,7 +168,7 @@ router.post('/user/delete', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
 
-// 💡 灾备引擎 API
+// 灾备引擎 API
 router.get('/backups', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '仅管理员有权访问灾备中心' });
   try {
@@ -148,7 +194,7 @@ router.post('/backup/upload', authenticate, upload.single('file'), async (req, r
   if (!req.file) return res.status(400).json({ status: 'error', message: '请选择文件' });
   try {
     await restoreBackup(req.file.path);
-    sendTgMessage(`🚨 <b>[灾难级数据恢复] 上传还原成功</b>\n执行官: <code>UID ${req.user.id}</code>\n数据包: <code>${req.file.originalname}</code>`);
+    sendTgMessage('🚨 [灾难级数据恢复] 上传还原成功\n执行官: <code>UID ' + req.user.id + '</code>\n数据包: <code>' + req.file.originalname + '</code>');
     res.json({ status: 'success', message: '上传数据已成功覆盖并唤醒全站！' });
   } catch (e) { res.status(500).json({ status: 'error', message: '数据包损坏或恢复失败' }); }
 });
@@ -160,7 +206,7 @@ router.post('/backup/restore', authenticate, async (req, res) => {
     const filepath = path.join(BACKUP_DIR, filename);
     if (!fs.existsSync(filepath)) return res.status(404).json({ status: 'error', message: '备份文件不存在' });
     await restoreBackup(filepath);
-    sendTgMessage(`🚨 <b>[灾难级数据恢复] 历史快照重置成功</b>\n执行官: <code>UID ${req.user.id}</code>\n快照名: <code>${filename}</code>`);
+    sendTgMessage('🚨 [灾难级数据恢复] 历史快照重置成功\n执行官: <code>UID ' + req.user.id + '</code>\n快照名: <code>' + filename + '</code>');
     res.json({ status: 'success', message: '历史快照已成功注入！' });
   } catch (e) { res.status(500).json({ status: 'error', message: '快照恢复失败' }); }
 });
@@ -173,7 +219,6 @@ router.get('/backup/download', authenticate, async (req, res) => {
   else res.status(404).send('File not found');
 });
 
-// 💡 核心修复：增加快照物理删除 API
 router.post('/backup/delete', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const { filename } = req.body;

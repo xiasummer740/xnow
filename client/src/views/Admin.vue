@@ -5,7 +5,7 @@ import { useUiStore } from '../stores/ui';
 import { useAppStore } from '../stores/app';
 
 const userStore = useUserStore(); const ui = useUiStore(); const app = useAppStore();
-const loading = ref(false); const syncing = ref(false); const editorRef = ref(null);
+const loading = ref(false); const syncing = ref(false); const announceSyncing = ref(false); const editorRef = ref(null);
 const vpnShopEnabled = ref(true); const vpnToggling = ref(false);
 const data = ref({ upstreamBalance: { balance: '0.00' }, users: [], orders: [], transactions: [], config: {}, totalOrders: 0 });
 
@@ -57,6 +57,22 @@ const fetchDashboard = async (showLoading = true) => {
 };
 
 const saveConfig = async () => { try { await fetch('/api/admin/config/update', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify(form.value) }); ui.showToast('系统全局配置已保存', 'success'); app.fetchConfig(); } catch (e) { ui.showToast('保存失败', 'error'); } };
+
+const syncUpstreamAnnouncement = async () => {
+  announceSyncing.value = true;
+  try {
+    const res = await fetch('/api/admin/sync-announcement', { method: 'POST', headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const data = await res.json();
+    if (data.status === 'success') {
+      form.value.announcement = data.data.announcement;
+      if (editorRef.value) editorRef.value.innerHTML = data.data.announcement;
+      ui.showToast('上游公告已同步到编辑器，请确认后点击「同步发布公告」保存', 'success');
+    } else {
+      ui.showToast(data.message || '同步失败', 'error');
+    }
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+  announceSyncing.value = false;
+};
 const handleLogoUpload = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { form.value.site_logo = e.target.result; ui.showToast('Logo 读取成功，请点击保存', 'success'); }; reader.readAsDataURL(file); };
 const execCmd = (cmd, val = null) => { document.execCommand(cmd, false, val); syncEditorContent(); };
 const syncEditorContent = () => { if (editorRef.value) form.value.announcement = editorRef.value.innerHTML; };
@@ -212,7 +228,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 
                 <div class="flex justify-between items-center mb-6">
                     <span class="text-xs text-slate-500">超强富媒体支持，图文并茂</span>
-                    <button @click="saveConfig" class="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-900 font-black transition shadow-[0_0_15px_rgba(251,191,36,0.3)]">同步发布公告</button>
+                    <div class="flex space-x-3">
+                      <button @click="syncUpstreamAnnouncement" :disabled="announceSyncing" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">{{ announceSyncing ? '同步中...' : '🔄 一键拉取上游公告' }}</button>
+                      <button @click="saveConfig" class="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-900 font-black transition shadow-[0_0_15px_rgba(251,191,36,0.3)]">同步发布公告</button>
+                    </div>
                 </div>
 
                 <hr class="border-slate-700 mb-4">
