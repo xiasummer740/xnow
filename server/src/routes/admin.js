@@ -1,5 +1,6 @@
 import express from 'express';
 import axios from 'axios';
+import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -69,7 +70,6 @@ router.post('/sync-announcement', authenticate, async (req, res) => {
     if (!loginUser || !loginPass) return res.json({ status: 'error', message: '请先配置上游登录账号密码' });
 
     const baseUrl = new URL(urlConf.value).origin;
-    const https = require('https');
     const fetchPage = (urlStr, options = {}) => {
       const u = new URL(urlStr);
       return new Promise((resolve) => {
