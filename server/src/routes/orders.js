@@ -22,9 +22,10 @@ router.post('/add', authenticate, async (req, res) => {
 
     const configs = await Config.findAll({ where: { key: ['global_multiplier', 'agent_discount'] }, transaction: t });
     const conf = {}; configs.forEach(c => conf[c.key] = c.value);
-    
-    const baseMultiplier = parseFloat(conf.global_multiplier || 2.0);
-    const agentDiscount = parseFloat(conf.agent_discount || 0.8);
+
+    // 分站定价覆盖
+    const baseMultiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
+    const agentDiscount = req.site ? parseFloat(req.site.agent_discount) : parseFloat(conf.agent_discount || 0.8);
 
     let user = await User.findByPk(req.user.id, { transaction: t });
     if (!user && req.user.role !== 'super_admin') {
@@ -108,6 +109,119 @@ router.post('/add', authenticate, async (req, res) => {
     await t.rollback();
     res.json({ status: 'error', message: `内部错误: ${e.message}` });
   }
+});
+
+// 批量下单
+router.post('/batch', authenticate, async (req, res) => {
+  const { orders: batchOrders } = req.body;
+  if (!Array.isArray(batchOrders) || batchOrders.length === 0) {
+    return res.json({ status: 'error', message: '请提供有效的批量订单数据' });
+  }
+  if (batchOrders.length > 50) {
+    return res.json({ status: 'error', message: '单次批量最多50条，请分批提交' });
+  }
+
+  const configs = await Config.findAll({ where: { key: ['global_multiplier', 'agent_discount', 'upstream_url', 'upstream_key'] } });
+  const conf = {}; configs.forEach(c => conf[c.key] = c.value);
+  if (!conf.upstream_url || !conf.upstream_key) {
+    return res.json({ status: 'error', message: '系统尚未配置上游API密钥' });
+  }
+
+  const baseMultiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
+  const agentDiscount = req.site ? parseFloat(req.site.agent_discount) : parseFloat(conf.agent_discount || 0.8);
+
+  const results = [];
+  let totalCharge = 0;
+
+  for (const item of batchOrders) {
+    const { serviceId, link, quantity } = item;
+    if (!serviceId || !link || !quantity || parseInt(quantity) <= 0) {
+      results.push({ serviceId, link, quantity, status: 'error', message: '参数非法' });
+      continue;
+    }
+
+    const t = await sequelize.transaction();
+    try {
+      const service = await Service.findByPk(serviceId, { transaction: t });
+      if (!service) { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '商品不存在' }); continue; }
+
+      const qty = parseInt(quantity);
+      if (qty < service.min || qty > service.max) {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: `数量限制: ${service.min}-${service.max}` });
+        continue;
+      }
+
+      let user = await User.findByPk(req.user.id, { transaction: t });
+      if (!user && req.user.role !== 'super_admin') { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '账户异常' }); continue; }
+
+      const actualRole = user ? user.role : req.user.role;
+      let finalMultiplier = baseMultiplier;
+      if (actualRole === 'super_admin' || actualRole === 'admin') {
+        finalMultiplier = 1.0;
+      } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) {
+        finalMultiplier = parseFloat(user.custom_multiplier);
+      } else if (actualRole === 'agent') {
+        finalMultiplier = baseMultiplier * agentDiscount;
+      }
+
+      const sellRate = parseFloat(service.rate) * finalMultiplier;
+      const charge = parseFloat(((qty / 1000) * sellRate).toFixed(4));
+      const upstream_charge = parseFloat(((qty / 1000) * parseFloat(service.rate)).toFixed(4));
+
+      if (user && parseFloat(user.balance) - totalCharge < parseFloat(charge)) {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: `余额不足，需要 ¥${charge}` });
+        continue;
+      }
+
+      const payloadObj = { key: conf.upstream_key, action: 'add', service: serviceId, link, quantity: qty };
+      const payload = new URLSearchParams(payloadObj);
+      const upRes = await axios.post(conf.upstream_url, payload.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000
+      });
+
+      if (upRes.data && upRes.data.order) {
+        const orderNo = 'XN' + Date.now() + Math.floor(Math.random() * 100);
+        const newOrder = await Order.create({
+          order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
+          upstream_order_id: String(upRes.data.order), service_id: serviceId,
+          service_name: service.name, link, quantity: qty, charge, upstream_charge, status: '排队中'
+        }, { transaction: t });
+
+        if (user) {
+          totalCharge += parseFloat(charge);
+          user.balance = (parseFloat(user.balance) - parseFloat(charge)).toFixed(6);
+          await user.save({ transaction: t });
+
+          await Transaction.create({
+            user_id: user.id, phone: user.phone, amount: -charge, balance: user.balance,
+            type: '批量订单扣款', description: `批量购买 [ID:${serviceId}] ${service.name} 数量:${qty}`
+          }, { transaction: t });
+        }
+
+        await t.commit();
+        results.push({ serviceId, link, quantity: qty, status: 'success', order_no: orderNo, charge });
+      } else {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: upRes.data?.error || '上游异常' });
+      }
+    } catch (e) {
+      await t.rollback().catch(() => {});
+      results.push({ serviceId, link, quantity, status: 'error', message: `系统错误: ${e.message}` });
+    }
+  }
+
+  const successCount = results.filter(r => r.status === 'success').length;
+  const failCount = results.filter(r => r.status === 'error').length;
+
+  // TG 播报
+  if (user) {
+    const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
+    sendTgMessage(`📦 <b>批量下单完成</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n🔰 <b>等级:</b> ${roleName}\n✅ <b>成功:</b> ${successCount} 单\n❌ <b>失败:</b> ${failCount} 单\n💸 <b>总扣费:</b> ￥${totalCharge.toFixed(2)}`);
+  }
+
+  res.json({ status: 'success', data: { total: batchOrders.length, success: successCount, fail: failCount, total_charge: totalCharge.toFixed(4), results } });
 });
 
 router.get('/', authenticate, async (req, res) => {

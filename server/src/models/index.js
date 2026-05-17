@@ -4,7 +4,8 @@ import Config from './Config.js';
 import Service from './Service.js';
 import Order from './Order.js';
 import Transaction from './Transaction.js';
+import Site from './Site.js';
 import VpnProduct from './VpnProduct.js';
 import VpnClient from './VpnClient.js';
 
-export { sequelize, User, Config, Service, Order, Transaction, VpnProduct, VpnClient };
+export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient };

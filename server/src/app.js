@@ -1,5 +1,6 @@
 import { autoBackupTask } from './utils/backupEngine.js';
 import { wafMiddleware } from './middleware/waf.js';
+import { siteMiddleware } from './middleware/site.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -17,6 +18,7 @@ import userRoutes from './routes/user.js';
 import servicesRoutes from './routes/services.js';
 import ordersRoutes from './routes/orders.js';
 import transactionsRoutes from './routes/transactions.js';
+import sitesRoutes from './routes/sites.js';
 import vpnRoutes from './routes/vpn.js';
 
 dotenv.config();
@@ -34,6 +36,7 @@ app.use(helmet({
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use(siteMiddleware);
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -59,6 +62,7 @@ app.use('/api/transactions', transactionsRoutes);
 app.use('/api/pay', payRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/sites', sitesRoutes);
 app.use('/api/vpn', vpnRoutes);
 
 const initDatabase = async () => {
