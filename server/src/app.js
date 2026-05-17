@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import { sequelize, User, Config } from './models/index.js';
 import { autoSyncServices } from './utils/sync.js';
 import { autoSyncOrders } from './utils/orderSync.js';
+import { autoSyncAnnouncement } from './utils/announceSync.js';
 
 import payRoutes from './routes/pay.js';
 import adminRoutes from './routes/admin.js';
@@ -93,8 +94,10 @@ app.listen(PORT, async () => {
   console.log(`🚀 XNOW API Server running on port ${PORT}`);
   await initDatabase();
   
-  setTimeout(autoSyncServices, 3000); 
-  setInterval(autoSyncServices, 1000 * 60 * 10); 
+  setTimeout(autoSyncServices, 3000);
+  setInterval(autoSyncServices, 1000 * 60 * 10);
   setInterval(autoSyncOrders, 1000 * 60 * 1);
   setInterval(autoBackupTask, 1000 * 60 * 5);
+  setTimeout(autoSyncAnnouncement, 30000);
+  setInterval(autoSyncAnnouncement, 1000 * 60 * 30);
 });

@@ -155,6 +155,10 @@ router.post('/sync-announcement', authenticate, async (req, res) => {
     let announcementHtml = descMatch[1].trim();
     announcementHtml = announcementHtml.replace(/var\(--color-id-\d+\)/g, '#ffffff');
 
+    // 规范化字号，避免上游特大字体
+    announcementHtml = announcementHtml.replace(/font-size:\s*\d{2,}px/gi, 'font-size: 17px');
+    announcementHtml = announcementHtml.replace(/font-size:\s*2[7-9]px/gi, 'font-size: 17px');
+
     // 清除上游广告和敏感信息
     announcementHtml = announcementHtml.replace(/<p[^>]*>[\s\S]*?tk7188\.top[\s\S]*?<\/p>/gi, '');
     announcementHtml = announcementHtml.replace(/<p[^>]*>[\s\S]*?tg频道[\s\S]*?<\/p>/gi, '');
