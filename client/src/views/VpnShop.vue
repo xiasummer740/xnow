@@ -1,93 +1,102 @@
 <template>
-  <div class="vpn-page min-h-full">
-    <section class="xui-hero">
-      <div class="xui-hero-badge">Xray Core · VLESS/VMess/Trojan/SS · 余额支付 · 秒级开通</div>
-      <h1 class="xui-hero-title">{{ appStore.lang === 'zh' ? '全球高速网络，一键连接' : 'Borderless Internet' }}</h1>
-      <p class="xui-hero-sub">{{ appStore.lang === 'zh' ? '选择节点位置，配置流量和时长，余额支付后即刻获取加密隧道。' : 'Pick a location, configure traffic, pay with balance, get connected.' }}</p>
-      <div style="display:flex;justify-content:center;gap:1.5rem;margin-top:1.25rem;flex-wrap:wrap">
-        <div class="xui-trust-item"><div class="xui-trust-num">{{ nodes.length||'—' }}</div><div class="xui-trust-label">{{ appStore.lang==='zh'?'全球节点':'Nodes' }}</div></div>
-        <div class="xui-trust-item"><div class="xui-trust-num">99.9%</div><div class="xui-trust-label">{{ appStore.lang==='zh'?'在线率':'Uptime' }}</div></div>
-        <div class="xui-trust-item"><div class="xui-trust-num">24/7</div><div class="xui-trust-label">{{ appStore.lang==='zh'?'技术支持':'Support' }}</div></div>
-        <div class="xui-trust-item"><div class="xui-trust-num">🔐</div><div class="xui-trust-label">TLS+Reality</div></div>
+  <div class="max-w-4xl mx-auto pb-12 space-y-6">
+    <!-- Hero -->
+    <div class="text-center pt-6 pb-4">
+      <div class="inline-block mb-4 px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-bold tracking-widest uppercase">Xray Core · VLESS / VMess / Trojan · 余额支付 · 秒开通</div>
+      <h1 class="text-3xl md:text-4xl font-black text-white tracking-wider mb-3">{{ appStore.lang === 'zh' ? '全球高速网络，一键连接' : 'Borderless Internet' }}</h1>
+      <p class="text-slate-400 text-sm max-w-xl mx-auto">{{ appStore.lang === 'zh' ? '选择节点，配置流量和时长，余额支付后即刻获取加密隧道。' : 'Pick a location, configure traffic, pay with balance, get connected.' }}</p>
+      <div class="flex justify-center gap-6 mt-6 text-center">
+        <div><div class="text-2xl font-black text-white">{{ nodes.length || '—' }}</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang==='zh'?'全球节点':'Nodes' }}</div></div>
+        <div><div class="text-2xl font-black text-emerald-400">99.9%</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang==='zh'?'在线率':'Uptime' }}</div></div>
+        <div><div class="text-2xl font-black text-white">24/7</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang==='zh'?'技术支持':'Support' }}</div></div>
+        <div><div class="text-2xl font-black text-emerald-400">TLS</div><div class="text-xs text-slate-500 mt-1">+Reality</div></div>
       </div>
-    </section>
+    </div>
 
-    <div v-if="loading" class="xui-spinner"></div>
+    <!-- Protocol bar -->
+    <div class="flex justify-center gap-3 flex-wrap">
+      <span v-for="p in ['VLESS','VMess','Trojan','Shadowsocks','Hysteria']" :key="p" class="text-[11px] font-bold text-slate-500 bg-slate-800/60 border border-slate-700 rounded-full px-3 py-1">{{ p }}</span>
+    </div>
+
+    <div v-if="loading" class="flex justify-center py-12"><div class="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div></div>
 
     <template v-else>
-      <div style="max-width:880px;margin:0 auto;padding:0 1rem 3rem">
-        <!-- Protocol Bar -->
-        <div style="display:flex;justify-content:center;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
-          <span v-for="p in ['VLESS','VMess','Trojan','Shadowsocks','Hysteria']" :key="p" style="font-size:0.65rem;font-weight:700;color:var(--xui-text-dim);background:var(--xui-surface);border:1px solid var(--xui-border);border-radius:9999px;padding:0.2rem 0.7rem">{{ p }}</span>
-        </div>
-        <!-- Step 1: Location -->
-        <div style="margin-bottom:1.5rem">
-          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--xui-text-dim);margin-bottom:0.75rem">{{ appStore.lang === 'zh' ? '① 选择节点位置' : '① Select Location' }}</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.625rem">
-            <div v-for="n in nodes" :key="n.id" @click="selectNode(n)" class="xui-card" :class="{ selected: selectedNode?.id === n.id }" style="padding:0.875rem 1rem;cursor:pointer;display:flex;align-items:center;gap:0.625rem">
-              <img :src="getFlagUrl(n)" class="xui-plan-flag" style="flex-shrink:0" @error="e=>e.target.style.display='none'" />
-              <div class="min-w-0">
-                <div style="font-weight:700;font-size:0.875rem">{{ n.name }}</div>
-                <div style="font-size:0.65rem;color:var(--xui-text-dim)">¥{{ parseFloat(n.price_per_gb).toFixed(2) }}/GB · 上限{{ n.max_traffic_gb }}GB</div>
-              </div>
-              <div v-if="selectedNode?.id === n.id" class="xui-plan-check" style="margin-left:auto;flex-shrink:0">✓</div>
+      <!-- Step 1: Select node -->
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">① {{ appStore.lang === 'zh' ? '选择节点位置' : 'Select Location' }}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div v-for="n in nodes" :key="n.id" @click="selectNode(n)"
+            :class="['p-4 rounded-2xl border cursor-pointer transition-all flex items-center gap-3', selectedNode?.id === n.id ? 'bg-emerald-500/10 border-emerald-400/50 ring-1 ring-emerald-400/30' : 'bg-slate-800/60 border-slate-700 hover:border-slate-600 hover:bg-slate-800']">
+            <img :src="getFlagUrl(n)" class="w-8 h-6 object-cover rounded flex-shrink-0" @error="e=>e.target.style.display='none'" />
+            <div class="min-w-0 flex-1">
+              <div class="font-bold text-white text-sm">{{ n.name }}</div>
+              <div class="text-xs text-slate-500">¥{{ parseFloat(n.price_per_gb).toFixed(2) }}/GB · 上限{{ n.max_traffic_gb }}GB</div>
             </div>
-            <div v-if="nodes.length===0" class="xui-empty" style="grid-column:1/-1"><div class="xui-empty-icon">🖥️</div><p>暂无可用节点</p></div>
+            <div v-if="selectedNode?.id === n.id" class="w-5 h-5 bg-emerald-400 rounded-full flex items-center justify-center text-slate-900 text-xs font-black flex-shrink-0">✓</div>
+          </div>
+          <div v-if="nodes.length===0" class="col-span-full text-center py-12 text-slate-500">
+            <div class="text-4xl mb-3">🖥️</div><p>暂无可用节点</p>
           </div>
         </div>
-
-        <!-- Step 2+3: Traffic + Duration (only when node selected) -->
-        <template v-if="selectedNode">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">
-            <div>
-              <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--xui-text-dim);margin-bottom:0.75rem">② {{ appStore.lang === 'zh' ? '流量配额' : 'Traffic' }}</div>
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem">
-                <template v-if="trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000)).length>0">
-                  <button v-for="g in trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000))" :key="g" @click="selectedTraffic=g" class="xui-card" :class="{ selected: selectedTraffic===g }" style="padding:0.75rem;text-align:center;cursor:pointer;font-weight:700;font-size:0.875rem;border:none">
-                    {{ g>=1000?(g/1000).toFixed(1)+'TB':g+'GB' }}
-                  </button>
-                </template>
-                <div v-else style="grid-column:1/-1;font-size:0.75rem;color:var(--xui-warning);text-align:center;padding:0.75rem">此节点已达容量上限</div>
-              </div>
-            </div>
-            <div>
-              <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--xui-text-dim);margin-bottom:0.75rem">③ {{ appStore.lang === 'zh' ? '使用时长' : 'Duration' }}</div>
-              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.5rem">
-                <button v-for="d in durationOptions" :key="d.days" @click="selectedDuration=d" class="xui-card" :class="{ selected: selectedDuration?.days===d.days }" style="padding:0.75rem;text-align:center;cursor:pointer;border:none;position:relative;overflow:visible">
-                  <div v-if="d.discount<=0.75" style="position:absolute;top:-6px;right:-6px;background:#f37b24;color:#fff;font-size:0.55rem;font-weight:900;padding:0.15rem 0.4rem;border-radius:9999px;line-height:1.2">最划算</div>
-                  <div style="font-weight:700;font-size:0.875rem">{{ d.label }}</div>
-                  <div v-if="d.discount<1" style="font-size:0.6rem;color:var(--xui-primary);margin-top:0.15rem">{{Math.round((1-d.discount)*100)}}% OFF</div>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Price + Buy -->
-          <div class="xui-card" style="padding:1.25rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
-            <div>
-              <div style="font-size:0.75rem;color:var(--xui-text-dim)">{{ selectedNode.name }} · {{ selectedTraffic }}GB · {{ selectedDuration?.label }}</div>
-              <div style="font-size:1.75rem;font-weight:900;color:var(--xui-primary);margin-top:0.25rem">¥{{ finalPrice.toFixed(2) }}</div>
-              <div style="font-size:0.7rem;margin-top:0.15rem" :class="balanceOk ? 'xui-tag-green' : 'xui-tag-red'" class="xui-tag">
-                {{ appStore.lang === 'zh' ? '余额' : 'Bal' }} ¥{{ parseFloat(userStore.userInfo?.balance||0).toFixed(2) }}
-                <span v-if="!balanceOk"> ⚠️ 不足</span>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem">
-              <button @click="buy" :disabled="buying" class="xui-btn" style="padding:0.75rem 2rem;font-size:1rem">{{ buying?'...':(appStore.lang==='zh'?'立即购买':'Buy Now') }}</button>
-              <router-link v-if="!balanceOk" to="/recharge" style="font-size:0.7rem;color:var(--xui-warning)">💳 余额不足？点击充值</router-link>
-            </div>
-          </div>
-        </template>
       </div>
 
+      <!-- Step 2+3: Traffic + Duration -->
+      <template v-if="selectedNode">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">② {{ appStore.lang === 'zh' ? '流量配额' : 'Traffic' }}</p>
+            <div class="grid grid-cols-3 gap-2">
+              <template v-if="trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000)).length>0">
+                <button v-for="g in trafficOptions.filter(t=>t<=(selectedNode?.max_traffic_gb||2000))" :key="g" @click="selectedTraffic=g"
+                  :class="['py-3 rounded-xl text-center font-bold text-sm transition border', selectedTraffic===g ? 'bg-emerald-500/10 border-emerald-400/50 text-emerald-400' : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-600']">
+                  {{ g>=1000?(g/1000).toFixed(1)+'TB':g+'GB' }}
+                </button>
+              </template>
+              <div v-else class="col-span-3 text-sm text-amber-400 text-center py-4">此节点已达容量上限</div>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">③ {{ appStore.lang === 'zh' ? '使用时长' : 'Duration' }}</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button v-for="d in durationOptions" :key="d.days" @click="selectedDuration=d"
+                :class="['py-3 rounded-xl text-center font-bold text-sm transition border relative', selectedDuration?.days===d.days ? 'bg-emerald-500/10 border-emerald-400/50 text-emerald-400' : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-600']">
+                <span v-if="d.discount<=0.75" class="absolute -top-2 -right-2 bg-amber-500 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full">最划算</span>
+                <div>{{ d.label }}</div>
+                <div v-if="d.discount<1" class="text-[11px] text-emerald-500 mt-0.5">{{Math.round((1-d.discount)*100)}}% OFF</div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Price + Buy -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div class="text-sm text-slate-400">{{ selectedNode.name }} · {{ selectedTraffic }}GB · {{ selectedDuration?.label }}</div>
+            <div class="text-3xl font-black text-emerald-400 mt-1">¥{{ finalPrice.toFixed(2) }}</div>
+            <div :class="['inline-block text-xs font-bold px-2 py-0.5 rounded-full mt-1.5', balanceOk ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30']">
+              余额 ¥{{ parseFloat(userStore.userInfo?.balance||0).toFixed(2) }}
+              <span v-if="!balanceOk"> ⚠️ 不足</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end gap-2 w-full sm:w-auto">
+            <button @click="buy" :disabled="buying" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-lg px-8 py-3.5 rounded-xl transition transform hover:-translate-y-0.5 shadow-[0_8px_25px_rgba(16,185,129,0.3)] disabled:opacity-50">
+              {{ buying?'处理中...':(appStore.lang==='zh'?'立即购买':'Buy Now') }}
+            </button>
+            <router-link v-if="!balanceOk" to="/recharge" class="text-xs text-amber-400 hover:text-amber-300">💳 余额不足？点击充值</router-link>
+          </div>
+        </div>
+      </template>
+
       <!-- Success Modal -->
-      <div v-if="showSuccess" class="xui-overlay" @click.self="showSuccess=false">
-        <div class="xui-modal text-center space-y-4">
-          <div style="font-size:3rem">✅</div>
-          <h2 style="font-size:1.2rem;font-weight:900">购买成功</h2>
-          <p v-if="purchaseResult?.email" style="font-size:0.8rem;color:var(--xui-text-dim);font-family:monospace;background:#f5f7f9;border-radius:0.5rem;padding:0.4rem 0.8rem;display:inline-block">{{ purchaseResult.email }}</p>
-          <button @click="goToClients" class="xui-btn w-full">查看我的节点</button>
-          <button @click="showSuccess=false" class="xui-btn xui-btn-ghost w-full">继续选购</button>
+      <div v-if="showSuccess" class="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" @click.self="showSuccess=false">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full text-center shadow-[0_20px_60px_rgba(0,0,0,0.8)] space-y-4">
+          <div class="text-5xl">✅</div>
+          <h2 class="text-xl font-black text-white">购买成功</h2>
+          <p v-if="purchaseResult?.email" class="text-sm font-mono text-emerald-400 bg-slate-800 rounded-lg py-2 px-4 inline-block">{{ purchaseResult.email }}</p>
+          <div class="flex flex-col gap-2 pt-2">
+            <button @click="goToClients" class="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold py-3 rounded-xl transition">查看我的节点</button>
+            <button @click="showSuccess=false" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition">继续选购</button>
+          </div>
         </div>
       </div>
     </template>
@@ -126,11 +135,8 @@ onMounted(async () => {
 
 const selectNode = (n) => {
   selectedNode.value = n;
-  // Reset traffic to first valid option within node's limit
   const valid = trafficOptions.value.filter(t => t <= (n.max_traffic_gb || 2000));
-  if (valid.length > 0 && !valid.includes(selectedTraffic.value)) {
-    selectedTraffic.value = valid[0];
-  }
+  if (valid.length > 0 && !valid.includes(selectedTraffic.value)) selectedTraffic.value = valid[0];
 };
 const buy = async () => {
   if(!selectedNode.value)return; const nd=selectedNode.value;
@@ -139,7 +145,7 @@ const buy = async () => {
   if(parseFloat(userStore.userInfo?.balance||0) < finalPrice.value) return uiStore.showToast('余额不足，请先充值','error');
   if(!await uiStore.showConfirm(`确认购买 ${nd.name} · ${selectedTraffic.value}GB · ${selectedDuration.value.label}？¥${finalPrice.value.toFixed(2)}`,'确认订单'))return;
   buying.value=true;
-  try{const r=await fetch('/api/vpn/buy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`},body:JSON.stringify({product_id:nd.id,traffic_gb:selectedTraffic.value,duration_days:selectedDuration.value.days})});const d=await r.json();if(d.status==='success'){if(d.data?.balance)userStore.updateUserInfo({balance:d.data.balance});purchaseResult.value=d.data;showSuccess.value=true}else uiStore.showToast(d.message||'Failed','error')}catch(e){uiStore.showToast('Network error','error')}
+  try{const r=await fetch('/api/vpn/buy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`},body:JSON.stringify({product_id:nd.id,traffic_gb:selectedTraffic.value,duration_days:selectedDuration.value.days})});const d=await r.json();if(d.status==='success'){if(d.data?.balance)userStore.updateUserInfo({balance:d.data.balance});purchaseResult.value=d.data;showSuccess.value=true}else uiStore.showToast(d.message||'失败','error')}catch(e){uiStore.showToast('网络错误','error')}
   buying.value=false;
 };
 const goToClients = () => { showSuccess.value=false; router.push('/vpn/clients'); };
