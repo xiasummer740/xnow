@@ -1,6 +1,6 @@
 <template>
-  <div id="app-root" class="relative min-h-screen">
-    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden"><div v-for="n in 20" :key="n" class="quantum-formula" :style="getQuantumStyle(n)">{{ getFormula() }}</div></div>
+  <div id="app-root" class="relative min-h-screen bg-[#060b18]">
+    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden"><div v-for="n in 30" :key="n" class="quantum-formula" :style="getQuantumStyle(n)">{{ getFormula() }}</div></div>
     
     <router-view class="relative z-10" />
     
@@ -75,7 +75,7 @@ const doRandomAction = () => {
 
 <style>
 /* 保持原有背景量子特效 */
-.quantum-formula { position: absolute; color: rgba(251, 191, 36, 0.15); font-family: 'Courier New', Courier, monospace; font-weight: bold; user-select: none; animation: floatFormula linear infinite; filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.2)); } 
+.quantum-formula { position: absolute; color: rgba(251, 191, 36, 0.25); font-family: 'Courier New', Courier, monospace; font-weight: bold; user-select: none; animation: floatFormula linear infinite; filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.4)); } 
 @keyframes floatFormula { 0% { transform: translateY(100vh) rotate(0deg) scale(0.8); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(-100vh) rotate(360deg) scale(1.2); opacity: 0; } } 
 .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; } 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
