@@ -57,15 +57,17 @@ export const autoSyncServices = async () => {
     }
 
     // 3. 数据融合与组装
-    let sortIndex = 0;
-    const servicesToInsert = apiRes.data.map(item => {
-      sortIndex++;
+    // 先将所有现有服务置为末尾排序，避免上游已下架服务遗留居前
+    await Service.update({ sort: 999999 }, { where: {} });
+
+    const servicesToInsert = apiRes.data.map((item, idx) => {
+      const sortOrder = idx + 1;
       let parsedRate = parseFloat(item.rate);
       if (isNaN(parsedRate) || parsedRate > 999999999) parsedRate = 0;
-      
+
       let rawDesc = descMap[String(item.service)] || item.description || item.desc || '';
       if (typeof rawDesc !== 'string') rawDesc = String(rawDesc);
-      
+
       return {
         service_id: item.service,
         name: item.name || '未命名服务',
@@ -77,22 +79,25 @@ export const autoSyncServices = async () => {
         refill: item.refill === true || item.refill === '1' || item.refill === 1,
         cancel: item.cancel === true || item.cancel === '1' || item.cancel === 1,
         description: rawDesc,
-        sort: sortIndex
+        sort: sortOrder
       };
     });
 
     // 4. 平滑防断开分块入库 (Chunking)
-    const chunkSize = 200; 
+    const chunkSize = 200;
     for (let i = 0; i < servicesToInsert.length; i += chunkSize) {
       const chunk = servicesToInsert.slice(i, i + chunkSize);
       await Service.bulkCreate(chunk, {
         updateOnDuplicate: ['name', 'type', 'category', 'rate', 'min', 'max', 'refill', 'cancel', 'description', 'sort']
       });
-      // 故意休眠 300 毫秒
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    console.log(`✅ [AutoSync] 所有 ${servicesToInsert.length} 条服务已绝对安全地写入数据库，未发生内存溢出！`);
+    // 清理已下架的服务(排序值仍为999999的)
+    const deleted = await Service.destroy({ where: { sort: 999999 } });
+    if (deleted > 0) console.log(\`🗑️ [AutoSync] 已清理 \${deleted} 条下架服务\`);
+
+    console.log(\`✅ [AutoSync] 所有 \${servicesToInsert.length} 条服务已绝对安全地写入数据库，未发生内存溢出！\`);
   } catch (err) {
     console.error('❌ [AutoSync] 致命错误:', err.message);
   }

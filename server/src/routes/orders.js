@@ -103,11 +103,26 @@ router.post('/add', authenticate, async (req, res) => {
       res.json({ status: 'success', message: '✅ 订单已秒级提交至全网', order_id: newOrder.order_no });
     } else {
       await t.rollback();
-      res.json({ status: 'error', message: upRes.data.error || '上游返回异常状态，已阻断扣款' });
+      const rawErr = String(upRes.data?.error || upRes.data?.message || '上游返回异常状态');
+      const errMap = {
+        'not enough funds': '上游账户余额不足，请联系管理员充值',
+        'incorrect request': '请求参数有误，请检查链接格式或服务是否有效',
+        'invalid link': '目标链接无效，请检查链接格式',
+        'service not found': '该服务已下架或暂停，请选择其他服务',
+        'min_quantity': '数量低于该服务最低要求',
+        'max_quantity': '数量超过该服务最高限制',
+        'duplicate': '请勿重复提交相同链接的订单',
+        'comments': '自定义评论内容不符合规范，请修改后重试',
+      };
+      let friendlyMsg = rawErr;
+      for (const [key, val] of Object.entries(errMap)) {
+        if (rawErr.toLowerCase().includes(key)) { friendlyMsg = val; break; }
+      }
+      res.json({ status: 'error', message: friendlyMsg });
     }
   } catch (e) {
     await t.rollback();
-    res.json({ status: 'error', message: `内部错误: ${e.message}` });
+    res.json({ status: 'error', message: '系统繁忙，请稍后重试' });
   }
 });
 
