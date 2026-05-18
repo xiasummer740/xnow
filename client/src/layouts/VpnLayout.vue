@@ -1,5 +1,5 @@
 <template>
-  <div class="h-[100dvh] w-full flex bg-slate-950 relative overflow-hidden">
+  <div class="h-[100dvh] w-full flex bg-[#060b18] relative overflow-hidden">
     <div v-if="isSidebarOpen" @click="isSidebarOpen = false" class="fixed inset-0 bg-black/60 z-[9998] md:hidden backdrop-blur-sm transition-opacity"></div>
 
     <aside :class="['fixed md:relative z-[9999] md:z-50 h-full w-60 bg-slate-900/95 border-r border-slate-800 flex flex-col backdrop-blur-xl transition-transform duration-300 ease-in-out', isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0']">
