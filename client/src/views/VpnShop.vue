@@ -1,21 +1,69 @@
 <template>
   <div class="max-w-4xl mx-auto pb-12 space-y-6">
     <!-- Hero -->
-    <div class="text-center pt-6 pb-4">
-      <div class="inline-block mb-4 px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-bold tracking-widest uppercase">Xray Core · VLESS / VMess / Trojan · 余额支付 · 秒开通</div>
-      <h1 class="text-3xl md:text-4xl font-black text-white tracking-wider mb-3">{{ appStore.lang === 'zh' ? '全球高速网络，一键连接' : 'Borderless Internet' }}</h1>
-      <p class="text-slate-400 text-sm max-w-xl mx-auto">{{ appStore.lang === 'zh' ? '选择节点，配置流量和时长，余额支付后即刻获取加密隧道。' : 'Pick a location, configure traffic, pay with balance, get connected.' }}</p>
-      <div class="flex justify-center gap-6 mt-6 text-center">
-        <div><div class="text-2xl font-black text-white">{{ nodes.length || '—' }}</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang==='zh'?'全球节点':'Nodes' }}</div></div>
-        <div><div class="text-2xl font-black text-emerald-400">99.9%</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang==='zh'?'在线率':'Uptime' }}</div></div>
-        <div><div class="text-2xl font-black text-white">24/7</div><div class="text-xs text-slate-500 mt-1">{{ appStore.lang==='zh'?'技术支持':'Support' }}</div></div>
-        <div><div class="text-2xl font-black text-emerald-400">TLS</div><div class="text-xs text-slate-500 mt-1">+Reality</div></div>
+    <div class="text-center pt-6 pb-4 space-y-5">
+      <div class="inline-block px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-bold tracking-widest uppercase">专为 TikTok / IG / YouTube 创作者打造</div>
+      <h1 class="text-3xl md:text-5xl font-black text-white tracking-wider leading-tight">
+        {{ appStore.lang === 'zh' ? '账号在哪，IP就在哪' : 'Your IP, Where Your Audience Is' }}
+      </h1>
+      <p class="text-slate-400 text-sm max-w-2xl mx-auto leading-relaxed">
+        {{ appStore.lang === 'zh' ? 'TikTok限流？账号莫名其妙被标记？直播卡顿掉帧？做跨境自媒体，IP纯净度决定账号生死。我们专为海外社媒玩家定制——原生住宅IP，TLS+Reality伪装，让你的流量真正"像当地人"。' : 'Shadow ban on TikTok? IP flagged? Laggy streams? For cross-border creators, IP purity is everything. Residential IPs with TLS+Reality obfuscation — make your traffic look 100% local.' }}
+      </p>
+
+      <!-- Pain point cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto text-left">
+        <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-emerald-500/30 transition">
+          <div class="text-2xl mb-2">🎯</div>
+          <h4 class="text-white font-bold text-sm mb-1">{{ appStore.lang==='zh'?'精准定位':'Geo-Targeting' }}</h4>
+          <p class="text-slate-500 text-xs leading-relaxed">{{ appStore.lang==='zh'?'原生住宅IP，TikTok算法识别为本地用户，推流权重翻倍。' : 'Residential IPs. TikTok algorithm sees you as local. Double your reach.' }}</p>
+        </div>
+        <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-emerald-500/30 transition">
+          <div class="text-2xl mb-2">🛡️</div>
+          <h4 class="text-white font-bold text-sm mb-1">{{ appStore.lang==='zh'?'防封防标记':'Anti-Ban' }}</h4>
+          <p class="text-slate-500 text-xs leading-relaxed">{{ appStore.lang==='zh'?'TLS指纹伪装为普通浏览器流量，平台无法识别你用了代理。' : 'TLS fingerprinting masks proxy traffic as regular browsing. Undetectable.' }}</p>
+        </div>
+        <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-emerald-500/30 transition">
+          <div class="text-2xl mb-2">⚡</div>
+          <h4 class="text-white font-bold text-sm mb-1">{{ appStore.lang==='zh'?'直播不卡顿':'Zero Lag' }}</h4>
+          <p class="text-slate-500 text-xs leading-relaxed">{{ appStore.lang==='zh'?'CN2 GIA / CMIN2 优化线路，直播推流低延迟不掉帧。' : 'Premium bandwidth. Smooth live streaming without frame drops.' }}</p>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="flex justify-center gap-8 text-center pt-2">
+        <div><div class="text-xl font-black text-white">{{ nodes.length || '—' }}</div><div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">{{ appStore.lang==='zh'?'全球节点':'Nodes' }}</div></div>
+        <div><div class="text-xl font-black text-emerald-400">99.9%</div><div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">{{ appStore.lang==='zh'?'在线率':'Uptime' }}</div></div>
+        <div><div class="text-xl font-black text-white">Reality</div><div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">协议伪装</div></div>
+        <div><div class="text-xl font-black text-emerald-400">秒开</div><div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">自动部署</div></div>
       </div>
     </div>
 
     <!-- Protocol bar -->
     <div class="flex justify-center gap-3 flex-wrap">
-      <span v-for="p in ['VLESS','VMess','Trojan','Shadowsocks','Hysteria']" :key="p" class="text-[11px] font-bold text-slate-500 bg-slate-800/60 border border-slate-700 rounded-full px-3 py-1">{{ p }}</span>
+      <span v-for="p in ['VLESS + Reality','VMess + WS','Trojan + TLS','Shadowsocks','Hysteria2']" :key="p" class="text-[11px] font-bold text-slate-500 bg-slate-800/60 border border-slate-700 rounded-full px-3 py-1">{{ p }}</span>
+    </div>
+
+    <!-- Why VPN matters -->
+    <div class="bg-slate-800/30 border border-slate-700/50 rounded-3xl p-6 max-w-3xl mx-auto">
+      <h3 class="text-sm font-black text-white text-center mb-5">🤔 {{ appStore.lang === 'zh' ? '为什么TikTok玩家都在用专属节点？' : 'Why TikTok creators use dedicated nodes?' }}</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        <div class="flex gap-3">
+          <span class="text-emerald-400 flex-shrink-0 mt-0.5">✅</span>
+          <div><span class="text-white font-bold">账号限流？</span><span class="text-slate-400"> 公用机场IP被万人用，TikTok早就标记了。独享原生IP才是解药。</span></div>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-emerald-400 flex-shrink-0 mt-0.5">✅</span>
+          <div><span class="text-white font-bold">0播放/Shadow Ban？</span><span class="text-slate-400"> IP不干净，内容再好也推不出去。纯净住宅IP，算法信任从第一帧开始。</span></div>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-emerald-400 flex-shrink-0 mt-0.5">✅</span>
+          <div><span class="text-white font-bold">直播卡顿掉帧？</span><span class="text-slate-400"> 普通线路晚高峰拥堵。CMIN2优化线路，跨国直播也能稳60帧。</span></div>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-emerald-400 flex-shrink-0 mt-0.5">✅</span>
+          <div><span class="text-white font-bold">多账号矩阵被封？</span><span class="text-slate-400"> 同IP登录多个账号 = 批量送死。每号独立IP，矩阵稳如磐石。</span></div>
+        </div>
+      </div>
     </div>
 
     <div v-if="loading" class="flex justify-center py-12"><div class="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div></div>
