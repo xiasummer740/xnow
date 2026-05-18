@@ -95,9 +95,9 @@ export const autoSyncServices = async () => {
 
     // 清理已下架的服务(排序值仍为999999的)
     const deleted = await Service.destroy({ where: { sort: 999999 } });
-    if (deleted > 0) console.log(\`🗑️ [AutoSync] 已清理 \${deleted} 条下架服务\`);
+    if (deleted > 0) console.log("🗑️ [AutoSync] 已清理 " + deleted + " 条下架服务");
 
-    console.log(\`✅ [AutoSync] 所有 \${servicesToInsert.length} 条服务已绝对安全地写入数据库，未发生内存溢出！\`);
+    console.log("✅ [AutoSync] 所有 " + servicesToInsert.length + " 条服务已绝对安全地写入数据库，未发生内存溢出！");
   } catch (err) {
     console.error('❌ [AutoSync] 致命错误:', err.message);
   }

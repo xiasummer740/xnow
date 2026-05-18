@@ -132,25 +132,34 @@ import { useAppStore } from '../stores/app';
 
 const userStore = useUserStore(); const uiStore = useUiStore(); const appStore = useAppStore();
 
-const platforms = { 'TikTok': '🎵', 'Telegram': '✈️', 'Facebook': '📘', 'Instagram': '📸', 'Twitter': '🐦', 'Line': '💬', 'Shopee': '🛍️', 'WhatsApp': '📞', 'Traffic': '🌐', '其他': '➕', '全部': '≡' };
+const platforms = { 'TikTok': '🎵', 'Telegram': '✈️', 'Facebook': '📘', 'Instagram': '📸', 'Twitter': '🐦', 'YouTube': '▶️', 'Spotify': '🎧', 'Snapchat': '👻', 'Google': '🔍', 'Discord': '🎮', 'LinkedIn': '💼', 'Reddit': '🤖', 'Traffic': '🌐', '其他': '➕', '全部': '≡' };
 const platformKeywords = {
   'TikTok': ['tiktok', 'tk', '抖音'],
   'Telegram': ['telegram', 'tg', '电报'],
   'Facebook': ['facebook', 'fb', '脸书'],
   'Instagram': ['instagram', 'ig', 'ins', '照片'],
   'Twitter': ['twitter', 'x', '推特'],
+  'YouTube': ['youtube', 'yt'],
+  'Spotify': ['spotify'],
+  'Snapchat': ['snapchat', 'snap'],
+  'Google': ['google maps', 'google real', 'google knowledge'],
+  'Discord': ['discord'],
+  'LinkedIn': ['linkedin'],
+  'Reddit': ['reddit'],
   'Line': ['line', '连我'],
   'Shopee': ['shopee', '虾皮'],
   'WhatsApp': ['whatsapp', 'wa'],
   'Traffic': ['traffic', 'website', 'seo', '流量', '网站']
 };
 
-const platformGuideLinks = { 
-    'TikTok': atob('aHR0cHM6Ly93d3cudGlrdG9rLmNvbS9AdXNlcm5hbWU='), 
-    'Telegram': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'), 
-    'Facebook': atob('aHR0cHM6Ly93d3cuZmFjZWJvb2suY29tL3VzZXJuYW1l'), 
-    'Instagram': atob('aHR0cHM6Ly93d3cuaW5zdGFncmFtLmNvbS91c2VybmFtZQ=='), 
-    'Twitter': atob('aHR0cHM6Ly90d2l0dGVyLmNvbS91c2VybmFtZQ==') 
+const platformGuideLinks = {
+    'TikTok': atob('aHR0cHM6Ly93d3cudGlrdG9rLmNvbS9AdXNlcm5hbWU='),
+    'Telegram': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'),
+    'Facebook': atob('aHR0cHM6Ly93d3cuZmFjZWJvb2suY29tL3VzZXJuYW1l'),
+    'Instagram': atob('aHR0cHM6Ly93d3cuaW5zdGFncmFtLmNvbS91c2VybmFtZQ=='),
+    'Twitter': atob('aHR0cHM6Ly90d2l0dGVyLmNvbS91c2VybmFtZQ=='),
+    'YouTube': atob('aHR0cHM6Ly93d3cueW91dHViZS5jb20vd2F0Y2g/dj1YWFhYWFhYWA=='),
+    'Snapchat': atob('aHR0cHM6Ly93d3cuc25hcGNoYXQuY29tL2FkZC91c2VybmFtZQ=='),
 };
 
 const rawServices = ref([]);
