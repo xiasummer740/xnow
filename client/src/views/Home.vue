@@ -86,6 +86,30 @@
       </div>
     </section>
 
+    <!-- Service Preview -->
+    <section class="relative z-20 max-w-5xl mx-auto px-6 py-16">
+      <h2 class="text-center text-2xl font-black text-white mb-2 tracking-wider">📊 {{ appStore.lang === 'zh' ? '热门服务预览' : 'Popular Services' }}</h2>
+      <p class="text-center text-slate-500 text-sm mb-8">{{ appStore.lang === 'zh' ? '更多服务请登录后查看 · 价格随倍率浮动' : 'More services after login' }}</p>
+      <div v-if="previewLoading" class="flex justify-center py-8"><div class="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div></div>
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div v-for="s in previewServices" :key="s.service"
+          class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-amber-500/20 transition text-left">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] text-slate-500 truncate max-w-[70%]" :title="s.category">{{ s.category?.substring(0, 20) }}</span>
+            <span class="text-[10px] font-mono text-amber-400">ID:{{ s.service }}</span>
+          </div>
+          <div class="text-xs text-slate-300 font-bold leading-snug mb-3 line-clamp-2" :title="s.name">{{ s.name?.substring(0, 40) }}</div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-500">¥{{ s.rate }}/千</span>
+            <span class="text-sm font-black text-amber-400">¥{{ s.sell_price?.toFixed(2) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-center mt-8">
+        <router-link to="/login" class="inline-block bg-amber-400 hover:bg-amber-300 text-slate-900 font-black px-8 py-3 rounded-xl transition transform hover:-translate-y-1 shadow-[0_8px_20px_rgba(251,191,36,0.3)]">{{ appStore.lang === 'zh' ? '🔓 登录查看全部 2998 个服务' : '🔓 Login to see all 2998 services' }}</router-link>
+      </div>
+    </section>
+
     <!-- FAQ -->
     <section class="relative z-20 max-w-2xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ' }}</h2>
@@ -117,6 +141,30 @@ import { useUserStore } from '../stores/user';
 const appStore = useAppStore();
 const userStore = useUserStore();
 const vpnShopEnabled = ref(true);
+const previewServices = ref([]);
+const previewLoading = ref(true);
+
+// 加载公开服务预览
+const loadPreview = async () => {
+  try {
+    const r = await fetch('/api/services/public');
+    const d = await r.json();
+    if (d.status === 'success' && Array.isArray(d.data)) {
+      // 取主要平台的热门服务
+      const platforms = ['TikTok', 'Instagram', 'YouTube', 'Telegram', 'Facebook', 'X', 'Traffic', 'Google'];
+      const seen = new Set();
+      previewServices.value = d.data.filter(s => {
+        const cat = (s.category || '').toLowerCase();
+        const match = platforms.find(p => cat.includes(p.toLowerCase()));
+        if (match && !seen.has(match)) { seen.add(match); return true; }
+        return false;
+      }).slice(0, 8);
+      // 不足则补
+      if (previewServices.value.length < 4) previewServices.value = d.data.slice(0, 8);
+    }
+  } catch (e) {}
+  previewLoading.value = false;
+};
 
 const platforms = [
   { name: 'TikTok', icon: '🎵' },
@@ -139,6 +187,7 @@ const faqs = reactive([
 
 onMounted(async () => {
   appStore.fetchConfig();
+  loadPreview();
   try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {}
 });
 </script>
