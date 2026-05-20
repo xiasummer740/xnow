@@ -157,11 +157,14 @@ const loadPreview = async () => {
       ];
       previewServices.value = [];
       for (const t of targets) {
-        const match = d.data.find(s => {
+        const candidates = d.data.filter(s => {
           const cat = (s.category || '').toLowerCase();
           return cat.includes(t.kw) && parseFloat(s.rate) > 0 && parseFloat(s.rate) < 100;
         });
-        if (match) previewServices.value.push({ ...match, _label: t.label });
+        if (candidates.length > 0) {
+          candidates.sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
+          previewServices.value.push({ ...candidates[0], _label: t.label });
+        }
         if (previewServices.value.length >= 8) break;
       }
     }
