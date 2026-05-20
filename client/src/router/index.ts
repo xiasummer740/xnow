@@ -13,7 +13,6 @@ import ApiDoc from '../views/ApiDoc.vue'
 import Affiliate from '../views/Affiliate.vue'
 import VpnShop from '../views/VpnShop.vue'
 import VpnClients from '../views/VpnClients.vue'
-import Pricing from '../views/Pricing.vue'
 import VpnAdmin from '../views/VpnAdmin.vue'
 
 const routes = [
@@ -29,8 +28,7 @@ const routes = [
       // 💡 核心修复：精准挂载灾备中心组件 (按需懒加载)
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: ApiDoc },
-      { path: 'affiliate', component: Affiliate },
-      { path: 'pricing', component: Pricing }
+      { path: 'affiliate', component: Affiliate }
     ]
   },
   { path: '/vpn', component: VpnLayout, children: [
