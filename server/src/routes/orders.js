@@ -43,7 +43,10 @@ router.post('/add', authenticate, async (req, res) => {
       finalMultiplier = baseMultiplier * agentDiscount; 
     }
 
-    const sellRate = parseFloat(service.rate) * finalMultiplier;
+    const baseRate = service.custom_rate !== null && service.custom_rate !== undefined
+      ? parseFloat(service.custom_rate)
+      : parseFloat(service.rate);
+    const sellRate = baseRate * finalMultiplier;
     const charge = ((parseInt(quantity) / 1000) * sellRate).toFixed(4);
     const upstream_charge = ((parseInt(quantity) / 1000) * parseFloat(service.rate)).toFixed(4);
 
@@ -180,7 +183,10 @@ router.post('/batch', authenticate, async (req, res) => {
         finalMultiplier = baseMultiplier * agentDiscount;
       }
 
-      const sellRate = parseFloat(service.rate) * finalMultiplier;
+      const baseRate = service.custom_rate !== null && service.custom_rate !== undefined
+        ? parseFloat(service.custom_rate)
+        : parseFloat(service.rate);
+      const sellRate = baseRate * finalMultiplier;
       const charge = parseFloat(((qty / 1000) * sellRate).toFixed(4));
       const upstream_charge = parseFloat(((qty / 1000) * parseFloat(service.rate)).toFixed(4));
 

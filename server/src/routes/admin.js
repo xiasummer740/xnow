@@ -4,7 +4,8 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Config, User, Order, Transaction } from '../models/index.js';
+import { Config, User, Order, Transaction, Service } from '../models/index.js';
+import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { createBackup, restoreBackup } from '../utils/backupEngine.js';
@@ -306,6 +307,101 @@ router.post('/backup/delete', authenticate, async (req, res) => {
         res.status(404).json({ status: 'error', message: '未找到该快照文件' });
     }
   } catch (e) { res.status(500).json({ status: 'error', message: '删除失败' }); }
+});
+
+// ====== 分站调价管理 ======
+router.get('/pricing', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = 50;
+    const search = req.query.search || '';
+    const onlyCustom = req.query.only_custom === 'true';
+    const category = req.query.category || '';
+
+    const where = {};
+    if (search) {
+      where[Op.or] = [
+        { service_id: isNaN(search) ? 0 : parseInt(search) },
+        { name: { [Op.like]: '%' + search + '%' } },
+        { category: { [Op.like]: '%' + search + '%' } }
+      ];
+    }
+    if (onlyCustom) where.custom_rate = { [Op.ne]: null };
+    if (category) where.category = category;
+
+    const { count, rows } = await Service.findAndCountAll({
+      where,
+      order: [['sort', 'ASC']],
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      attributes: ['service_id', 'name', 'category', 'rate', 'custom_rate', 'min', 'max']
+    });
+
+    // 获取全局倍率
+    const multiplier = await Config.findOne({ where: { key: 'global_multiplier' } });
+    const mult = parseFloat(multiplier?.value || 2.0);
+
+    res.json({
+      status: 'success',
+      data: {
+        items: rows.map(r => ({
+          id: r.service_id,
+          name: r.name,
+          category: r.category,
+          upstream_rate: parseFloat(r.rate),
+          custom_rate: r.custom_rate !== null ? parseFloat(r.custom_rate) : null,
+          sell_price: parseFloat(((r.custom_rate !== null ? parseFloat(r.custom_rate) : parseFloat(r.rate)) * mult).toFixed(4)),
+          min: r.min,
+          max: r.max
+        })),
+        total: count,
+        page,
+        pageSize,
+        global_multiplier: mult
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// 批量更新自定义价格 (body: { prices: [{id, custom_rate}] })
+router.post('/pricing', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const { prices } = req.body;
+    if (!Array.isArray(prices)) return res.json({ status: 'error', message: '参数格式错误' });
+
+    let updated = 0;
+    for (const item of prices) {
+      if (!item.id) continue;
+      await Service.update(
+        { custom_rate: item.custom_rate === null || item.custom_rate === '' ? null : parseFloat(item.custom_rate) },
+        { where: { service_id: item.id } }
+      );
+      updated++;
+    }
+
+    res.json({ status: 'success', message: '已更新 ' + updated + ' 个服务定价' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// 获取分类列表
+router.get('/categories', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const cats = await Service.findAll({
+      attributes: ['category'],
+      group: ['category'],
+      order: [['category', 'ASC']]
+    });
+    res.json({ status: 'success', data: cats.map(c => c.category) });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
 });
 
 export default router;

@@ -13,7 +13,7 @@ import ApiDoc from '../views/ApiDoc.vue'
 import Affiliate from '../views/Affiliate.vue'
 import VpnShop from '../views/VpnShop.vue'
 import VpnClients from '../views/VpnClients.vue'
-import Sites from '../views/Sites.vue'
+import Pricing from '../views/Pricing.vue'
 import VpnAdmin from '../views/VpnAdmin.vue'
 
 const routes = [
@@ -30,6 +30,7 @@ const routes = [
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: ApiDoc },
       { path: 'affiliate', component: Affiliate },
+      { path: 'pricing', component: Pricing },
       { path: 'sites', component: Sites }
     ]
   },

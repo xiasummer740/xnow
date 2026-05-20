@@ -7,6 +7,7 @@ const Service = sequelize.define('Service', {
   type: { type: DataTypes.STRING(50) },
   category: { type: DataTypes.STRING(255) },
   rate: { type: DataTypes.DECIMAL(30, 6), defaultValue: 0.000000 },
+  custom_rate: { type: DataTypes.DECIMAL(30, 6), allowNull: true },
   min: { type: DataTypes.INTEGER, defaultValue: 100 },
   max: { type: DataTypes.INTEGER, defaultValue: 10000 },
   refill: { type: DataTypes.BOOLEAN, defaultValue: false },

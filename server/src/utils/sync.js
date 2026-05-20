@@ -88,7 +88,7 @@ export const autoSyncServices = async () => {
     for (let i = 0; i < servicesToInsert.length; i += chunkSize) {
       const chunk = servicesToInsert.slice(i, i + chunkSize);
       await Service.bulkCreate(chunk, {
-        updateOnDuplicate: ['name', 'type', 'category', 'rate', 'min', 'max', 'refill', 'cancel', 'description', 'sort']
+        updateOnDuplicate: ['name', 'type', 'category', 'rate', 'min', 'max', 'refill', 'cancel', 'description', 'sort'] // 不覆盖 custom_rate
       });
       await new Promise(resolve => setTimeout(resolve, 300));
     }
