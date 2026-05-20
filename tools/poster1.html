@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=800,height=1200"><title>宣传海报1</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{width:800px;height:1200px;background:linear-gradient(135deg,#060b18 0%,#0f172a 50%,#1a0a2e 100%);font-family:'PingFang SC','Microsoft YaHei',sans-serif;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.stars{position:absolute;inset:0;pointer-events:none}
+.star{position:absolute;background:#fbbf24;border-radius:50%;opacity:0;animation:twinkle 3s infinite}
+@keyframes twinkle{0%,100%{opacity:0;transform:scale(0.5)}50%{opacity:0.8;transform:scale(1)}}
+.card{position:relative;z-index:10;text-align:center;padding:60px 50px;max-width:650px}
+.badge{display:inline-block;padding:8px 24px;border:1px solid rgba(251,191,36,0.3);border-radius:50px;background:rgba(251,191,36,0.08);color:#fbbf24;font-size:14px;font-weight:700;letter-spacing:3px;margin-bottom:30px}
+h1{font-size:56px;font-weight:900;line-height:1.2;margin-bottom:20px;background:linear-gradient(180deg,#fff 0%,#fbbf24 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{color:#94a3b8;font-size:20px;margin-bottom:50px;line-height:1.6}
+.features{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:40px}
+.feat{padding:20px;border:1px solid rgba(148,163,184,0.15);border-radius:16px;background:rgba(15,23,42,0.6);text-align:left;display:flex;gap:14px;align-items:flex-start}
+.feat-icon{font-size:28px;flex-shrink:0}
+.feat h3{color:#fff;font-size:16px;margin-bottom:4px}
+.feat p{color:#64748b;font-size:13px;line-height:1.5}
+.price-tag{display:inline-block;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0f172a;font-size:18px;font-weight:900;padding:12px 32px;border-radius:50px;margin-bottom:30px}
+.cta{display:inline-block;background:#fbbf24;color:#0f172a;font-weight:900;font-size:22px;padding:18px 50px;border-radius:16px;text-decoration:none;box-shadow:0 8px 30px rgba(251,191,36,0.3)}
+.url{color:#64748b;font-size:18px;margin-top:20px;letter-spacing:1px}
+.floating{position:absolute;color:rgba(251,191,36,0.08);font-size:14px;font-family:monospace;font-weight:700;animation:float 20s linear infinite;pointer-events:none}
+@keyframes float{0%{transform:translateY(1100px) rotate(0)}100%{transform:translateY(-100px) rotate(360deg)}}
+</style></head><body>
+<div class="stars"><script>for(let i=0;i<40;i++){const s=document.createElement('div');s.className='star';s.style.cssText=`left:${Math.random()*100}%;top:${Math.random()*100}%;width:${2+Math.random()*3}px;height:${2+Math.random()*3}px;animation-delay:${Math.random()*3}s`;document.querySelector('.stars').appendChild(s)}</script></div>
+<div class="floating" style="left:5%">E=mc²</div><div class="floating" style="left:20%;animation-delay:-5s">iħ∂ψ/∂t=Hψ</div><div class="floating" style="left:40%;animation-delay:-10s">∇×E=-∂B/∂t</div><div class="floating" style="left:60%;animation-delay:-3s">S=k·logW</div><div class="floating" style="left:75%;animation-delay:-8s">e^(iπ)+1=0</div><div class="floating" style="left:88%;animation-delay:-15s">ΔxΔp≥ħ/2</div>
+<div class="card">
+<div class="badge">🚀 TIKTOK · INSTAGRAM · YOUTUBE · TELEGRAM</div>
+<h1>让你的社交媒体<br>火速出圈</h1>
+<p class="subtitle">粉丝 · 点赞 · 播放量 · 评论 · 转发<br>全平台覆盖 秒级交付 无需密码</p>
+<div class="features">
+<div class="feat"><div class="feat-icon">⚡</div><div><h3>秒级自动交付</h3><p>下单后秒级启动，极速完成</p></div></div>
+<div class="feat"><div class="feat-icon">💎</div><div><h3>全网最低价</h3><p>TikTok千粉 ¥6.5 起</p></div></div>
+<div class="feat"><div class="feat-icon">🔒</div><div><h3>安全无需密码</h3><p>只要链接 不要账号密码</p></div></div>
+<div class="feat"><div class="feat-icon">🛡️</div><div><h3>独立IP节点</h3><p>跨境运营防封必备</p></div></div>
+</div>
+<div class="price-tag" id="livePrice">TikTok千粉最低 ¥--/千</div><br>
+<a class="cta" href="https://xnow.taikon.top">⚡ 立即注册体验</a>
+<p class="url">xnow.taikon.top</p>
+</div>
+<script>
+(async function(){
+  try {
+    const r = await fetch('/api/services/public');
+    const d = await r.json();
+    if (d.status==='success' && Array.isArray(d.data)) {
+      const tiktok = d.data.filter(s => (s.category||'').toLowerCase().includes('tiktok - 刷粉') && parseFloat(s.rate)>0 && parseFloat(s.rate)<100);
+      if (tiktok.length > 0) {
+        tiktok.sort((a,b) => parseFloat(a.rate) - parseFloat(b.rate));
+        document.getElementById('livePrice').textContent = 'TikTok千粉最低 ¥' + tiktok[0].sell_price.toFixed(2) + '/千';
+      }
+    }
+  } catch(e) {}
+})();
+</script>
+</body></html>
