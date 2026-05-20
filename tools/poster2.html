@@ -1,31 +1,38 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=800,height=1200"><title>宣传海报 - 实时价格</title>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=1080,height=1920"><title>价格菜单海报</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}
-body{width:800px;min-height:1200px;background:linear-gradient(160deg,#0a0e1a 0%,#111827 50%,#0a1628 100%);font-family:'PingFang SC','Microsoft YaHei',sans-serif;padding:50px 60px;position:relative;overflow:hidden}
-.glow1{position:absolute;top:-100px;right:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(251,191,36,0.12),transparent);border-radius:50%;pointer-events:none}
-.glow2{position:absolute;bottom:-100px;left:-100px;width:350px;height:350px;background:radial-gradient(circle,rgba(59,130,246,0.1),transparent);border-radius:50%;pointer-events:none}
-h1{font-size:40px;font-weight:900;color:#fff;text-align:center;margin-bottom:8px;position:relative;z-index:10}
-.sub{text-align:center;color:#64748b;font-size:16px;margin-bottom:40px;position:relative;z-index:10}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;position:relative;z-index:10;margin-bottom:40px}
-.item{background:rgba(15,23,42,0.8);border:1px solid rgba(71,85,105,0.2);border-radius:14px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between}
-.item-left{display:flex;align-items:center;gap:12px}
-.icon{font-size:28px;flex-shrink:0}
-.info h3{color:#e2e8f0;font-size:15px;font-weight:700;margin-bottom:3px}
-.info span{color:#64748b;font-size:11px}
+body{width:1080px;min-height:1920px;background:linear-gradient(160deg,#0a0e1a 0%,#111827 50%,#0a1628 100%);font-family:'PingFang SC','Microsoft YaHei',sans-serif;padding:70px 80px;position:relative;overflow:hidden}
+.glow1{position:absolute;top:-120px;right:-120px;width:500px;height:500px;background:radial-gradient(circle,rgba(251,191,36,0.1),transparent);border-radius:50%;pointer-events:none}
+.glow2{position:absolute;bottom:-120px;left:-120px;width:450px;height:450px;background:radial-gradient(circle,rgba(59,130,246,0.08),transparent);border-radius:50%;pointer-events:none}
+h1{font-size:56px;font-weight:900;color:#fff;text-align:center;margin-bottom:10px;position:relative;z-index:10}
+.sub{text-align:center;color:#64748b;font-size:24px;margin-bottom:55px;position:relative;z-index:10}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;position:relative;z-index:10;margin-bottom:50px}
+.item{background:rgba(15,23,42,0.8);border:1px solid rgba(71,85,105,0.2);border-radius:20px;padding:28px 30px;display:flex;align-items:center;justify-content:space-between}
+.item-left{display:flex;align-items:center;gap:18px}
+.icon{font-size:44px;flex-shrink:0}
+.info h3{color:#e2e8f0;font-size:22px;font-weight:700;margin-bottom:4px}
+.info span{color:#64748b;font-size:16px}
 .price{text-align:right;flex-shrink:0}
-.price .from{color:#64748b;font-size:10px;margin-bottom:2px}
-.price .num{color:#fbbf24;font-size:22px;font-weight:900}
-.price .unit{color:#64748b;font-size:11px}
-.highlight{border-color:rgba(251,191,36,0.3);background:linear-gradient(135deg,rgba(251,191,36,0.05),rgba(15,23,42,0.8))}
-.bottom{position:relative;z-index:10;text-align:center;background:rgba(15,23,42,0.8);border:1px solid rgba(71,85,105,0.2);border-radius:16px;padding:24px;margin-bottom:20px}
-.bottom h3{color:#fff;font-size:18px;font-weight:700;margin-bottom:8px}
-.bottom p{color:#94a3b8;font-size:13px;line-height:1.6}
-.url{text-align:center;color:#fbbf24;font-size:24px;font-weight:900;letter-spacing:2px;position:relative;z-index:10;margin-top:10px}
-.tag{display:inline-block;padding:3px 10px;background:rgba(251,191,36,0.15);color:#fbbf24;border-radius:50px;font-size:10px;font-weight:700;margin-left:6px}
+.price .from{color:#64748b;font-size:14px;margin-bottom:4px}
+.price .num{color:#fbbf24;font-size:34px;font-weight:900}
+.price .unit{color:#64748b;font-size:16px}
+.highlight{border-color:rgba(251,191,36,0.35);background:linear-gradient(135deg,rgba(251,191,36,0.06),rgba(15,23,42,0.8))}
+.bottom{position:relative;z-index:10;text-align:center;background:rgba(15,23,42,0.8);border:1px solid rgba(71,85,105,0.2);border-radius:20px;padding:35px;margin-bottom:30px}
+.bottom h3{color:#fff;font-size:26px;font-weight:700;margin-bottom:12px}
+.bottom p{color:#94a3b8;font-size:20px;line-height:1.6}
+.url{text-align:center;color:#fbbf24;font-size:36px;font-weight:900;letter-spacing:3px;position:relative;z-index:10;margin-top:15px}
+.tag{display:inline-block;padding:4px 14px;background:rgba(251,191,36,0.15);color:#fbbf24;border-radius:50px;font-size:14px;font-weight:700;margin-left:8px}
+.extra{position:relative;z-index:10;text-align:center;margin-top:30px}
+.extra span{display:inline-block;background:rgba(15,23,42,0.8);border:1px solid rgba(71,85,105,0.2);color:#64748b;font-size:18px;padding:12px 28px;border-radius:50px;margin:6px}
 </style></head><body>
 <div class="glow1"></div><div class="glow2"></div>
 <h1>📊 热门服务 & 实时价格</h1>
 <p class="sub">全平台覆盖 · 价格随倍率实时更新 · 登录查看全部</p>
-<div class="grid" id="priceGrid"><div style="color:#64748b;text-align:center;grid-column:1/-1;padding:40px">⏳ 加载实时价格中...</div></div>
+<div class="grid" id="priceGrid"><div style="color:#64748b;text-align:center;grid-column:1/-1;padding:50px;font-size:20px">⏳ 加载实时价格中...</div></div>
+<div class="extra">
+  <span>✨ 还有 Spotify / Discord / LinkedIn / Pinterest / Reddit / Line / Shopee</span>
+  <span>🌐 30+ 国家网站流量</span>
+  <span>🗺️ Google Maps 评价</span>
+</div>
 <div class="bottom">
 <h3>🔐 安全 · 免密码 · 秒级交付</h3>
 <p>只要目标链接，不要账号密码。全自动API对接，下单后秒级启动。<br>支持微信/支付宝/USDT充值，单次500元以上免手续费。</p>
@@ -65,9 +72,9 @@ h1{font-size:40px;font-weight:900;color:#fff;text-align:center;margin-bottom:8px
         html += `<div class="${cls}"><div class="item-left"><div class="icon">${t.icon}</div><div class="info"><h3>${t.label}${hotTag}</h3><span>${t.desc}</span></div></div><div class="price"><div class="from">起</div><div class="num">¥${s.sell_price.toFixed(2)}</div><div class="unit">/${t.unit}</div></div></div>`;
       }
     }
-    grid.innerHTML = html || '<div style="color:#ef4444;text-align:center;grid-column:1/-1;padding:40px">⚠ 加载失败，请刷新重试</div>';
+    grid.innerHTML = html || '<div style="color:#ef4444;text-align:center;grid-column:1/-1;padding:50px;font-size:20px">⚠ 加载失败，请刷新重试</div>';
   } catch(e) {
-    grid.innerHTML = '<div style="color:#ef4444;text-align:center;grid-column:1/-1;padding:40px">⚠ 加载失败: ' + e.message + '</div>';
+    grid.innerHTML = '<div style="color:#ef4444;text-align:center;grid-column:1/-1;padding:50px;font-size:20px">⚠ 加载失败: ' + e.message + '</div>';
   }
 })();
 </script>
