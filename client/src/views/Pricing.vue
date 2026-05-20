@@ -181,7 +181,14 @@ const batchReset = async () => {
   } catch (e) { uiStore.showToast('网络错误', 'error'); }
 };
 
-onMounted(() => { fetchData(); fetchCategories(); });
+onMounted(() => {
+  if (!userStore.token) {
+    uiStore.showToast('请先登录', 'error');
+    return;
+  }
+  fetchData().catch(e => console.error('Pricing fetch error:', e));
+  fetchCategories().catch(e => console.error('Categories fetch error:', e));
+});
 </script>
 
 <style>

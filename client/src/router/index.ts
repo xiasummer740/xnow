@@ -30,8 +30,7 @@ const routes = [
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: ApiDoc },
       { path: 'affiliate', component: Affiliate },
-      { path: 'pricing', component: Pricing },
-      { path: 'sites', component: Sites }
+      { path: 'pricing', component: Pricing }
     ]
   },
   { path: '/vpn', component: VpnLayout, children: [
