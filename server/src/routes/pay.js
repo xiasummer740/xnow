@@ -4,6 +4,7 @@ import { Config, Transaction, sequelize, User } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import axios from 'axios';
 import { sendTgMessage } from '../utils/tgBot.js';
+import { addPendingPayment, markCompleted, markFailed, getPendingPayments, markProcessing, cleanOldPayments } from '../utils/paymentTracker.js';
 
 const router = express.Router();
 const md5 = (str) => crypto.createHash('md5').update(str).digest('hex');
@@ -39,6 +40,8 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
 
         const signStr = name + pay_type + price + order_id + order_uid + notify_url + return_url + feedback_url + conf.bufpay_key;
         const sign = md5(signStr);
+
+    addPendingPayment({ order_id, user_id: req.user.id, amount: amountFloat, pay_type });
 
         res.json({
             status: 'success', target_url: `https://bufpay.com/api/pay/${realBufId}`, order_id: order_id,
@@ -88,6 +91,7 @@ router.get('/status', authenticate, async (req, res) => {
                 const response = await axios.get(`https://bufpay.com/api/query/${aoid}`, { timeout: 3000 });
                 if (response.data.status === 'success' || response.data.status === 'payed') {
                     await handleSuccessPay(order_id, req.user.id, amount, 'BufPay补单');
+                    markCompleted(order_id);
                     return res.json({ status: 'success' });
                 }
             } catch(ignore) {}
@@ -102,7 +106,7 @@ router.get('/return/bufpay', async (req, res) => {
         const conf = await Config.findOne({ where: { key: 'bufpay_key' } });
         if (conf) {
             const localSign = md5(aoid + order_id + order_uid + price + pay_price + conf.value);
-            if (localSign === sign) await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回');
+            if (localSign === sign) { await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回'); markCompleted(order_id); }
         }
     } catch (e) {}
     res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>支付成功</title><style>body { background: #0f172a; color: #34d399; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }</style></head><body><h2>支付成功，正在自动跳转...</h2><script>if(window.parent!==window){window.parent.postMessage({type:'pay_success'},'*');}else{window.location.href='/recharge';}</script></body></html>`);
@@ -116,6 +120,7 @@ router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req
         const localSign = md5(aoid + order_id + order_uid + price + pay_price + conf.value);
         if (localSign !== sign) return res.status(400).send('Sign Error');
         await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay异步回调');
+        markCompleted(order_id);
         res.status(200).send('ok');
     } catch (e) { res.status(500).send('Error'); }
 });
@@ -181,3 +186,40 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
     } catch (e) { await t.rollback(); }
 }
 export default router;
+
+
+// ============================================================
+// 支付补单引擎 - 每2分钟自动执行，处理回调失败的单子
+// ============================================================
+export async function reconcilePayments() {
+  const list = getPendingPayments()
+  const now = Date.now()
+  for (const pay of list) {
+    if (pay.status !== 'pending') continue
+    const age = now - new Date(pay.created_at).getTime()
+    if (age < 180000) continue
+    if (pay.retry_count >= 5) { markFailed(pay.order_id, 'over max retry'); continue }
+    markProcessing(pay.order_id)
+    try {
+      const exist = await Transaction.findOne({
+        where: { description: { [sequelize.Sequelize.Op.like]: '%' + pay.order_id + '%' } }
+      })
+      if (exist) { markCompleted(pay.order_id); continue }
+      try {
+        const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
+        if (res.data && (res.data.status === 'success' || res.data.status === 'payed')) {
+          await handleSuccessPay(pay.order_id, pay.user_id, res.data.pay_price || pay.amount, 'BufPay auto')
+          markCompleted(pay.order_id)
+          continue
+        }
+      } catch(e) {}
+      if (age > 1800000) {
+        markFailed(pay.order_id, 'callback timeout')
+        sendTgMessage('Payment callback missing: ' + pay.order_id + ' user:' + pay.user_id + ' amount:' + pay.amount)
+      }
+    } catch(e) {
+      console.error('reconcile error', pay.order_id, e.message)
+    }
+  }
+  cleanOldPayments()
+}

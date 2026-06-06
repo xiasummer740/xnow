@@ -21,6 +21,7 @@ import ordersRoutes from './routes/orders.js';
 import transactionsRoutes from './routes/transactions.js';
 import sitesRoutes from './routes/sites.js';
 import vpnRoutes from './routes/vpn.js';
+import { reconcilePayments } from './routes/pay.js';
 
 dotenv.config();
 const app = express();
@@ -100,4 +101,5 @@ app.listen(PORT, async () => {
   setInterval(autoBackupTask, 1000 * 60 * 5);
   setTimeout(autoSyncAnnouncement, 30000);
   setInterval(autoSyncAnnouncement, 1000 * 60 * 30);
+  setInterval(reconcilePayments, 1000 * 60 * 2);
 });
