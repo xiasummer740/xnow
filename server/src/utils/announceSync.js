@@ -1,5 +1,6 @@
 import https from 'https';
 import { Config } from '../models/index.js';
+import { sendTgMessage } from './tgBot.js';
 
 const fetchPage = (urlStr, options = {}) => {
   const u = new URL(urlStr);
@@ -36,6 +37,7 @@ const getCleanAnnouncement = (raw) => {
 };
 
 export const autoSyncAnnouncement = async () => {
+  console.log("📢 [AutoAnnounce] 开始检查上游公告...");
   try {
     const urlConf = await Config.findOne({ where: { key: 'upstream_url' } });
     const loginUser = await Config.findOne({ where: { key: 'upstream_login_user' } });
@@ -102,8 +104,10 @@ export const autoSyncAnnouncement = async () => {
       const dateMatch = newContent.match(/【([^】]+)】/);
       const version = dateMatch ? dateMatch[1] : '最新';
       console.log('📢 [AutoAnnounce] 公告已自动更新为: ' + version);
+        sendTgMessage('📢 <b>公告已自动同步</b>\
+版本: ' + version);
     }
   } catch (e) {
-    // 静默失败，不影响主流程
+    console.error('[AutoAnnounce] 同步失败:', e.message);
   }
 };
