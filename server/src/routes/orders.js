@@ -63,7 +63,7 @@ router.post('/add', authenticate, async (req, res) => {
     const keyConf = await Config.findOne({where:{key:'upstream_key'}, transaction: t});
     
     if (!urlConf?.value || !keyConf?.value) {
-      await t.rollback(); return res.json({ status: 'error', message: '系统尚未配置上游API密钥' });
+      await t.rollback(); return res.json({ status: 'error', message: '服务配置异常，请联系管理员' });
     }
 
     // 💡 核心修复 2：动态组装上游 API 载荷，绝不漏掉评论数据
@@ -77,7 +77,7 @@ router.post('/add', authenticate, async (req, res) => {
       upRes = await axios.post(urlConf.value, payload.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 });
     } catch (axiosErr) {
       await t.rollback();
-      return res.json({ status: 'error', message: '网络异常，上游接口未响应，订单已阻断扣款' });
+      return res.json({ status: 'error', message: '服务暂不可用，请稍后重试' });
     }
     
     if (upRes.data && upRes.data.order) {
@@ -106,9 +106,9 @@ router.post('/add', authenticate, async (req, res) => {
       res.json({ status: 'success', message: '✅ 订单已秒级提交至全网', order_id: newOrder.order_no });
     } else {
       await t.rollback();
-      const rawErr = String(upRes.data?.error || upRes.data?.message || '上游返回异常状态');
+      const rawErr = String(upRes.data?.error || upRes.data?.message || '服务异常，请稍后重试');
       const errMap = {
-        'not enough funds': '上游账户余额不足，请联系管理员充值',
+        'not enough funds': '服务暂不可用，充值补货中，请稍后再试',
         'incorrect request': '请求参数有误，请检查链接格式或服务是否有效',
         'invalid link': '目标链接无效，请检查链接格式',
         'service not found': '该服务已下架或暂停，请选择其他服务',
@@ -142,7 +142,7 @@ router.post('/batch', authenticate, async (req, res) => {
   const configs = await Config.findAll({ where: { key: ['global_multiplier', 'agent_discount', 'upstream_url', 'upstream_key'] } });
   const conf = {}; configs.forEach(c => conf[c.key] = c.value);
   if (!conf.upstream_url || !conf.upstream_key) {
-    return res.json({ status: 'error', message: '系统尚未配置上游API密钥' });
+    return res.json({ status: 'error', message: '服务配置异常，请联系管理员' });
   }
 
   const baseMultiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
@@ -225,7 +225,7 @@ router.post('/batch', authenticate, async (req, res) => {
         results.push({ serviceId, link, quantity: qty, status: 'success', order_no: orderNo, charge });
       } else {
         await t.rollback();
-        results.push({ serviceId, link, quantity, status: 'error', message: upRes.data?.error || '上游异常' });
+        results.push({ serviceId, link, quantity, status: 'error', message: upRes.data?.error || '服务暂不可用，请稍后重试' });
       }
     } catch (e) {
       await t.rollback().catch(() => {});
