@@ -32,9 +32,8 @@ else
   echo "  ✓ 已安装"
 fi
 npm install -g pm2 > /dev/null 2>&1
-# 动态获取 PM2 路径（兼容 tarball/apt/nvm 等任意 Node 安装方式）
-PM2_BIN=$(npm root -g 2>/dev/null)/../bin/pm2
-[ -f "$PM2_BIN" ] && ln -sf "$PM2_BIN" /usr/local/bin/pm2 2>/dev/null || true
+# 将 pm2 从全局 bin 目录链接到 /usr/local/bin（兼容任意 Node 安装方式）
+ln -sf "$(npm bin -g)/pm2" /usr/local/bin/pm2 2>/dev/null || true
 echo "  ✓ PM2"
 
 # ── MySQL ──────────────────────────────────────────────
