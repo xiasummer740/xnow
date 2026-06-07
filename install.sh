@@ -32,8 +32,8 @@ else
   echo "  ✓ 已安装"
 fi
 npm install -g pm2 > /dev/null 2>&1
-# 将 pm2 从全局 bin 目录链接到 /usr/local/bin（兼容任意 Node 安装方式）
-ln -sf "$(npm bin -g)/pm2" /usr/local/bin/pm2 2>/dev/null || true
+# 将全局 bin 目录加入 PATH，后续 pm2 命令直接可用
+export PATH="$(npm bin -g):$PATH"
 echo "  ✓ PM2"
 
 # ── MySQL ──────────────────────────────────────────────
