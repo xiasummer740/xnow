@@ -32,8 +32,8 @@ else
   echo "  ✓ 已安装"
 fi
 npm install -g pm2 > /dev/null 2>&1
-# 将全局 bin 目录加入 PATH，后续 pm2 命令直接可用
-export PATH="$(npm bin -g):$PATH"
+# 用 npx 调用 pm2（避免 PATH 不生效的问题）
+PM2="npx --yes pm2"
 echo "  ✓ PM2"
 
 # ── MySQL ──────────────────────────────────────────────
@@ -67,9 +67,9 @@ JWT_SECRET=$(openssl rand -hex 32)
 PORT=3000
 ENVEOF
 npm install
-pm2 delete xnow-backend 2>/dev/null || true
-pm2 start src/app.js --name xnow-backend
-pm2 save
+$PM2 delete xnow-backend 2>/dev/null || true
+$PM2 start src/app.js --name xnow-backend
+$PM2 save
 echo "  ✓ 后端就绪"
 
 # ── 前端 ──────────────────────────────────────────────
