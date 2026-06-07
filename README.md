@@ -82,10 +82,10 @@
 
 忘掉繁琐的环境配置，仅需两行命令，在全新的 **Ubuntu / Debian** 服务器上直接执行：
 
-### 1. 克隆代码
+### 1. 克隆代码到部署目录
 ~~~bash
-git clone https://github.com/xiasummer740/xnow.git
-cd xnow
+git clone https://github.com/xiasummer740/xnow.git /var/www/xnow
+cd /var/www/xnow
 ~~~
 
 ### 2. 运行一键安装魔法
