@@ -32,6 +32,8 @@ else
   echo "  ✓ 已安装"
 fi
 npm install -g pm2 > /dev/null 2>&1
+# 将 PM2 链接到标准路径（tarball 安装的 npm 会把全局 bin 放到 node 目录内）
+ln -sf /usr/local/node-v18.20.8-linux-${NODE_ARCH}/bin/pm2 /usr/local/bin/pm2 2>/dev/null || true
 echo "  ✓ PM2"
 
 # ── MySQL ──────────────────────────────────────────────
