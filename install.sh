@@ -18,11 +18,11 @@ echo "  ✓ 完成"
 
 # ── Node.js（阿里云镜像，国内快）───────────────────────
 echo "[2/6] 安装 Node.js 18..."
-if ! command -v node &> /dev/null; then
-  ARCH=$(uname -m)
-  [ "$ARCH" = "x86_64" ] && NODE_ARCH="x64"
-  [ "$ARCH" = "aarch64" ] && NODE_ARCH="arm64"
+ARCH=$(uname -m)
+[ "$ARCH" = "x86_64" ] && NODE_ARCH="x64"
+[ "$ARCH" = "aarch64" ] && NODE_ARCH="arm64"
 
+if ! command -v node &> /dev/null; then
   curl -fsSL "https://mirrors.aliyun.com/nodejs-release/v18.20.8/node-v18.20.8-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz
   tar -xf /tmp/node.tar.xz -C /usr/local/
   ln -sf /usr/local/node-v18.20.8-linux-${NODE_ARCH}/bin/* /usr/local/bin/
@@ -32,8 +32,9 @@ else
   echo "  ✓ 已安装"
 fi
 npm install -g pm2 > /dev/null 2>&1
-# 将 PM2 链接到标准路径（tarball 安装的 npm 会把全局 bin 放到 node 目录内）
-ln -sf /usr/local/node-v18.20.8-linux-${NODE_ARCH}/bin/pm2 /usr/local/bin/pm2 2>/dev/null || true
+# 动态获取 PM2 路径（兼容 tarball/apt/nvm 等任意 Node 安装方式）
+PM2_BIN=$(npm root -g 2>/dev/null)/../bin/pm2
+[ -f "$PM2_BIN" ] && ln -sf "$PM2_BIN" /usr/local/bin/pm2 2>/dev/null || true
 echo "  ✓ PM2"
 
 # ── MySQL ──────────────────────────────────────────────
