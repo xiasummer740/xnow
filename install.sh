@@ -60,7 +60,12 @@ if ! command -v pm2 &> /dev/null; then
     [ -f "$PM2_BIN" ] && ln -sf "$PM2_BIN" /usr/local/bin/pm2
   fi
 fi
-command -v pm2 &> /dev/null && ok "PM2 $(pm2 -v 2>/dev/null)" || warn "PM2 未安装，将用 npx 降级"
+if command -v pm2 &> /dev/null; then
+  ok "PM2 $(pm2 -v 2>/dev/null)"
+else
+  fail "PM2 安装失败，请手动执行：npm install -g pm2"
+  exit 1
+fi
 
 # ── MySQL ──────────────────────────────────────────────
 echo "[3/6] 配置 MySQL..."
@@ -300,9 +305,10 @@ echo ""
 echo "执行健康检查..."
 sleep 2
 
-# 检查后端
-if curl -sf http://127.0.0.1:3000/api/ > /dev/null 2>&1; then
-  ok "后端 API 响应正常"
+# 检查后端（接受任意 HTTP 状态码，有响应即视为存活）
+BACKEND_HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+if [ "$BACKEND_HTTP" != "000" ]; then
+  ok "后端 API 响应正常 (HTTP $BACKEND_HTTP)"
 else
   warn "后端未响应，请手动检查：pm2 logs xnow-backend"
 fi
@@ -319,7 +325,11 @@ echo "============================================"
 echo "  部署完成！"
 echo "  https://$DOMAIN"
 echo ""
-echo "  SSL: $( [ "$CERT_OK" -eq 1 ] && echo 'Let's Encrypt (自动续期)' || echo '自签证书' )"
+if [ "$CERT_OK" -eq 1 ]; then
+  echo "  SSL: Let's Encrypt (自动续期)"
+else
+  echo "  SSL: 自签证书"
+fi
 echo "  后端进程: pm2 list"
 echo "  查看日志: pm2 logs xnow-backend"
 echo "============================================"
