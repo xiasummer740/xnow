@@ -156,6 +156,29 @@ else
   exit 1
 fi
 
+# ── 全局 ACME 验证配置 ──────────────────────────
+# 如果当前 nginx 没有全局 ACME 验证路径，自动添加
+# 这样后续安装其他项目（如 XX-UI）可以直接用 webroot 模式签证书
+if command -v nginx &>/dev/null; then
+  ACME_CONF="/etc/nginx/conf.d/00-acme-challenge.conf"
+  ACME_ROOT="/var/www/acme-challenge"
+  if [ ! -f "$ACME_CONF" ]; then
+    mkdir -p "$ACME_ROOT"
+    cat > "$ACME_CONF" << 'EOF'
+server {
+    listen 80;
+    server_name _;
+    location /.well-known/acme-challenge/ {
+        root /var/www/acme-challenge;
+    }
+    location / { return 404; }
+}
+EOF
+    nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+    ok "全局 ACME 验证已配置"
+  fi
+fi
+
 # ══════════════════════════════════════════════════════
 # SSL 证书
 # ══════════════════════════════════════════════════════
