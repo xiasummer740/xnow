@@ -169,7 +169,7 @@ server {
     listen 80;
     server_name _;
     location /.well-known/acme-challenge/ {
-        root /var/www/acme-challenge;
+        alias /var/www/acme-challenge/;
     }
     location / { return 404; }
 }
