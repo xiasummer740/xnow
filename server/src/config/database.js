@@ -9,11 +9,18 @@ const sequelize = new Sequelize(
   {
     host: process.env.DB_HOST,
     dialect: 'mysql',
-    logging: false, // 生产环境关闭 SQL 日志打印
+    logging: false,
     timezone: '+08:00',
     define: {
       timestamps: true,
       underscored: true
+    },
+    // 连接池：MySQL 意外断开后自动重连，不卡死进程
+    pool: {
+      max: 10,
+      min: 2,
+      acquire: 30000,
+      idle: 10000
     }
   }
 );

@@ -24,6 +24,18 @@ import vpnRoutes from './routes/vpn.js';
 import { reconcilePayments } from './routes/pay.js';
 
 dotenv.config();
+
+// ============================================================
+// 🛡️ 进程级崩溃防护 — 任何未捕获的错误都不会让进程静默退出
+// ============================================================
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ [Process] 未捕获的 Promise 拒绝:', reason instanceof Error ? reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ [Process] 未捕获的异常:', err.message);
+  // 不退出进程 —— 让 systemd 托管的服务继续运行
+});
+
 const app = express();
 app.use(wafMiddleware);
 
@@ -56,8 +68,19 @@ app.use('/api/login', authLimiter);
 app.use('/api/send-code', authLimiter);
 app.use('/api/register', authLimiter);
 
-app.use('/api', authRoutes); 
-app.use('/api/user', userRoutes); 
+app.use('/api', authRoutes);
+
+// 🩺 健康检查 — 用于监控进程是否存活
+app.get('/api/health', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.json({ status: 'ok', db: 'connected', uptime: process.uptime() });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'disconnected' });
+  }
+});
+
+app.use('/api/user', userRoutes);
 app.use('/api/services', servicesRoutes); 
 app.use('/api/orders', ordersRoutes); 
 app.use('/api/transactions', transactionsRoutes); 
