@@ -31,7 +31,9 @@ const getCleanAnnouncement = (raw) => {
   html = html.replace(/var\(--color-id-\d+\)/g, '#ffffff');
   html = html.replace(/font-size:\s*\d{2,}px/gi, 'font-size: 17px');
   html = html.replace(/font-size:\s*2[7-9]px/gi, 'font-size: 17px');
+  // 清除上游广告和敏感信息
   html = html.replace(/<p[^>]*>[\s\S]*?tk7188\.top[\s\S]*?<\/p>/gi, '');
+  html = html.replace(/<p[^>]*>[\s\S]*?tg频道[\s\S]*?<\/p>/gi, '');
   html = html.replace(/@tk7188\w*/g, '@客服');
   return html;
 };
@@ -47,7 +49,7 @@ export const autoSyncAnnouncement = async () => {
 
     const baseUrl = new URL(urlConf.value).origin;
 
-    // 登录
+    // 获取 CSRF
     const home = await fetchPage(baseUrl);
     if (home.error) return;
 
@@ -55,16 +57,28 @@ export const autoSyncAnnouncement = async () => {
     const csrfMatch = home.body.match(/name="_csrf"[^>]*value="([^"]+)"/);
     if (!csrfMatch) return;
 
-    const params = new URLSearchParams();
-    params.append('LoginForm[username]', loginUser.value);
-    params.append('LoginForm[password]', loginPass.value);
-    params.append('_csrf', csrfMatch[1]);
+    // 登录（需带 Origin/Referer 头，否则上游 CSRF 防护会拒绝）
+    const loginParams = new URLSearchParams();
+    loginParams.append('LoginForm[username]', loginUser.value);
+    loginParams.append('LoginForm[password]', loginPass.value);
+    loginParams.append('_csrf', csrfMatch[1]);
 
     const login = await fetchPage(baseUrl, {
       method: 'POST',
-      headers: { Cookie: cookies.join('; '), 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString()
+      headers: {
+        Cookie: cookies.join('; '),
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: baseUrl,
+        Referer: baseUrl + '/'
+      },
+      body: loginParams.toString()
     });
+
+    // 登录失败则退出
+    if (login.status !== 302) {
+      console.log('⚠️ [AutoAnnounce] 上游登录失败，状态码：' + login.status);
+      return;
+    }
 
     const allCookies = [...cookies];
     (login.headers['set-cookie'] || []).forEach(nc => {
@@ -74,11 +88,16 @@ export const autoSyncAnnouncement = async () => {
       else allCookies.push(nc.split(';')[0]);
     });
 
-    const dash = await fetchPage(baseUrl, { headers: { Cookie: allCookies.join('; ') } });
+    const dash = await fetchPage(baseUrl, {
+      headers: { Cookie: allCookies.join('; '), Referer: baseUrl + '/' }
+    });
 
-    // 提取公告
+    // 提取公告 — 从公告区块向上查找定位
     const annStart = dash.body.indexOf('刷粉风控期建议');
-    if (annStart < 0) return;
+    if (annStart < 0) {
+      console.log('⚠️ [AutoAnnounce] 未找到公告标记，上游公告格式可能已变更');
+      return;
+    }
 
     const before = dash.body.substring(Math.max(0, annStart - 5000), annStart);
     const blockMatch = before.match(/id="block_(\d+)"/g);
