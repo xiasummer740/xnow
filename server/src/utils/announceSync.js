@@ -122,9 +122,9 @@ export const autoSyncAnnouncement = async () => {
       const dateMatch = newContent.match(/【([^】]+)】/);
       const version = dateMatch ? dateMatch[1] : '最新';
       console.log('📢 [AutoAnnounce] 公告已自动更新为: ' + version);
-        sendTgMessage('📢 <b>公告已自动同步</b>\
-版本: ' + version);
+      sendTgMessage('📢 <b>公告已自动同步</b>\n版本: ' + version);
     }
+    // 静默：内容无变化时不输出任何日志，不通知
   } catch (e) {
     console.error('[AutoAnnounce] 同步失败:', e.message);
   }
