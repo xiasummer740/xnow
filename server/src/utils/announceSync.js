@@ -39,7 +39,6 @@ const getCleanAnnouncement = (raw) => {
 };
 
 export const autoSyncAnnouncement = async () => {
-  console.log("📢 [AutoAnnounce] 开始检查上游公告...");
   try {
     const urlConf = await Config.findOne({ where: { key: 'upstream_url' } });
     const loginUser = await Config.findOne({ where: { key: 'upstream_login_user' } });
