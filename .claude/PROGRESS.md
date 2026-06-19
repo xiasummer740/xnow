@@ -28,13 +28,25 @@
 7. PM2 重启服务生效
 
 ### 三方同步状态
-- 本地: `6fe74c56` ✅
-- GitHub: `6fe74c56` ✅
-- VPS: `6fe74c56` ✅（服务已重启）
+- 本地: `d318b723` ✅
+- GitHub: `d318b723` ✅
+- VPS: `d318b723` ✅（服务已重启）
 
 ### 待办
 - [ ] VPS 配置 GitHub SSH key 以便服务器直接推送
 - [ ] PM2 启用开机自启（`pm2 save` + `pm2 startup`）
+
+## [2025-06-20] 前端 JS 文件 hash 不匹配修复
+
+### 问题
+`client/dist/index.html` 引用的 JS hash 与实际构建产物不一致，nginx SPA 兜底返回 `index.html`，浏览器报 MIME 类型错误（`Expected a JavaScript module script but served with MIME type "text/html"`）。
+
+### 根因
+`index.html` 被更新（Jun 19 16:04）但 JS 资源未重新构建（Jun 16 12:24），hash 对不上。
+
+### 修复
+- 在服务器执行 `cd /var/www/xnow/client && npm run build` 重新构建前端
+- 重建后 hash 一致，页面正常访问
 
 ## [2025-06-07] 项目初始化
 - 初始部署
