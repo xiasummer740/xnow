@@ -28,13 +28,45 @@
 7. PM2 重启服务生效
 
 ### 三方同步状态
-- 本地: `d318b723` ✅
-- GitHub: `d318b723` ✅
-- VPS: `d318b723` ✅（服务已重启）
+- 本地: `40892dac` ✅
+- GitHub: `40892dac` ✅
+- VPS: `40892dac` ✅（服务已重启）
 
 ### 待办
 - [ ] VPS 配置 GitHub SSH key 以便服务器直接推送
-- [ ] PM2 启用开机自启（`pm2 save` + `pm2 startup`）
+
+## [2025-06-20] PM2 开机自启配置
+
+### 操作
+- 在服务器执行 `npx pm2 save` 保存进程列表
+- `npx pm2 startup` 创建 systemd 服务 `pm2-root.service`
+- 已 `enable`，服务器重启后自动恢复 xnow-app 进程
+
+## [2025-06-20] 安全加固修复（4项）
+
+### 问题
+安全全面审查发现以下问题：
+
+| 严重度 | 问题 | 文件 |
+|--------|------|------|
+| HIGH | 硬编码万能验证码 `666888`，绕过邮箱注册验证 | `auth.js:19` |
+| HIGH | 备份文件下载/删除/还原存在路径穿越，可读写系统任意文件 | `admin.js` |
+| MEDIUM | SSL 证书验证关闭（`rejectUnauthorized: false`） | `announceSync.js`, `admin.js` |
+| LOW | postMessage 使用通配符 `*` 目标域 | `pay.js:112` |
+
+### 修改内容
+1. **`auth.js`** — 移除 `if (code === '666888')` 万能验证码
+2. **`admin.js`** — 添加 `safeBackupPath()` 校验函数，所有备份操作路径必须限制在 `BACKUP_DIR` 内
+3. **`announceSync.js`**、**`admin.js`** — 移除 `rejectUnauthorized: false`，恢复 SSL 证书验证
+4. **`pay.js`** — `postMessage` 目标域从 `'*'` 改为 `window.location.origin`
+
+### 影响评估
+- 不影响网站正常运行
+- 后台备份操作与之前完全一致
+- 注册流程必须经过邮箱验证（不能再填 666888 跳过）
+
+### 三方同步状态
+- Commit `40892dac`，已部署至 VPS，PM2 已重启生效
 
 ## [2025-06-20] 前端 JS 文件 hash 不匹配修复
 
