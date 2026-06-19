@@ -13,6 +13,13 @@ import { createBackup, restoreBackup } from '../utils/backupEngine.js';
 const router = express.Router();
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
 
+// 安全校验：确保文件路径在 BACKUP_DIR 内，防止路径穿越
+const safeBackupPath = (filename) => {
+  const fullPath = path.resolve(BACKUP_DIR, path.basename(filename));
+  if (!fullPath.startsWith(BACKUP_DIR)) return null;
+  return fullPath;
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, BACKUP_DIR),
   filename: (req, file, cb) => cb(null, `uploaded_${Date.now()}_${file.originalname}`)
@@ -83,7 +90,6 @@ router.post('/sync-announcement', authenticate, async (req, res) => {
             'Accept-Language': 'zh-CN,zh;q=0.9',
             ...(options.headers || {})
           },
-          rejectUnauthorized: false
         }, (resp) => {
           let body = '';
           resp.on('data', chunk => body += chunk);
@@ -279,8 +285,8 @@ router.post('/backup/restore', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const { filename } = req.body;
   try {
-    const filepath = path.join(BACKUP_DIR, filename);
-    if (!fs.existsSync(filepath)) return res.status(404).json({ status: 'error', message: '备份文件不存在' });
+    const filepath = safeBackupPath(filename);
+    if (!filepath || !fs.existsSync(filepath)) return res.status(404).json({ status: 'error', message: '备份文件不存在' });
     await restoreBackup(filepath);
     sendTgMessage('🚨 [灾难级数据恢复] 历史快照重置成功\n执行官: <code>UID ' + req.user.id + '</code>\n快照名: <code>' + filename + '</code>');
     res.json({ status: 'success', message: '历史快照已成功注入！' });
@@ -290,8 +296,8 @@ router.post('/backup/restore', authenticate, async (req, res) => {
 router.get('/backup/download', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).send('Forbidden');
   const { filename } = req.query;
-  const filepath = path.join(BACKUP_DIR, filename);
-  if (fs.existsSync(filepath)) res.download(filepath);
+  const filepath = safeBackupPath(filename);
+  if (filepath && fs.existsSync(filepath)) res.download(filepath);
   else res.status(404).send('File not found');
 });
 
@@ -299,8 +305,8 @@ router.post('/backup/delete', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const { filename } = req.body;
   try {
-    const filepath = path.join(BACKUP_DIR, filename);
-    if (fs.existsSync(filepath)) {
+    const filepath = safeBackupPath(filename);
+    if (filepath && fs.existsSync(filepath)) {
         fs.unlinkSync(filepath);
         res.json({ status: 'success', message: '快照文件已从服务器物理移除' });
     } else {

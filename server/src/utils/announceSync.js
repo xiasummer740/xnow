@@ -14,7 +14,6 @@ const fetchPage = (urlStr, options = {}) => {
         'Accept-Language': 'zh-CN,zh;q=0.9',
         ...(options.headers || {})
       },
-      rejectUnauthorized: false
     }, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);

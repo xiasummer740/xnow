@@ -109,7 +109,7 @@ router.get('/return/bufpay', async (req, res) => {
             if (localSign === sign) { await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回'); markCompleted(order_id); }
         }
     } catch (e) {}
-    res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>支付成功</title><style>body { background: #0f172a; color: #34d399; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }</style></head><body><h2>支付成功，正在自动跳转...</h2><script>if(window.parent!==window){window.parent.postMessage({type:'pay_success'},'*');}else{window.location.href='/recharge';}</script></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>支付成功</title><style>body { background: #0f172a; color: #34d399; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }</style></head><body><h2>支付成功，正在自动跳转...</h2><script>if(window.parent!==window){window.parent.postMessage({type:'pay_success'},window.location.origin);}else{window.location.href='/recharge';}</script></body></html>`);
 });
 
 router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req, res) => {

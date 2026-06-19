@@ -16,7 +16,6 @@ const getRealIp = (req) => {
 };
 
 const verifyCodeInline = (email, code) => {
-    if (code === '666888') return { valid: true };
     if (!global.verificationCodes) global.verificationCodes = new Map();
     const record = global.verificationCodes.get(email);
     if (!record) return { valid: false, message: '验证码不存在或已过期，请重新获取' };
