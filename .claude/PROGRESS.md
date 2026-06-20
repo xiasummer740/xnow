@@ -1,5 +1,17 @@
 # XNOW 项目进度日志
 
+## [2026-06-20] 项目清理 + VPS GitHub SSH key + 权限白名单
+
+### 完成
+1. **项目根目录散落记忆文件清理** — 23 个记忆 `.md` 文件从项目根移到 `memory/` 目录，更新 `MEMORY.md` 索引路径
+2. **VPS GitHub SSH key 配置** — 生成 `ed25519` 密钥，添加为 xnow 仓库 deploy key（读写权限），remote 切换为 SSH 地址 (`git@github.com:xiasummer740/xnow.git`)，`git pull` 验证通过
+3. **删除多余文件** — 项目根 `package-lock.json`（无对应 package.json）
+4. **权限白名单全局化** — `~/.claude/settings.json` 添加 `permissions.allow`（`git *`, `ssh *`, `npx eslint/prettier *`, `python3 *`, `chmod *` 等），项目 `.claude/settings.local.json` 精简
+
+### 三方同步状态
+- 本地: `8865a099` ✅
+- GitHub: `8865a099` ✅
+
 ## [2026-06-20] 公告同步静默失效修复（第2轮）
 
 ### 问题
