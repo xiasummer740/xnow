@@ -1,0 +1,26 @@
+# Memory Index
+
+- [用户信息](memory/user_profile.md) — 用户称呼：祥哥，必须使用此称呼
+- [项目：v1.0.2 导航修复](memory/project_crystal-price-v1.0.2-fixes.md) — 晶振报价管理系统关键修复记录
+- [铁律背景](memory/feedback_iron-rules.md) — 七条铁律的动机和记忆点，具体条款以 CLAUDE.md 为准
+- [工作流模式](memory/feedback_workflow-pattern.md) — 五步核心流程 + 三级确认粒度
+- [技能整理 2026-05-26](memory/feedback_skill-cleanup-2026-05-26.md) — 删除 tdd/diagnose/ui-ux-pro-max 三个冗余技能
+- [多设备协作](memory/project_multi-device-workflow.md) — GitHub 同步 + 新电脑快速启动流程
+- [技术踩坑记录](memory/bugs_lessons-learned.md) — 🗄️ 已合并到全局 CLAUDE.md
+- [全中文输出](memory/feedback_chinese-only.md) — 所有 UI、回复、注释默认中文，祥哥看不懂英文
+- [XNOW 自定义补丁](memory/xnow-custom-patches.md) — electerm-analysis 5 项自定义修改，官方更新后需重新应用
+- [DeepSeek 余额状态栏](memory/deepseek-balance-statusline.md) — 🗄️ 已合并到全局 CLAUDE.md
+- [包管理器统一 npm](memory/feedback_npm-only.md) — 所有项目用 npm，不加 pnpm/yarn
+- [切项目前检查 git status](memory/feedback_switch-project-check.md) — 多项目切换前检查未提交修改
+- [轻工具链 Claude 自动检查](memory/feedback_no-toolchain-claude-review.md) — 不加 pre-commit/husky/eslint，Claude 代替
+- [GitHub 账户 xiasummer740](memory/github_xiasummer740.md) — 项目名=仓库名，改完代码自动同步
+- [全局 ESLint + Prettier](memory/quality-global-eslint-prettier.md) — 全局质量工具，不装项目依赖
+- [技能商店第二阶段完成](memory/xnow-skill-store-phase2-complete.md) — XNOW Terminal 技能商店 UI + ESM 修复 + AI 模型建议
+- [命令写法避坑](memory/feedback_command-patterns-avoid-block.md) — 避免触发白名单管不住的安全拦截（复合cd、脚本块）
+- [XNOW GitHub 工作流](memory/xnow-github-workflow.md) — xnow init/sync/release 命令，替代 git 手动操作
+- [高手工作流](memory/expert-workflow.md) — 项目级 CLAUDE.md + 单任务单对话 + 主动提醒
+- [xnow-terminal v3.14.0 待处理](memory/xnow-terminal-v3.14.0-pendings.md) — 当前未提交的改动记录
+- [xnow-terminal 项目概要](../xnow-terminal/.claude/PROJECT_SUMMARY.md) — XNOW Terminal 项目文档
+- [XNOW-Harness 对话启动拉取](memory/feedback_xnow-harness-auto-pull.md) — 每次对话必须先拉取 XNOW-Harness，不可跳过
+- [别碰原生模块编译](memory/bugs_dont-clean-native-modules.md) — 不要对正常工作的 C++ addon 执行清理/重编操作，破坏预编译二进制后 electron-builder 编不过
+- [xnow-default-branch-main](memory/xnow-default-branch-main.md) — 默认分支设置为 main
