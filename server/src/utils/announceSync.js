@@ -116,7 +116,10 @@ export const autoSyncAnnouncement = async () => {
     const existing = await Config.findOne({ where: { key: 'announcement' } });
     const existingClean = existing?.value ? existing.value.replace(/var\(--color-id-\d+\)/g, '#ffffff').trim() : '';
 
-    if (newContent !== existingClean) {
+    // 剥离 HTML 标签后比对纯文本，避免上游动态 HTML 属性导致的误判
+    const _stripHtml = (s) => s.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (_stripHtml(newContent) !== _stripHtml(existingClean)) {
       await Config.upsert({ key: 'announcement', value: newContent });
       const dateMatch = newContent.match(/【([^】]+)】/);
       const version = dateMatch ? dateMatch[1] : '最新';
