@@ -19,9 +19,9 @@
 - SSH 配置修复：启用 `PubkeyAuthentication yes`，添加 `xnow-vps` Host 别名
 
 ### 三方同步状态
-- 本地: `2c15fc9c` ✅
-- GitHub: `2c15fc9c` ✅
-- VPS: `2c15fc9c` ✅（服务已重启）
+- 本地: `2c0056d9` ✅
+- GitHub: `2c0056d9` ✅
+- VPS: `2c0056d9` ✅（服务已重启）
 
 ## [2025-06-20] 公告同步静默优化
 
