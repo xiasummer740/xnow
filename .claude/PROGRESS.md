@@ -1,5 +1,28 @@
 # XNOW 项目进度日志
 
+## [2026-06-20] 公告同步静默失效修复（第2轮）
+
+### 问题
+上次修复后公告同步依然每 30 分钟推送一次相同的"6.19号更新"消息，6 小时内重复推送 12 次。
+
+### 根因
+`announceSync.js:119` 使用 `newContent !== existingClean` 对比**完整 HTML**，上游页面每次请求返回的 HTML 可能有细微动态差异（属性顺序、空白、CSS 值等），导致始终判定为"有变化"。
+
+### 修复内容
+- **`server/src/utils/announceSync.js`** — 加入 `stripHtml()` 函数，剥离所有 HTML 标签后只比纯文本内容
+- 上游纯文本没变 → 不打日志 + 不发通知
+- 上游纯文本变了 → 正常更新 + 通知
+
+### 部署
+- Commit: `2c15fc9c`，已推送 GitHub ✅
+- VPS 已 git pull + pm2 restart ✅
+- SSH 配置修复：启用 `PubkeyAuthentication yes`，添加 `xnow-vps` Host 别名
+
+### 三方同步状态
+- 本地: `2c15fc9c` ✅
+- GitHub: `2c15fc9c` ✅
+- VPS: `2c15fc9c` ✅（服务已重启）
+
 ## [2025-06-20] 公告同步静默优化
 
 ### 问题
