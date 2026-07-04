@@ -64,10 +64,10 @@
           <div class="flex items-center space-x-1.5 md:space-x-3 text-slate-300">
             <span class="hidden lg:inline text-slate-400 text-xs">UID: {{ userStore.userInfo?.id || '--' }}</span>
             <span class="font-bold text-xs max-w-[80px] md:max-w-none truncate">{{ userStore.userInfo?.phone || '未登录' }}</span>
-            <span v-if="userStore.userInfo?.role === 'super_admin'" class="badge bg-red-500/10 text-red-400 border border-red-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">至尊管理员</span>
-            <span v-else-if="userStore.userInfo?.role === 'admin'" class="badge bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">管理员</span>
-            <span v-else-if="userStore.userInfo?.role === 'agent'" class="badge bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">至尊代理</span>
-            <span v-else class="badge bg-slate-500/10 text-slate-400 border border-slate-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">黄金用户</span>
+            <span v-if="userStore.userInfo?.role === 'super_admin'" class="badge bg-red-500/10 text-red-400 border border-red-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">{{ app.t('super_admin_badge') }}</span>
+            <span v-else-if="userStore.userInfo?.role === 'admin'" class="badge bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">{{ app.t('admin_badge') }}</span>
+            <span v-else-if="userStore.userInfo?.role === 'agent'" class="badge bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">{{ app.t('agent_badge') }}</span>
+            <span v-else class="badge bg-slate-500/10 text-slate-400 border border-slate-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex">{{ app.t('gold_badge') }}</span>
           </div>
           <button @click="appStore.toggleLang" class="text-slate-400 hover:text-white font-bold transition text-xs select-none w-6">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
           <div class="relative flex items-center">
