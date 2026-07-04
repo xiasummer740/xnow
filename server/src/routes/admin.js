@@ -395,6 +395,61 @@ router.post('/pricing', authenticate, async (req, res) => {
   }
 });
 
+// ====== CSV 导出 ======
+const csvEscape = (v) => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+const sendCSV = (res, rows, headers, filename) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}_${new Date().toISOString().slice(0,10)}.csv"`);
+  res.write('﻿' + headers.join(',') + '\n');
+  rows.forEach(r => res.write(r.join(',') + '\n'));
+  res.end();
+};
+
+router.get('/users/export', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const { search, role, date_from, date_to } = req.query;
+    const where = {};
+    if (search) where[Op.or] = [{ phone: { [Op.like]: '%' + search + '%' } }, { email: { [Op.like]: '%' + search + '%' } }, { id: isNaN(search) ? 0 : parseInt(search) }];
+    if (role && ['user', 'gold', 'agent', 'admin', 'super_admin'].includes(role)) where.role = role;
+    if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
+    if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    const users = await User.findAll({ where, order: [['created_at', 'DESC']] });
+    const headers = ['UID', '手机号', '邮箱', '角色', '余额', '总佣金', '注册IP', '最后登录IP', '最后登录', '是否封禁', '注册时间'];
+    sendCSV(res, users.map(u => [u.id, csvEscape(u.phone), csvEscape(u.email||''), u.role, u.balance, u.total_commission||0, csvEscape(u.register_ip||''), csvEscape(u.last_login_ip||''), u.last_login_at||'', u.is_banned ? '是' : '否', u.created_at]), headers, 'users');
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+router.get('/orders/export', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const { search, status, date_from, date_to } = req.query;
+    const where = {};
+    if (search) where[Op.or] = [{ order_no: { [Op.like]: '%' + search + '%' } }, { service_name: { [Op.like]: '%' + search + '%' } }, { phone: { [Op.like]: '%' + search + '%' } }, { user_id: isNaN(search) ? 0 : parseInt(search) }];
+    if (status) where.status = status;
+    if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
+    if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    const orders = await Order.findAll({ where, order: [['created_at', 'DESC']] });
+    const headers = ['订单号', 'UID', '手机号', '服务ID', '服务名', '链接', '数量', '收费', '上游收费', '利润', '状态', '已退款', '下单时间'];
+    sendCSV(res, orders.map(o => [o.order_no, o.user_id, csvEscape(o.phone||''), o.service_id||'', csvEscape(o.service_name||''), csvEscape(o.link), o.quantity, o.charge, o.upstream_charge, (parseFloat(o.charge)-parseFloat(o.upstream_charge)).toFixed(2), o.status, o.is_refunded ? '是' : '否', o.created_at]), headers, 'orders');
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+router.get('/transactions/export', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const { search, type, date_from, date_to } = req.query;
+    const where = {};
+    if (search) where[Op.or] = [{ phone: { [Op.like]: '%' + search + '%' } }, { description: { [Op.like]: '%' + search + '%' } }, { user_id: isNaN(search) ? 0 : parseInt(search) }];
+    if (type) where.type = type;
+    if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
+    if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    const txs = await Transaction.findAll({ where, order: [['created_at', 'DESC']] });
+    const headers = ['ID', 'UID', '手机号', '金额', '余额快照', '类型', '描述', '时间'];
+    sendCSV(res, txs.map(t => [t.id, t.user_id, csvEscape(t.phone||''), t.amount, t.balance||'', t.type, csvEscape(t.description||''), t.created_at]), headers, 'transactions');
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // 获取分类列表
 router.get('/categories', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
