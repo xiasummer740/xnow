@@ -18,6 +18,7 @@ const User = sequelize.define('User', {
   inviter_id: { type: DataTypes.INTEGER, allowNull: true },
   total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
   is_banned: { type: DataTypes.BOOLEAN, defaultValue: false },
-  ban_reason: { type: DataTypes.STRING(255), allowNull: true }
+  ban_reason: { type: DataTypes.STRING(255), allowNull: true },
+  admin_note: { type: DataTypes.TEXT, defaultValue: '' }
 });
 export default User;

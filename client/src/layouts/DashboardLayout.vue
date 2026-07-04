@@ -40,6 +40,27 @@
         <div class="flex items-center space-x-2 md:space-x-5 text-sm">
           <div @click="appStore.toggleCurrency" class="hidden sm:flex bg-slate-800 border border-slate-700 rounded-full p-0.5 cursor-pointer text-xs transition hover:border-amber-400 select-none"><span :class="['px-2 py-0.5 rounded-full font-bold transition', appStore.currency === 'CNY' ? 'bg-amber-400 text-black' : 'text-slate-400']">CNY</span><span :class="['px-2 py-0.5 rounded-full font-bold transition', appStore.currency === 'USD' ? 'bg-amber-400 text-black' : 'text-slate-400']">USD</span></div>
           <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1">{{ appStore.t('balance') }}</span><span class="text-amber-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
+          <!-- 通知铃铛 -->
+          <div class="relative" v-if="userStore.token && userStore.userInfo?.role !== 'super_admin'">
+            <button @click="toggleNotifPanel" class="relative text-slate-400 hover:text-white transition p-1">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              <span v-if="notifUnread > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow">{{ notifUnread > 99 ? '99+' : notifUnread }}</span>
+            </button>
+            <div v-if="showNotifPanel" class="absolute right-0 top-full mt-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-fade-in z-[100]">
+              <div class="p-3 border-b border-slate-700 flex justify-between items-center">
+                <span class="text-xs font-bold text-white">通知</span>
+                <button v-if="notifUnread > 0" @click="markAllNotifRead" class="text-[10px] text-amber-400 hover:text-amber-300 transition">全部已读</button>
+              </div>
+              <div class="max-h-64 overflow-y-auto custom-scrollbar">
+                <div v-if="notifList.length === 0" class="p-6 text-center text-xs text-slate-500">暂无通知</div>
+                <div v-for="n in notifList" :key="n.id" :class="['p-3 border-b border-slate-700/50 hover:bg-slate-700/30 transition cursor-pointer', !n.is_read ? 'bg-blue-500/5' : '']" @click="markNotifRead(n)">
+                  <div class="text-xs font-bold text-white mb-0.5">{{ n.title }}</div>
+                  <div class="text-[11px] text-slate-400 leading-relaxed">{{ n.content }}</div>
+                  <div class="text-[9px] text-slate-600 mt-1">{{ formatNotifTime(n.created_at || n.createdAt) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="flex items-center space-x-1.5 md:space-x-3 text-slate-300">
             <span class="hidden lg:inline text-slate-400 text-xs">UID: {{ userStore.userInfo?.id || '--' }}</span>
             <span class="font-bold text-xs max-w-[80px] md:max-w-none truncate">{{ userStore.userInfo?.phone || '未登录' }}</span>
@@ -112,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
@@ -197,7 +218,49 @@ const syncUserStatus = async () => {
   } catch (e) {}
 };
 
-onMounted(() => { appStore.fetchConfig(); syncUserStatus(); });
+// 通知
+const showNotifPanel = ref(false);
+const notifList = ref([]);
+const notifUnread = ref(0);
+const toggleNotifPanel = () => {
+  showNotifPanel.value = !showNotifPanel.value;
+  if (showNotifPanel.value) fetchNotifs();
+};
+const fetchNotifs = async () => {
+  if (!userStore.token || userStore.token === 'super-admin-offline-token') return;
+  try {
+    const res = await fetch('/api/user/notifications', { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const j = await res.json();
+    if (j.status === 'success') { notifList.value = j.data; notifUnread.value = j.unreadCount; }
+  } catch (e) {}
+};
+const markNotifRead = async (n) => {
+  if (n.is_read) return;
+  try {
+    await fetch('/api/user/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ id: n.id }) });
+    n.is_read = true; notifUnread.value = Math.max(0, notifUnread.value - 1);
+  } catch (e) {}
+};
+const markAllNotifRead = async () => {
+  try {
+    await fetch('/api/user/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({}) });
+    notifList.value.forEach(n => n.is_read = true); notifUnread.value = 0;
+    uiStore.showToast('已全部标记已读', 'success');
+  } catch (e) {}
+};
+const formatNotifTime = (t) => { if (!t) return ''; try { const d = new Date(t); const now = new Date(); const diff = now - d; if (diff < 60000) return '刚刚'; if (diff < 3600000) return Math.floor(diff/60000) + '分钟前'; if (diff < 86400000) return Math.floor(diff/3600000) + '小时前'; return d.toLocaleDateString('zh-CN'); } catch(e) { return t; } };
+
+// 定期检查通知
+let notifInterval = null;
+onMounted(() => {
+  appStore.fetchConfig(); syncUserStatus();
+  // 每60秒检查一次新通知
+  if (userStore.token && userStore.token !== 'super-admin-offline-token') {
+    fetchNotifs();
+    notifInterval = setInterval(fetchNotifs, 60000);
+  }
+});
+onUnmounted(() => { if (notifInterval) clearInterval(notifInterval); });
 </script>
 
 <style>

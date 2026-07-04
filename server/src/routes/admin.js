@@ -4,7 +4,7 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Config, User, Order, Transaction, Service, AuditLog } from '../models/index.js';
+import { Config, User, Order, Transaction, Service, AuditLog, Notification } from '../models/index.js';
 import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -271,6 +271,86 @@ router.post('/user/delete', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
 
+// ====== 用户运营操作 ======
+
+// 获取用户订单历史
+router.get('/users/:id/orders', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const orders = await Order.findAll({
+      where: { user_id: req.params.id },
+      order: [['created_at', 'DESC']],
+      limit: 20
+    });
+    res.json({ status: 'success', data: orders });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 获取用户交易流水
+router.get('/users/:id/transactions', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const txs = await Transaction.findAll({
+      where: { user_id: req.params.id },
+      order: [['created_at', 'DESC']],
+      limit: 20
+    });
+    res.json({ status: 'success', data: txs });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 管理员备注用户
+router.post('/users/:id/note', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ status: 'error', message: '用户不存在' });
+    user.admin_note = req.body.note || '';
+    await user.save();
+    await logAudit(req, 'user_note', 'user', req.params.id, { note: req.body.note });
+    res.json({ status: 'success', message: '备注已保存' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 发送站内通知
+router.post('/users/:id/notify', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ status: 'error', message: '用户不存在' });
+    const { title, content } = req.body;
+    await Notification.create({
+      user_id: user.id,
+      title: title || '系统通知',
+      content: content || ''
+    });
+    await logAudit(req, 'user_notify', 'user', req.params.id, { title });
+    sendTgMessage('📢 [管理员发送通知]\n👤 UID: <code>' + user.id + '</code>\n📱 账号: <code>' + user.phone + '</code>\n📌 标题: ' + (title || '系统通知'));
+    res.json({ status: 'success', message: '通知已发送' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ====== 公告推送 ======
+
+// 推送公告给所有用户
+router.post('/announcement/push', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const { title, content } = req.body;
+    const allUsers = await User.findAll({ attributes: ['id'], where: { is_banned: false } });
+    const notifications = allUsers.map(u => ({
+      user_id: u.id, title: title || '系统公告', content: content || ''
+    }));
+    // 批量插入，每次 100 条避免过大
+    for (let i = 0; i < notifications.length; i += 100) {
+      await Notification.bulkCreate(notifications.slice(i, i + 100));
+    }
+    await logAudit(req, 'announcement_push', 'announcement', 'all', { title, userCount: allUsers.length });
+    sendTgMessage('📢 [全局公告推送]\n📌 标题: ' + (title || '系统公告') + '\n👥 推送人数: ' + allUsers.length);
+    res.json({ status: 'success', message: '公告已推送给 ' + allUsers.length + ' 位用户', userCount: allUsers.length });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // 灾备引擎 API
 router.get('/backups', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '仅管理员有权访问灾备中心' });
@@ -440,8 +520,8 @@ router.get('/users/export', authenticate, async (req, res) => {
     if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
     if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
     const users = await User.findAll({ where, order: [['created_at', 'DESC']] });
-    const headers = ['UID', '手机号', '邮箱', '角色', '余额', '总佣金', '注册IP', '最后登录IP', '最后登录', '是否封禁', '注册时间'];
-    sendCSV(res, users.map(u => [u.id, csvEscape(u.phone), csvEscape(u.email||''), u.role, u.balance, u.total_commission||0, csvEscape(u.register_ip||''), csvEscape(u.last_login_ip||''), u.last_login_at||'', u.is_banned ? '是' : '否', u.created_at]), headers, 'users');
+    const headers = ['UID', '手机号', '邮箱', '角色', '余额', '总佣金', '注册IP', '最后登录IP', '最后登录', '是否封禁', '注册时间', '管理员备注'];
+    sendCSV(res, users.map(u => [u.id, csvEscape(u.phone), csvEscape(u.email||''), u.role, u.balance, u.total_commission||0, csvEscape(u.register_ip||''), csvEscape(u.last_login_ip||''), u.last_login_at||'', u.is_banned ? '是' : '否', u.created_at, csvEscape(u.admin_note||'')]), headers, 'users');
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -455,8 +535,8 @@ router.get('/orders/export', authenticate, async (req, res) => {
     if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
     if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
     const orders = await Order.findAll({ where, order: [['created_at', 'DESC']] });
-    const headers = ['订单号', 'UID', '手机号', '服务ID', '服务名', '链接', '数量', '收费', '上游收费', '利润', '状态', '已退款', '下单时间'];
-    sendCSV(res, orders.map(o => [o.order_no, o.user_id, csvEscape(o.phone||''), o.service_id||'', csvEscape(o.service_name||''), csvEscape(o.link), o.quantity, o.charge, o.upstream_charge, (parseFloat(o.charge)-parseFloat(o.upstream_charge)).toFixed(2), o.status, o.is_refunded ? '是' : '否', o.created_at]), headers, 'orders');
+    const headers = ['订单号', 'UID', '手机号', '服务ID', '服务名', '链接', '数量', '收费', '上游收费', '利润', '状态', '已退款', '下单时间', '管理员备注'];
+    sendCSV(res, orders.map(o => [o.order_no, o.user_id, csvEscape(o.phone||''), o.service_id||'', csvEscape(o.service_name||''), csvEscape(o.link), o.quantity, o.charge, o.upstream_charge, (parseFloat(o.charge)-parseFloat(o.upstream_charge)).toFixed(2), o.status, o.is_refunded ? '是' : '否', o.created_at, csvEscape(o.admin_note||'')]), headers, 'orders');
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -563,6 +643,86 @@ router.get('/transactions', authenticate, async (req, res) => {
     if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
     const { count, rows } = await Transaction.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
     res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ====== 订单运营操作 ======
+
+// 订单退款
+router.post('/orders/refund', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  const { orderId } = req.body;
+  try {
+    const order = await Order.findByPk(orderId);
+    if (!order) return res.status(404).json({ status: 'error', message: '订单不存在' });
+    if (order.is_refunded) return res.json({ status: 'error', message: '该订单已退款，禁止重复操作' });
+
+    const user = await User.findByPk(order.user_id);
+    if (!user) return res.status(404).json({ status: 'error', message: '用户不存在' });
+
+    // 计算退款金额（按剩余比例或全额）
+    const qty = parseInt(order.quantity) || 1;
+    const remains = parseInt(order.remains) || 0;
+    const refundRatio = remains > 0 && remains < qty ? remains / qty : 1;
+    const refundAmount = parseFloat((parseFloat(order.charge) * refundRatio).toFixed(4));
+
+    // 执行退款
+    user.balance = (parseFloat(user.balance) + refundAmount).toFixed(6);
+    await user.save();
+
+    await Transaction.create({
+      user_id: user.id, phone: user.phone, amount: refundAmount, balance: user.balance,
+      type: '退款入账', description: `管理员退款: 订单 ${order.order_no} 退还 ¥${refundAmount}`
+    });
+
+    order.is_refunded = true;
+    await order.save();
+
+    await logAudit(req, 'order_refund', 'order', orderId, { order_no: order.order_no, amount: refundAmount });
+    sendTgMessage('💳 [管理员退款]\n📦 订单: <code>' + order.order_no + '</code>\n👤 UID: <code>' + user.id + '</code>\n💵 金额: ¥' + refundAmount);
+
+    res.json({ status: 'success', message: '退款成功', data: { amount: refundAmount } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 手动检查单笔订单状态
+router.get('/orders/:id/check-status', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ status: 'error', message: '订单不存在' });
+    if (!order.upstream_order_id) return res.json({ status: 'error', message: '无上游订单ID，无法查询' });
+
+    const urlConf = await Config.findOne({ where: { key: 'upstream_url' } });
+    const keyConf = await Config.findOne({ where: { key: 'upstream_key' } });
+    if (!urlConf?.value || !keyConf?.value) return res.json({ status: 'error', message: '上游配置不完整' });
+
+    const payload = new URLSearchParams({ key: keyConf.value, action: 'status', order: order.upstream_order_id });
+    const upRes = await axios.post(urlConf.value, payload.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000
+    });
+
+    if (upRes.data) {
+      const up = upRes.data;
+      if (up.status) order.status = up.status;
+      if (up.remains) order.remains = String(up.remains);
+      if (up.start_count) order.start_count = String(up.start_count);
+      await order.save();
+    }
+
+    res.json({ status: 'success', data: { order_no: order.order_no, status: order.status, remains: order.remains, start_count: order.start_count } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 管理员备注
+router.post('/orders/:id/note', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ status: 'error', message: '订单不存在' });
+    order.admin_note = req.body.note || '';
+    await order.save();
+    res.json({ status: 'success', message: '备注已保存' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 

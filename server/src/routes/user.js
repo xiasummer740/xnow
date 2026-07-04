@@ -1,5 +1,5 @@
 import express from 'express';
-import { User, Transaction, Order, Config } from '../models/index.js';
+import { User, Transaction, Order, Config, Notification } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -196,6 +196,34 @@ router.get('/affiliate-stats', authenticate, async (req, res) => {
   } catch (error) { 
     res.status(500).json({ status: 'error', message: '大盘渲染异常' }); 
   }
+});
+
+// 获取用户通知
+router.get('/notifications', authenticate, async (req, res) => {
+  try {
+    const notifications = await Notification.findAll({
+      where: { user_id: req.user.id },
+      order: [['created_at', 'DESC']],
+      limit: 20
+    });
+    const unreadCount = await Notification.count({
+      where: { user_id: req.user.id, is_read: false }
+    });
+    res.json({ status: 'success', data: notifications, unreadCount });
+  } catch (e) { res.json({ status: 'error', message: e.message }); }
+});
+
+// 标记通知已读
+router.post('/notifications/read', authenticate, async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (id) {
+      await Notification.update({ is_read: true }, { where: { id, user_id: req.user.id } });
+    } else {
+      await Notification.update({ is_read: true }, { where: { user_id: req.user.id } });
+    }
+    res.json({ status: 'success' });
+  } catch (e) { res.json({ status: 'error', message: e.message }); }
 });
 
 export default router;

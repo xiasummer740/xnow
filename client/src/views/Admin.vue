@@ -12,6 +12,16 @@ use([CanvasRenderer, LineChart, PieChart, BarChart, GridComponent, TooltipCompon
 
 const userStore = useUserStore(); const ui = useUiStore(); const app = useAppStore();
 const loading = ref(false); const syncing = ref(false); const announceSyncing = ref(false); const editorRef = ref(null);
+const tabs = [
+  { key: 'overview', label: '📊 概览' },
+  { key: 'users', label: '👥 用户' },
+  { key: 'orders', label: '📦 订单' },
+  { key: 'transactions', label: '💰 流水' },
+  { key: 'finance', label: '📈 财务' },
+  { key: 'config', label: '⚙️ 配置' },
+  { key: 'logs', label: '📋 日志' },
+];
+const activeTab = ref('overview');
 const vpnShopEnabled = ref(true); const vpnToggling = ref(false);
 const data = ref({ upstreamBalance: { balance: '0.00' }, users: [], orders: [], transactions: [], config: {}, totalOrders: 0 });
 
@@ -83,9 +93,95 @@ const fetchOrders = async () => {
 };
 watch([orderPage, orderLimit, orderSearch, orderStatus, orderDateFrom, orderDateTo], () => { if (orderPage.value > 1) orderPage.value = 1; fetchOrders(); }, { immediate: true });
 
+// 订单运营
+const orderDetail = ref({ show: false, data: null, note: '' });
+const openOrderDetail = (o) => { orderDetail.value = { show: true, data: o, note: o.admin_note || '' }; };
+const closeOrderDetail = () => { orderDetail.value.show = false; };
+
+const refundOrder = async (o) => {
+  if (!confirm(`确定退款订单 ${o.order_no}？金额: ¥${o.charge}`)) return;
+  try {
+    const res = await fetch('/api/admin/orders/refund', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ orderId: o.id })
+    });
+    const j = await res.json();
+    if (j.status === 'success') { ui.showToast('退款成功', 'success'); fetchOrders(); }
+    else { ui.showToast(j.message || '退款失败', 'error'); }
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+};
+
+const checkOrderStatus = async (o) => {
+  try {
+    const res = await fetch(`/api/admin/orders/${o.id}/check-status`, {
+      headers: { 'Authorization': `Bearer ${userStore.token}` }
+    });
+    const j = await res.json();
+    if (j.status === 'success') {
+      o.status = j.data.status; o.remains = j.data.remains; o.start_count = j.data.start_count;
+      ui.showToast(`状态已刷新: ${j.data.status}`, 'success');
+    } else { ui.showToast(j.message || '刷新失败', 'error'); }
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+};
+
+const saveOrderNote = async (o) => {
+  try {
+    const res = await fetch(`/api/admin/orders/${o.id}/note`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ note: orderDetail.value.note })
+    });
+    const j = await res.json();
+    if (j.status === 'success') { ui.showToast('备注已保存', 'success'); o.admin_note = orderDetail.value.note; }
+    else { ui.showToast(j.message || '保存失败', 'error'); }
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+};
+
+// 用户运营
+const userDetail = ref({ show: false, data: null, orders: [], transactions: [], loading: false, note: '', notifyTitle: '', notifyContent: '' });
+const openUserDetail = async (u) => {
+  userDetail.value = { show: true, data: u, orders: [], transactions: [], loading: true, note: u.admin_note || '', notifyTitle: '', notifyContent: '' };
+  try {
+    const [oRes, tRes] = await Promise.all([
+      fetch(`/api/admin/users/${u.id}/orders`, { headers: { 'Authorization': `Bearer ${userStore.token}` } }),
+      fetch(`/api/admin/users/${u.id}/transactions`, { headers: { 'Authorization': `Bearer ${userStore.token}` } })
+    ]);
+    const oData = await oRes.json();
+    const tData = await tRes.json();
+    if (oData.status === 'success') userDetail.value.orders = oData.data;
+    if (tData.status === 'success') userDetail.value.transactions = tData.data;
+  } catch (e) { ui.showToast('用户详情加载失败', 'error'); }
+  finally { userDetail.value.loading = false; }
+};
+const closeUserDetail = () => { userDetail.value.show = false; };
+
+const saveUserNote = async (u) => {
+  try {
+    const res = await fetch(`/api/admin/users/${u.id}/note`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ note: userDetail.value.note })
+    });
+    const j = await res.json();
+    if (j.status === 'success') { ui.showToast('备注已保存', 'success'); u.admin_note = userDetail.value.note; }
+    else { ui.showToast(j.message || '保存失败', 'error'); }
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+};
+
+const sendUserNotify = async (u) => {
+  if (!userDetail.value.notifyTitle && !userDetail.value.notifyContent) return ui.showToast('请输入通知标题或内容', 'error');
+  try {
+    const res = await fetch(`/api/admin/users/${u.id}/notify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ title: userDetail.value.notifyTitle, content: userDetail.value.notifyContent })
+    });
+    const j = await res.json();
+    if (j.status === 'success') { ui.showToast('通知已发送', 'success'); userDetail.value.notifyTitle = ''; userDetail.value.notifyContent = ''; }
+    else { ui.showToast(j.message || '发送失败', 'error'); }
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+};
+
 const formatTime = (isoString) => { if (!isoString) return '--'; try { return new Date(isoString).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }); } catch (e) { return isoString; } };
 
-const showAudit = ref(false); const auditLogs = ref([]); const auditLoading = ref(false);
+const auditLogs = ref([]); const auditLoading = ref(false);
 const fetchAuditLogs = async () => {
   auditLoading.value = true;
   try {
@@ -95,7 +191,6 @@ const fetchAuditLogs = async () => {
   } catch (e) { ui.showToast('审计日志加载失败', 'error'); }
   finally { auditLoading.value = false; }
 };
-watch(showAudit, (v) => { if (v && !auditLogs.value.length) fetchAuditLogs(); });
 
 const fetchDashboard = async (showLoading = true) => {
     if (showLoading) loading.value = true;
@@ -130,6 +225,23 @@ const syncUpstreamAnnouncement = async () => {
   } catch (e) { ui.showToast('网络异常', 'error'); }
   announceSyncing.value = false;
 };
+
+const announcePushing = ref(false);
+const pushAnnouncementToAll = async () => {
+  if (!confirm('确定将当前公告推送给所有用户？')) return;
+  announcePushing.value = true;
+  try {
+    const res = await fetch('/api/admin/announcement/push', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ title: '系统公告', content: form.value.announcement })
+    });
+    const j = await res.json();
+    if (j.status === 'success') ui.showToast('公告已推送至 ' + j.userCount + ' 位用户', 'success');
+    else ui.showToast(j.message || '推送失败', 'error');
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+  finally { announcePushing.value = false; }
+};
+
 const handleLogoUpload = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { form.value.site_logo = e.target.result; ui.showToast('Logo 读取成功，请点击保存', 'success'); }; reader.readAsDataURL(file); };
 const execCmd = (cmd, val = null) => { document.execCommand(cmd, false, val); syncEditorContent(); };
 const syncEditorContent = () => { if (editorRef.value) form.value.announcement = editorRef.value.innerHTML; };
@@ -229,7 +341,7 @@ let refreshTimer = null; watch(() => app.globalRefreshTrigger, () => fetchDashbo
 const fetchVpnStatus = async () => { try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {} };
 const toggleVpnShop = async () => { vpnToggling.value = true; try { const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') { vpnShopEnabled.value = d.enabled; } else { alert(d.message || '操作失败'); } } catch (e) { alert('请求失败，请检查网络'); } finally { vpnToggling.value = false; } };
 // 💰 财务大盘
-const showFinance = ref(false); const financeData = ref(null); const financeLoading = ref(false);
+const financeData = ref(null); const financeLoading = ref(false);
 const fetchFinance = async () => {
   financeLoading.value = true;
   try {
@@ -240,7 +352,7 @@ const fetchFinance = async () => {
   } catch (e) { ui.showToast('网络异常', 'error'); }
   finally { financeLoading.value = false; }
 };
-watch(showFinance, (v) => { if (v && !financeData.value) fetchFinance(); });
+watch(activeTab, (v) => { if (v === 'finance' && !financeData.value) fetchFinance(); if (v === 'logs' && !auditLogs.value.length) fetchAuditLogs(); });
 
 const exportCSV = (endpoint, params) => {
   const p = new URLSearchParams(params); p.set('token', userStore.token);
@@ -310,6 +422,15 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
     <div class="max-w-7xl mx-auto space-y-6 pb-20 relative z-10">
         <div v-if="loading" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex flex-col items-center pt-32 rounded-3xl"><div class="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(251,191,36,0.5)]"></div><div class="text-amber-400 font-black mt-6 text-lg tracking-widest animate-pulse">正在与上游进行绝对实时同步...</div><div class="text-slate-400 text-xs mt-2">拉取最新数据中，请稍候</div></div>
         
+        <!-- Tab 导航 -->
+        <div class="sticky top-0 z-40 -mx-4 md:-mx-6 px-4 md:px-6 bg-slate-900/95 backdrop-blur-xl border-b border-slate-700 flex flex-wrap gap-0.5 py-2 mb-6">
+          <button v-for="t in tabs" :key="t.key" @click="activeTab = t.key"
+            :class="['px-4 py-2 rounded-lg text-sm font-bold transition', activeTab === t.key ? 'bg-amber-400/15 text-amber-400 border border-amber-400/30 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/70']">
+            {{ t.label }}
+          </button>
+        </div>
+
+        <div v-if="activeTab === 'overview'" class="space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-green-500/10 text-8xl">💰</div><div class="text-slate-400 text-xs font-bold mb-1 flex items-center justify-between"><span>上游余额 (API)</span><span v-if="syncing" class="text-[9px] text-amber-500 font-bold animate-pulse">⏳ 同步中...</span><span v-else class="flex items-center text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full border border-green-500/30"><span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse mr-1"></span>LIVE</span></div><div class="text-3xl font-black text-green-400 font-mono mt-2">{{ data.upstreamBalance?.balance || '0.00' }}</div></div>
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-amber-500/10 text-8xl">🏦</div><div class="text-slate-400 text-xs font-bold mb-1">本站玩家金库汇总</div><div class="text-3xl font-black text-amber-400 font-mono mt-2">{{ app.formatMoney(data.users ? data.users.reduce((acc, u) => acc + parseFloat(u.balance || 0), 0) : 0) }}</div></div>
@@ -317,6 +438,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-purple-500/10 text-8xl">📦</div><div class="text-slate-400 text-xs font-bold mb-1">全站累计处理订单</div><div class="text-3xl font-black text-purple-400 font-mono mt-2">{{ data.totalOrders || '0' }}</div></div>
         </div>
 
+        </div> <!-- end overview -->
+
+        <!-- ⚙️ 配置 -->
+        <div v-if="activeTab === 'config'" class="space-y-6">
         <div v-if="['admin', 'super_admin'].includes(userStore.userInfo?.role)" class="bg-slate-800/80 border border-emerald-500/30 p-5 rounded-2xl shadow-lg flex items-center justify-between">
           <div>
             <h3 class="text-white font-bold flex items-center"><span class="text-emerald-400 mr-2">🛡️</span> VPN 安全节点商城</h3>
@@ -362,6 +487,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                     <div class="flex space-x-3">
                       <button @click="syncUpstreamAnnouncement" :disabled="announceSyncing" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">{{ announceSyncing ? '同步中...' : '🔄 一键拉取上游公告' }}</button>
                       <button @click="saveConfig" class="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-900 font-black transition shadow-[0_0_15px_rgba(251,191,36,0.3)]">同步发布公告</button>
+                      <button @click="pushAnnouncementToAll" :disabled="announcePushing" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">{{ announcePushing ? '推送中...' : '📢 推送给所有用户' }}</button>
                     </div>
                 </div>
 
@@ -404,16 +530,19 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             </div>
         </div>
 
+        </div> <!-- end config -->
+
+        <!-- 📈 财务 -->
+        <div v-if="activeTab === 'finance'" class="space-y-6">
         <!-- 💰 财务大盘 -->
         <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6">
-          <div @click="showFinance = !showFinance" class="p-6 border-b border-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-700/30 transition">
+          <div class="p-6 border-b border-slate-700 flex justify-between items-center">
             <h3 class="text-lg font-bold text-white flex items-center"><span class="text-emerald-400 mr-2">💰</span> 财务大盘</h3>
             <div class="flex items-center space-x-3">
               <span v-if="financeLoading" class="text-xs text-amber-400 animate-pulse">加载中...</span>
-              <span class="text-slate-400 text-sm transition" :class="showFinance ? 'rotate-180' : ''">▼</span>
             </div>
           </div>
-          <div v-if="showFinance && financeData">
+          <div v-if="financeData">
             <div v-if="financeLoading" class="p-10 text-center text-slate-500">正在拉取财务数据...</div>
             <div v-else class="p-6 space-y-6">
               <!-- 摘要卡片 -->
@@ -507,21 +636,21 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
               </div>
             </div>
           </div>
-          <div v-else-if="showFinance && !financeData && !financeLoading" class="p-10 text-center text-slate-500">
-            点击展开后自动加载数据
-          </div>
         </div>
 
+        </div> <!-- end finance -->
+
+        <!-- 📋 日志 -->
+        <div v-if="activeTab === 'logs'" class="space-y-6">
         <!-- 📋 操作日志 -->
         <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6">
-          <div @click="showAudit = !showAudit" class="p-6 border-b border-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-700/30 transition">
+          <div class="p-6 border-b border-slate-700 flex justify-between items-center">
             <h3 class="text-lg font-bold text-white flex items-center"><span class="text-slate-400 mr-2">📋</span> 操作日志</h3>
             <div class="flex items-center space-x-3">
               <span v-if="auditLoading" class="text-xs text-amber-400 animate-pulse">加载中...</span>
-              <span class="text-slate-400 text-sm transition" :class="showAudit ? 'rotate-180' : ''">▼</span>
             </div>
           </div>
-          <div v-if="showAudit" class="overflow-x-auto custom-scrollbar">
+          <div v-if="true" class="overflow-x-auto custom-scrollbar">
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="bg-slate-900/50 text-[10px] uppercase text-slate-400"><tr><th class="px-4 py-3">时间</th><th class="px-4 py-3">管理员</th><th class="px-4 py-3">操作</th><th class="px-4 py-3">目标</th><th class="px-4 py-3">详情</th><th class="px-4 py-3">IP</th></tr></thead>
               <tbody class="divide-y divide-slate-700/50 text-slate-300">
@@ -539,11 +668,19 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
           </div>
         </div>
 
+        </div> <!-- end logs -->
+
+        <!-- 💰 流水 -->
+        <div v-if="activeTab === 'transactions'" class="space-y-6">
         <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6 relative"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h3 class="text-lg font-bold text-white flex items-center"><span class="text-blue-400 mr-2">🧾</span> 全站资金流水大盘</h3>
             <button @click="exportCSV('transactions', {search: txSearch, type: txType, date_from: txDateFrom, date_to: txDateTo})" class="text-xs bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded transition shadow">📥 导出 CSV</button></div><div class="flex justify-between items-center bg-slate-900/50 p-3 border-b border-slate-700"><input type="text" v-model="txSearch" placeholder="搜索 UID / 账号 / 摘要" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs border border-slate-600 focus:border-amber-400 outline-none w-64"><div class="flex items-center space-x-2 text-xs text-slate-400"><span>单页显示</span><select v-model="txLimit" class="bg-slate-800 text-white px-2 py-1 rounded border border-slate-600 outline-none"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></div></div><div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">时间 (Time)</th><th class="px-6 py-4">用户账号</th><th class="px-6 py-4">变动金额</th><th class="px-6 py-4">当前余额</th><th class="px-6 py-4">资金摘要 (类型)</th></tr></thead><tbody class="divide-y divide-slate-700/50 text-slate-200"><tr v-for="t in txData.items" :key="t.id" class="hover:bg-slate-700/30 transition"><td class="px-6 py-4 font-mono text-xs text-amber-400/80 font-bold">{{ formatTime(t.createdAt || t.created_at) }}</td><td class="px-6 py-4 font-bold text-white"><div class="flex items-center"><span class="bg-slate-700 px-1.5 py-0.5 rounded text-[10px] mr-2">UID {{ t.user_id }}</span>{{ t.phone || '未知' }}</div></td><td class="px-6 py-4 font-mono font-bold" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ t.amount }}</td><td class="px-6 py-4 font-mono text-amber-400 font-bold">{{ t.balance != null ? app.formatMoney(t.balance) : '--' }}</td><td class="px-6 py-4 text-xs"><span class="text-slate-300 font-bold mr-2">{{ t.description }}</span><span class="text-slate-500 font-mono">({{ t.type }})</span></td></tr><tr v-if="txData.items.length === 0"><td colspan="5" class="text-center py-10 text-slate-500">暂无资金变动记录</td></tr></tbody></table></div><div class="flex justify-between items-center p-3 bg-slate-900/50 border-t border-slate-700"><span class="text-xs text-slate-400">共 {{ txData.total }} 条记录，第 {{ txPage }} / {{ totalTxPage }} 页</span><div class="flex space-x-2"><button @click="txPage > 1 && txPage--" :disabled="txPage === 1" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">上一页</button><button @click="txPage < totalTxPage && txPage++" :disabled="txPage === totalTxPage" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">下一页</button></div></div></div>
 
+        </div> <!-- end transactions -->
+
+        <!-- 👥 用户 -->
+        <div v-if="activeTab === 'users'" class="space-y-6">
         <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h3 class="text-lg font-bold text-white flex items-center"><span class="text-blue-400 mr-2">👥</span> 全站用户监控与资金管理</h3>
-            <button @click="exportCSV('users', {search: userSearch, role: userRole, date_from: userDateFrom, date_to: userDateTo})" class="text-xs bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded transition shadow">📥 导出 CSV</button></div><div class="flex justify-between items-center bg-slate-900/50 p-3 border-b border-slate-700"><input type="text" v-model="userSearch" placeholder="搜索 UID / 账号 / 邮箱 / IP" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs border border-slate-600 focus:border-amber-400 outline-none w-64"></div><div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">UID/账号/邮箱/注册IP与时间</th><th class="px-6 py-4">最后登录 IP</th><th class="px-6 py-4">等级/状态</th><th class="px-6 py-4">当前余额</th><th class="px-6 py-4">专属倍率</th><th class="px-6 py-4 text-center">操作</th></tr></thead><tbody class="divide-y divide-slate-700/50 text-slate-200"><tr v-for="u in userData.items" :key="u.id" :class="['hover:bg-slate-700/30 transition', u.is_banned ? 'bg-red-900/20 opacity-80' : '']"><td class="px-6 py-4"><div class="font-bold text-white mb-1 flex items-center"><span class="bg-slate-700 px-1.5 py-0.5 rounded text-[10px] mr-2">UID {{ u.id }}</span><span :class="u.is_banned ? 'line-through text-red-400' : ''">{{ u.phone }}</span></div><div class="text-[10px] text-blue-400 font-mono tracking-tighter mb-0.5 flex items-center"><span class="mr-1">📧</span> {{ u.email || '未绑定邮箱' }}</div><div class="text-[10px] text-slate-500 font-mono tracking-tighter">注册IP: {{ u.register_ip || '未知' }} | {{ formatTime(u.createdAt || u.created_at) }}</div></td><td class="px-6 py-4"><div class="text-xs font-mono text-amber-400/80 mb-1">{{ u.last_login_ip || '未登录' }}</div><div v-if="u.last_login_at" class="text-[10px] text-slate-500 font-mono tracking-tighter flex items-center"><span class="mr-1">🕒</span> {{ formatTime(u.last_login_at) }}</div></td><td class="px-6 py-4"><div v-if="u.role === 'super_admin'" class="x-badge badge-super inline-flex items-center"><span class="badge-shimmer"></span>{{ app.t('super_admin_badge') || '至尊管理员' }}</div><div v-else-if="u.role === 'admin'" class="x-badge badge-admin inline-flex items-center"><span class="badge-shimmer"></span>{{ app.t('admin_badge') || '管理员' }}</div><div v-else-if="u.role === 'agent'" class="flex flex-col items-start"><div class="x-badge badge-agent inline-flex items-center mb-1"><span class="badge-shimmer"></span>{{ app.t('agent_badge') || '代理' }}</div><div class="text-[9px] text-slate-500">{{ u.vip_expire_at ? new Date(u.vip_expire_at).toLocaleDateString() : '无期限' }}</div></div><div v-else class="x-badge badge-gold inline-flex items-center"><span class="badge-shimmer"></span>{{ app.t('gold_badge') || '黄金用户' }}</div><div v-if="u.is_banned" class="mt-2 text-[10px] font-black text-red-500 bg-red-500/10 px-2 py-1 rounded border border-red-500/30 w-max tracking-widest">🚨 账号已封禁</div></td><td class="px-6 py-4 font-mono text-amber-400 font-bold text-lg bg-slate-900/30">{{ app.formatMoney(u.balance) }}</td><td class="px-6 py-4"><div v-if="['admin', 'super_admin'].includes(u.role)" class="flex flex-col space-y-2"><div class="flex space-x-1.5 items-center"><input type="text" disabled value="1.00" class="w-24 bg-slate-900/50 border border-slate-700/50 rounded-lg py-1.5 px-2 text-center text-xs text-slate-600 font-mono cursor-not-allowed"><span class="text-[10px] text-slate-500 font-bold px-2 py-1.5 bg-slate-800/50 rounded-lg border border-slate-700">🔒 锁定</span></div><div class="text-[10px] text-slate-500">目前生效: <span class="text-slate-400 font-bold tracking-wide">1.00x (原价)</span></div></div><div v-else class="flex flex-col space-y-2"><div class="flex space-x-1.5 items-center"><input type="number" v-model="u.customInput" :placeholder="getDefaultMultiplier(u) + ' (默认)'" step="0.1" class="w-24 bg-slate-900 border border-slate-600 rounded-lg py-1.5 px-2 text-center text-xs outline-none focus:border-amber-400 placeholder:text-slate-600 transition shadow-inner font-mono text-white"><button @click="saveMultiplier(u)" class="text-[10px] bg-slate-700 px-3 py-1.5 rounded-lg text-white font-bold transition hover:bg-amber-400 hover:text-black shadow-sm">保存</button><button v-if="u.custom_multiplier" @click="resetMultiplier(u)" class="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg transition hover:bg-red-500 hover:text-white shadow-sm font-bold" title="一键恢复系统默认倍率">恢复</button></div><div class="text-[10px] text-slate-400">目前生效: <span :class="u.custom_multiplier ? 'text-purple-400 font-black tracking-wide' : 'text-emerald-400 font-bold tracking-wide'">{{ u.custom_multiplier ? parseFloat(u.custom_multiplier).toFixed(2) + 'x (已自定义)' : getDefaultMultiplier(u) + 'x (系统默认)' }}</span></div></div></td><td class="px-6 py-4 text-center">
+            <button @click="exportCSV('users', {search: userSearch, role: userRole, date_from: userDateFrom, date_to: userDateTo})" class="text-xs bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded transition shadow">📥 导出 CSV</button></div><div class="flex justify-between items-center bg-slate-900/50 p-3 border-b border-slate-700"><input type="text" v-model="userSearch" placeholder="搜索 UID / 账号 / 邮箱 / IP" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs border border-slate-600 focus:border-amber-400 outline-none w-64"></div><div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">UID/账号/邮箱/注册IP与时间</th><th class="px-6 py-4">最后登录 IP</th><th class="px-6 py-4">等级/状态</th><th class="px-6 py-4">当前余额</th><th class="px-6 py-4">专属倍率</th><th class="px-6 py-4 text-center">操作</th></tr></thead><tbody class="divide-y divide-slate-700/50 text-slate-200"><tr v-for="u in userData.items" :key="u.id" :class="['hover:bg-slate-700/30 transition cursor-pointer', u.is_banned ? 'bg-red-900/20 opacity-80' : '']" @click="openUserDetail(u)"><td class="px-6 py-4"><div class="font-bold text-white mb-1 flex items-center"><span class="bg-slate-700 px-1.5 py-0.5 rounded text-[10px] mr-2">UID {{ u.id }}</span><span :class="u.is_banned ? 'line-through text-red-400' : ''">{{ u.phone }}</span><button @click.stop="openUserDetail(u)" class="ml-2 text-[10px] bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded transition font-bold">详情</button></div><div class="text-[10px] text-blue-400 font-mono tracking-tighter mb-0.5 flex items-center"><span class="mr-1">📧</span> {{ u.email || '未绑定邮箱' }}</div><div class="text-[10px] text-slate-500 font-mono tracking-tighter">注册IP: {{ u.register_ip || '未知' }} | {{ formatTime(u.createdAt || u.created_at) }}</div><div v-if="u.admin_note" class="text-[10px] text-amber-400/60 mt-1 truncate max-w-[300px]">📝 {{ u.admin_note }}</div></td><td class="px-6 py-4"><div class="text-xs font-mono text-amber-400/80 mb-1">{{ u.last_login_ip || '未登录' }}</div><div v-if="u.last_login_at" class="text-[10px] text-slate-500 font-mono tracking-tighter flex items-center"><span class="mr-1">🕒</span> {{ formatTime(u.last_login_at) }}</div></td><td class="px-6 py-4"><div v-if="u.role === 'super_admin'" class="x-badge badge-super inline-flex items-center"><span class="badge-shimmer"></span>{{ app.t('super_admin_badge') || '至尊管理员' }}</div><div v-else-if="u.role === 'admin'" class="x-badge badge-admin inline-flex items-center"><span class="badge-shimmer"></span>{{ app.t('admin_badge') || '管理员' }}</div><div v-else-if="u.role === 'agent'" class="flex flex-col items-start"><div class="x-badge badge-agent inline-flex items-center mb-1"><span class="badge-shimmer"></span>{{ app.t('agent_badge') || '代理' }}</div><div class="text-[9px] text-slate-500">{{ u.vip_expire_at ? new Date(u.vip_expire_at).toLocaleDateString() : '无期限' }}</div></div><div v-else class="x-badge badge-gold inline-flex items-center"><span class="badge-shimmer"></span>{{ app.t('gold_badge') || '黄金用户' }}</div><div v-if="u.is_banned" class="mt-2 text-[10px] font-black text-red-500 bg-red-500/10 px-2 py-1 rounded border border-red-500/30 w-max tracking-widest">🚨 账号已封禁</div></td><td class="px-6 py-4 font-mono text-amber-400 font-bold text-lg bg-slate-900/30">{{ app.formatMoney(u.balance) }}</td><td class="px-6 py-4"><div v-if="['admin', 'super_admin'].includes(u.role)" class="flex flex-col space-y-2"><div class="flex space-x-1.5 items-center"><input type="text" disabled value="1.00" class="w-24 bg-slate-900/50 border border-slate-700/50 rounded-lg py-1.5 px-2 text-center text-xs text-slate-600 font-mono cursor-not-allowed"><span class="text-[10px] text-slate-500 font-bold px-2 py-1.5 bg-slate-800/50 rounded-lg border border-slate-700">🔒 锁定</span></div><div class="text-[10px] text-slate-500">目前生效: <span class="text-slate-400 font-bold tracking-wide">1.00x (原价)</span></div></div><div v-else class="flex flex-col space-y-2"><div class="flex space-x-1.5 items-center"><input type="number" v-model="u.customInput" :placeholder="getDefaultMultiplier(u) + ' (默认)'" step="0.1" class="w-24 bg-slate-900 border border-slate-600 rounded-lg py-1.5 px-2 text-center text-xs outline-none focus:border-amber-400 placeholder:text-slate-600 transition shadow-inner font-mono text-white"><button @click="saveMultiplier(u)" class="text-[10px] bg-slate-700 px-3 py-1.5 rounded-lg text-white font-bold transition hover:bg-amber-400 hover:text-black shadow-sm">保存</button><button v-if="u.custom_multiplier" @click="resetMultiplier(u)" class="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg transition hover:bg-red-500 hover:text-white shadow-sm font-bold" title="一键恢复系统默认倍率">恢复</button></div><div class="text-[10px] text-slate-400">目前生效: <span :class="u.custom_multiplier ? 'text-purple-400 font-black tracking-wide' : 'text-emerald-400 font-bold tracking-wide'">{{ u.custom_multiplier ? parseFloat(u.custom_multiplier).toFixed(2) + 'x (已自定义)' : getDefaultMultiplier(u) + 'x (系统默认)' }}</span></div></div></td><td class="px-6 py-4 text-center">
             <div class="flex items-center justify-center space-x-2 mb-2">
                 <button v-if="!['admin', 'super_admin'].includes(u.role)" @click="openRoleModal(u)" class="text-xs bg-purple-500/10 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 px-3 py-1.5 rounded transition font-bold shadow-[0_0_10px_rgba(168,85,247,0.1)]">👑 提权</button>
                 <button @click="openFundModal(u, 'add')" class="text-xs bg-green-500/10 hover:bg-green-500/30 text-green-400 border border-green-500/30 px-3 py-1.5 rounded transition font-bold">+ 加款</button>
@@ -555,7 +692,132 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             </div>
         </td></tr></tbody></table></div><div class="flex justify-between items-center p-3 bg-slate-900/50 border-t border-slate-700"><span class="text-xs text-slate-400">共 {{ userData.total }} 位用户，第 {{ userPage }} / {{ totalUserPage }} 页</span><div class="flex space-x-2"><button @click="userPage > 1 && userPage--" :disabled="userPage === 1" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">上一页</button><button @click="userPage < totalUserPage && userPage++" :disabled="userPage === totalUserPage" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">下一页</button></div></div></div>
 
-        <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6 relative"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h3 class="text-lg font-bold text-white flex items-center"><span class="text-purple-400 mr-2">📊</span> 全站历史订单监控池</h3><div class="flex space-x-2"><button @click="exportCSV('orders', {search: orderSearch, status: orderStatus, date_from: orderDateFrom, date_to: orderDateTo})" class="text-xs bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded transition shadow">📥 导出 CSV</button><button @click="fetchDashboard(false)" class="text-xs bg-amber-500 hover:bg-amber-600 text-slate-900 font-black px-4 py-2 rounded transition shadow flex items-center">手动强刷大盘</button></div></div><div class="flex justify-between items-center bg-slate-900/50 p-3 border-b border-slate-700"><input type="text" v-model="orderSearch" placeholder="搜索 订单号 / UID / 服务名" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs border border-slate-600 focus:border-amber-400 outline-none w-64"><div class="flex items-center space-x-2 text-xs text-slate-400"><span>单页显示</span><select v-model="orderLimit" class="bg-slate-800 text-white px-2 py-1 rounded border border-slate-600 outline-none"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></div></div><div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">订单号 / 时间</th><th class="px-6 py-4">下单人 UID</th><th class="px-6 py-4 max-w-xs">服务 (ID) / 链接</th><th class="px-6 py-4 text-center">初始 / 数量 / 剩余</th><th class="px-6 py-4">费用</th><th class="px-6 py-4 text-right">上游状态</th></tr></thead><tbody class="divide-y divide-slate-700/50 text-slate-200"><tr v-for="o in orderData.items" :key="o.id" class="hover:bg-slate-700/30 transition"><td class="px-6 py-4"><div class="font-mono text-xs text-slate-300">{{ o.order_no }}</div><div class="text-[10px] text-amber-500/80 mt-1 font-mono tracking-tighter">{{ formatTime(o.createdAt || o.created_at) }}</div></td><td class="px-6 py-4 font-bold text-white"><div class="text-xs">{{ o.phone || '未知' }}</div><div class="text-[10px] text-slate-500">UID: {{ o.user_id }}</div></td><td class="px-6 py-4" style="max-width: 280px; white-space: normal !important; word-wrap: break-word; word-break: break-all;"><div class="text-xs text-slate-400 mb-1 leading-relaxed"><span v-if="o.service_id" class="text-amber-500 font-bold mr-1">[ID:{{ o.service_id }}]</span><span v-else class="text-slate-500 font-bold mr-1">[ID:无]</span>{{ o.service_name }}</div><a :href="o.link" target="_blank" class="text-[11px] text-blue-400 hover:text-blue-300 transition select-all leading-relaxed block">{{ o.link }}</a></td><td class="px-6 py-4 text-center"><div class="flex items-center justify-center space-x-2 text-xs font-mono bg-slate-900/50 py-1 rounded-lg border border-slate-700/50"><span class="text-slate-500" title="Start">{{ o.start_count || 0 }}</span><span class="text-slate-600">/</span><span class="font-bold text-white" title="Quantity">{{ o.quantity }}</span><span class="text-slate-600">/</span><span class="text-red-400" title="Remains">{{ o.remains || 0 }}</span></div></td><td class="px-6 py-4"><div class="text-xs text-amber-400 font-bold mt-0.5">{{ app.formatMoney(o.charge) }}</div></td><td class="px-6 py-4 text-right"><span class="px-3 py-1 rounded-full text-[10px] font-bold border" :class="o.status === '进行中' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : o.status === '已完成' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'">{{ o.status }}</span></td></tr><tr v-if="orderData.items.length === 0"><td colspan="6" class="text-center py-10 text-slate-500">暂无订单记录</td></tr></tbody></table></div><div class="flex justify-between items-center p-3 bg-slate-900/50 border-t border-slate-700"><span class="text-xs text-slate-400">共 {{ orderData.total }} 条订单，第 {{ orderPage }} / {{ totalOrderPage }} 页</span><div class="flex space-x-2"><button @click="orderPage > 1 && orderPage--" :disabled="orderPage === 1" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">上一页</button><button @click="orderPage < totalOrderPage && orderPage++" :disabled="orderPage === totalOrderPage" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">下一页</button></div></div></div>
+        </div> <!-- end users -->
+
+        <!-- 📦 订单 -->
+        <div v-if="activeTab === 'orders'" class="space-y-6">
+        <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6 relative"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h3 class="text-lg font-bold text-white flex items-center"><span class="text-purple-400 mr-2">📊</span> 全站历史订单监控池</h3><div class="flex space-x-2"><button @click="exportCSV('orders', {search: orderSearch, status: orderStatus, date_from: orderDateFrom, date_to: orderDateTo})" class="text-xs bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded transition shadow">📥 导出 CSV</button><button @click="fetchDashboard(false)" class="text-xs bg-amber-500 hover:bg-amber-600 text-slate-900 font-black px-4 py-2 rounded transition shadow flex items-center">手动强刷大盘</button></div></div><div class="flex justify-between items-center bg-slate-900/50 p-3 border-b border-slate-700"><input type="text" v-model="orderSearch" placeholder="搜索 订单号 / UID / 服务名" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs border border-slate-600 focus:border-amber-400 outline-none w-64"><div class="flex items-center space-x-2 text-xs text-slate-400"><span>单页显示</span><select v-model="orderLimit" class="bg-slate-800 text-white px-2 py-1 rounded border border-slate-600 outline-none"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></div></div><div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">订单号 / 时间</th><th class="px-6 py-4">下单人 UID</th><th class="px-6 py-4 max-w-xs">服务 (ID) / 链接</th><th class="px-6 py-4 text-center">初始 / 数量 / 剩余</th><th class="px-6 py-4">费用</th><th class="px-6 py-4 text-right">上游状态</th><th class="px-6 py-4 text-center">操作</th></tr></thead><tbody class="divide-y divide-slate-700/50 text-slate-200"><tr v-for="o in orderData.items" :key="o.id" class="hover:bg-slate-700/30 transition cursor-pointer" @click="openOrderDetail(o)"><td class="px-6 py-4"><div class="font-mono text-xs text-slate-300">{{ o.order_no }}</div><div class="text-[10px] text-amber-500/80 mt-1 font-mono tracking-tighter">{{ formatTime(o.createdAt || o.created_at) }}</div><div v-if="o.admin_note" class="text-[10px] text-amber-400/60 mt-1 truncate max-w-[200px]">📝 {{ o.admin_note }}</div></td><td class="px-6 py-4 font-bold text-white"><div class="text-xs">{{ o.phone || '未知' }}</div><div class="text-[10px] text-slate-500">UID: {{ o.user_id }}</div></td><td class="px-6 py-4" style="max-width: 280px; white-space: normal !important; word-wrap: break-word; word-break: break-all;"><div class="text-xs text-slate-400 mb-1 leading-relaxed"><span v-if="o.service_id" class="text-amber-500 font-bold mr-1">[ID:{{ o.service_id }}]</span><span v-else class="text-slate-500 font-bold mr-1">[ID:无]</span>{{ o.service_name }}</div><a :href="o.link" target="_blank" class="text-[11px] text-blue-400 hover:text-blue-300 transition select-all leading-relaxed block">{{ o.link }}</a></td><td class="px-6 py-4 text-center"><div class="flex items-center justify-center space-x-2 text-xs font-mono bg-slate-900/50 py-1 rounded-lg border border-slate-700/50"><span class="text-slate-500" title="Start">{{ o.start_count || 0 }}</span><span class="text-slate-600">/</span><span class="font-bold text-white" title="Quantity">{{ o.quantity }}</span><span class="text-slate-600">/</span><span class="text-red-400" title="Remains">{{ o.remains || 0 }}</span></div></td><td class="px-6 py-4"><div class="text-xs text-amber-400 font-bold mt-0.5">{{ app.formatMoney(o.charge) }}</div><div v-if="o.upstream_charge" class="text-[9px] text-slate-500">成本 {{ app.formatMoney(o.upstream_charge) }}</div></td><td class="px-6 py-4 text-right"><span class="px-3 py-1 rounded-full text-[10px] font-bold border" :class="o.status === '进行中' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : o.status === '已完成' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'">{{ o.status }}</span><div v-if="o.is_refunded" class="text-[10px] text-red-400 font-bold mt-1">💰 已退款</div></td><td class="px-6 py-4 text-center"><div class="flex flex-col items-center space-y-1.5"><button @click.stop="checkOrderStatus(o)" class="text-[10px] bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 px-2 py-1 rounded transition font-bold" title="刷新状态">🔄</button><button v-if="!o.is_refunded" @click.stop="refundOrder(o)" class="text-[10px] bg-red-500/10 hover:bg-red-500/30 text-red-400 border border-red-500/30 px-2 py-1 rounded transition font-bold" title="退款">💰 退款</button></div></td></tr><tr v-if="orderData.items.length === 0"><td colspan="7" class="text-center py-10 text-slate-500">暂无订单记录</td></tr></tbody></table></div><div class="flex justify-between items-center p-3 bg-slate-900/50 border-t border-slate-700"><span class="text-xs text-slate-400">共 {{ orderData.total }} 条订单，第 {{ orderPage }} / {{ totalOrderPage }} 页</span><div class="flex space-x-2"><button @click="orderPage > 1 && orderPage--" :disabled="orderPage === 1" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">上一页</button><button @click="orderPage < totalOrderPage && orderPage++" :disabled="orderPage === totalOrderPage" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">下一页</button></div></div></div>
+        </div> <!-- end orders -->
+
+        <!-- 📦 订单详情 Modal -->
+        <div v-if="orderDetail.show && orderDetail.data" class="fixed inset-0 z-[10004] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div class="bg-slate-900 border border-slate-700 p-6 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar relative">
+            <button @click="closeOrderDetail" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            <h3 class="text-lg font-bold text-white mb-5 flex items-center"><span class="text-purple-400 mr-2">📦</span> 订单详情 <span class="text-xs text-slate-500 ml-2 font-mono">{{ orderDetail.data.order_no }}</span></h3>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">订单号</span><span class="text-white font-mono font-bold">{{ orderDetail.data.order_no }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">上游订单号</span><span class="text-white font-mono">{{ orderDetail.data.upstream_order_id || '--' }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">用户</span><span class="text-white font-bold">UID {{ orderDetail.data.user_id }} ({{ orderDetail.data.phone || '未知' }})</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">下单时间</span><span class="text-amber-400 font-mono text-xs">{{ formatTime(orderDetail.data.createdAt || orderDetail.data.created_at) }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50 col-span-2"><span class="text-xs text-slate-400 block mb-1">服务</span><span class="text-white">[ID:{{ orderDetail.data.service_id }}] {{ orderDetail.data.service_name }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50 col-span-2"><span class="text-xs text-slate-400 block mb-1">目标链接</span><a :href="orderDetail.data.link" target="_blank" class="text-blue-400 hover:text-blue-300 text-xs break-all">{{ orderDetail.data.link }}</a></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">数量</span><span class="text-white font-bold">{{ orderDetail.data.quantity }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">初始 / 剩余</span><span class="text-white font-mono">{{ orderDetail.data.start_count || 0 }} / {{ orderDetail.data.remains || 0 }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">收费</span><span class="text-amber-400 font-bold">{{ app.formatMoney(orderDetail.data.charge) }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">上游成本 / 利润</span><span class="text-red-400">{{ app.formatMoney(orderDetail.data.upstream_charge) }}</span> <span class="text-green-400">/ {{ app.formatMoney(parseFloat(orderDetail.data.charge || 0) - parseFloat(orderDetail.data.upstream_charge || 0)) }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">状态</span><span class="px-2 py-0.5 rounded-full text-xs font-bold border" :class="orderDetail.data.status === '进行中' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : orderDetail.data.status === '已完成' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'">{{ orderDetail.data.status }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">是否退款</span><span :class="orderDetail.data.is_refunded ? 'text-red-400 font-bold' : 'text-slate-500'">{{ orderDetail.data.is_refunded ? '✅ 已退款' : '❌ 未退款' }}</span></div>
+            </div>
+            <!-- 管理员备注 -->
+            <div class="mt-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+              <label class="text-xs text-slate-400 block mb-2 font-bold">📝 管理员备注</label>
+              <div class="flex space-x-2">
+                <input type="text" v-model="orderDetail.note" placeholder="输入备注（仅管理员可见）" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-amber-400 transition" @keyup.enter="saveOrderNote(orderDetail.data)">
+                <button @click="saveOrderNote(orderDetail.data)" class="text-xs bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 px-3 py-2 rounded-lg font-bold transition whitespace-nowrap">保存备注</button>
+              </div>
+            </div>
+            <div class="mt-4 flex space-x-3">
+              <button @click="checkOrderStatus(orderDetail.data)" class="flex-1 text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl transition">🔄 刷新状态</button>
+              <button v-if="!orderDetail.data.is_refunded" @click="refundOrder(orderDetail.data); closeOrderDetail()" class="flex-1 text-xs bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl transition">💰 退款</button>
+              <button @click="closeOrderDetail" class="flex-1 text-xs bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-xl transition">关闭</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 👥 用户详情 Modal -->
+        <div v-if="userDetail.show && userDetail.data" class="fixed inset-0 z-[10004] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div class="bg-slate-900 border border-slate-700 p-6 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-3xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar relative">
+            <button @click="closeUserDetail" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            <h3 class="text-lg font-bold text-white mb-5 flex items-center"><span class="text-blue-400 mr-2">👤</span> 用户详情 <span class="text-xs text-slate-500 ml-2">UID {{ userDetail.data.id }}</span></h3>
+
+            <!-- 基本信息 -->
+            <div class="grid grid-cols-3 gap-3 text-sm mb-4">
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">手机号</span><span class="text-white font-bold">{{ userDetail.data.phone }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">邮箱</span><span class="text-white">{{ userDetail.data.email || '未绑定' }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">角色</span><span class="text-amber-400 font-bold">{{ userDetail.data.role }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">余额</span><span class="text-green-400 font-bold font-mono">{{ app.formatMoney(userDetail.data.balance) }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">总佣金</span><span class="text-purple-400 font-bold font-mono">{{ app.formatMoney(userDetail.data.total_commission) }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">封禁状态</span><span :class="userDetail.data.is_banned ? 'text-red-400 font-bold' : 'text-green-400'">{{ userDetail.data.is_banned ? '🚫 已封禁' : '✅ 正常' }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.register_ip || '--' }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">最后登录 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.last_login_ip || '--' }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册时间</span><span class="text-xs text-amber-400 font-mono">{{ formatTime(userDetail.data.createdAt || userDetail.data.created_at) }}</span></div>
+            </div>
+
+            <!-- 管理员备注 -->
+            <div class="mb-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+              <label class="text-xs text-slate-400 block mb-2 font-bold">📝 管理员备注</label>
+              <div class="flex space-x-2">
+                <input type="text" v-model="userDetail.note" placeholder="输入备注（仅管理员可见）" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-amber-400 transition" @keyup.enter="saveUserNote(userDetail.data)">
+                <button @click="saveUserNote(userDetail.data)" class="text-xs bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 px-3 py-2 rounded-lg font-bold transition">保存备注</button>
+              </div>
+            </div>
+
+            <!-- 发送通知 -->
+            <div class="mb-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+              <label class="text-xs text-slate-400 block mb-2 font-bold">📢 发送站内通知</label>
+              <div class="flex space-x-2 mb-2">
+                <input type="text" v-model="userDetail.notifyTitle" placeholder="通知标题" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-amber-400 transition">
+                <input type="text" v-model="userDetail.notifyContent" placeholder="通知内容" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-amber-400 transition">
+                <button @click="sendUserNotify(userDetail.data)" class="text-xs bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-lg transition whitespace-nowrap">发送</button>
+              </div>
+            </div>
+
+            <!-- 订单历史 -->
+            <div class="mb-4">
+              <h4 class="text-sm font-bold text-white mb-2 flex items-center"><span class="text-purple-400 mr-2">📦</span> 最近订单 (20条)</h4>
+              <div v-if="userDetail.loading" class="text-xs text-slate-500 py-4 text-center">加载中...</div>
+              <div v-else-if="!userDetail.orders.length" class="text-xs text-slate-500 py-4 text-center">暂无订单</div>
+              <div v-else class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-xs whitespace-nowrap">
+                  <thead class="bg-slate-900/50 text-[10px] uppercase text-slate-400"><tr><th class="px-3 py-2">订单号</th><th class="px-3 py-2">服务</th><th class="px-3 py-2">数量</th><th class="px-3 py-2">金额</th><th class="px-3 py-2">状态</th><th class="px-3 py-2">时间</th></tr></thead>
+                  <tbody class="divide-y divide-slate-700/50 text-slate-300">
+                    <tr v-for="o in userDetail.orders" :key="o.id" class="hover:bg-slate-700/30">
+                      <td class="px-3 py-1.5 font-mono text-[10px]">{{ o.order_no }}</td>
+                      <td class="px-3 py-1.5 max-w-[150px] truncate">{{ o.service_name }}</td>
+                      <td class="px-3 py-1.5">{{ o.quantity }}</td>
+                      <td class="px-3 py-1.5 text-amber-400 font-mono">{{ app.formatMoney(o.charge) }}</td>
+                      <td class="px-3 py-1.5"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold" :class="o.status === '已完成' ? 'bg-green-500/10 text-green-400' : o.status === '进行中' ? 'bg-blue-500/10 text-blue-400' : 'bg-slate-500/10 text-slate-400'">{{ o.status }}</span></td>
+                      <td class="px-3 py-1.5 text-[10px] text-amber-500/60 font-mono">{{ formatTime(o.createdAt || o.created_at) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 交易流水 -->
+            <div class="mb-4">
+              <h4 class="text-sm font-bold text-white mb-2 flex items-center"><span class="text-green-400 mr-2">💰</span> 最近交易 (20条)</h4>
+              <div v-if="userDetail.loading" class="text-xs text-slate-500 py-4 text-center">加载中...</div>
+              <div v-else-if="!userDetail.transactions.length" class="text-xs text-slate-500 py-4 text-center">暂无交易</div>
+              <div v-else class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-xs whitespace-nowrap">
+                  <thead class="bg-slate-900/50 text-[10px] uppercase text-slate-400"><tr><th class="px-3 py-2">金额</th><th class="px-3 py-2">余额</th><th class="px-3 py-2">类型</th><th class="px-3 py-2">描述</th><th class="px-3 py-2">时间</th></tr></thead>
+                  <tbody class="divide-y divide-slate-700/50 text-slate-300">
+                    <tr v-for="t in userDetail.transactions" :key="t.id" class="hover:bg-slate-700/30">
+                      <td class="px-3 py-1.5 font-mono font-bold" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ t.amount }}</td>
+                      <td class="px-3 py-1.5 font-mono text-amber-400">{{ t.balance || '--' }}</td>
+                      <td class="px-3 py-1.5">{{ t.type }}</td>
+                      <td class="px-3 py-1.5 max-w-[200px] truncate text-slate-400">{{ t.description }}</td>
+                      <td class="px-3 py-1.5 text-[10px] text-amber-500/60 font-mono">{{ formatTime(t.createdAt || t.created_at) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <button @click="closeUserDetail" class="w-full text-xs bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-xl transition">关闭</button>
+          </div>
+        </div>
 
         <div v-if="fundModal.show" class="fixed inset-0 z-[10005] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"><div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-sm w-full relative transform transition-all scale-100"><button @click="fundModal.show = false" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button><h3 class="text-xl font-black text-white mb-2 tracking-wide text-center">资金中心指令</h3><p class="text-slate-400 text-sm mb-6 text-center">目标账户: <span class="text-amber-400 font-bold">{{ fundModal.phone }}</span></p><div class="space-y-4 mb-8"><div><label class="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">操作金额 (CNY)</label><input type="number" v-model="fundModal.amount" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition font-mono text-lg" placeholder="0.00"></div></div><button @click="submitFund" :class="['w-full font-black text-lg py-3.5 rounded-xl transition transform hover:-translate-y-1 shadow-lg text-slate-900', fundModal.type === 'add' ? 'bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 shadow-[0_0_20px_rgba(251,191,36,0.3)]']">确认{{ fundModal.type === 'add' ? '加款' : '扣款' }}</button></div></div>
         <div v-if="roleModal.show" class="fixed inset-0 z-[10006] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"><div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-md w-full relative transform transition-all scale-100"><button @click="roleModal.show = false" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button><h3 class="text-xl font-black text-white mb-2 tracking-wide text-center">用户特权与等级调度</h3><p class="text-slate-400 text-sm mb-6 text-center">目标账户: <span class="text-amber-400 font-bold">{{ roleModal.phone }}</span></p><div class="space-y-6 mb-8"><div><label class="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">分配身份</label><div class="grid grid-cols-2 gap-3"><button @click="roleModal.role = 'user'; roleModal.addDays = 0" :class="['py-3 rounded-xl border text-sm font-bold transition', roleModal.role === 'user' ? 'bg-slate-700 border-slate-500 text-white shadow-inner' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800']">黄金用户</button><button @click="roleModal.role = 'agent'" :class="['py-3 rounded-xl border text-sm font-bold transition flex flex-col items-center justify-center', roleModal.role === 'agent' ? 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.2)]' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800']">👑 至尊代理</button></div></div><div v-if="roleModal.role === 'agent'" class="animate-fade-in space-y-3 p-4 bg-slate-800/50 rounded-2xl border border-amber-500/20"><div class="flex justify-between items-center"><label class="block text-xs font-bold text-amber-400 uppercase tracking-wider">赠送代理时长 (天)</label><span class="text-[10px] text-slate-400">目前到期: {{ roleModal.currentExpire ? new Date(roleModal.currentExpire).toLocaleDateString() : '无' }}</span></div><div class="grid grid-cols-4 gap-2"><button @click="roleModal.addDays = 7" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 7 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+7天</button><button @click="roleModal.addDays = 30" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 30 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1月</button><button @click="roleModal.addDays = 90" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 90 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1季</button><button @click="roleModal.addDays = 365" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 365 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1年</button></div><div class="flex items-center space-x-3 mt-3"><span class="text-xs text-slate-400 whitespace-nowrap">自定义:</span><input type="number" v-model="roleModal.addDays" min="0" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-amber-400 outline-none focus:border-amber-400 transition font-mono text-sm" placeholder="输入天数"></div><p v-if="roleModal.addDays > 0" class="text-[10px] text-emerald-400 text-right mt-1">将在原时间上自动续期 {{ roleModal.addDays }} 天</p></div></div><button @click="submitRole" class="w-full font-black text-lg py-3.5 rounded-xl transition transform hover:-translate-y-1 shadow-lg text-white bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]">确认调度</button></div></div>

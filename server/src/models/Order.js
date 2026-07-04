@@ -17,7 +17,8 @@ const Order = sequelize.define('Order', {
   status: { type: DataTypes.STRING(50), defaultValue: '排队中' },
   remains: { type: DataTypes.STRING(50), defaultValue: '0' },
   // 核心加法：智能退款标记，防止重复退款
-  is_refunded: { type: DataTypes.BOOLEAN, defaultValue: false }
+  is_refunded: { type: DataTypes.BOOLEAN, defaultValue: false },
+  admin_note: { type: DataTypes.TEXT, defaultValue: '' }
 });
 
 export default Order;
