@@ -330,6 +330,46 @@ router.post('/users/:id/notify', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// 用户全面分析（消费统计 + 服务分布 + 月度趋势）
+router.get('/users/:id/analysis', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const sq = Transaction.sequelize;
+    const uid = req.params.id;
+
+    const [spending] = await sq.query(`
+      SELECT COUNT(*) as total_orders,
+        COALESCE(SUM(charge),0) as total_spent,
+        COALESCE(SUM(charge-upstream_charge),0) as total_profit,
+        COALESCE(AVG(charge),0) as avg_order_value,
+        MIN(created_at) as first_order_at,
+        MAX(created_at) as last_order_at
+      FROM orders WHERE user_id = ?`, { replacements: [uid], type: sq.QueryTypes.SELECT });
+
+    const [depositStats] = await sq.query(`
+      SELECT COALESCE(SUM(amount),0) as total_deposit,
+        COUNT(*) as deposit_count,
+        COALESCE(SUM(CASE WHEN type='推广返佣' THEN amount ELSE 0 END),0) as total_commission
+      FROM transactions WHERE user_id=? AND amount>0`, { replacements: [uid], type: sq.QueryTypes.SELECT });
+
+    const serviceBreakdown = await sq.query(`
+      SELECT service_id,service_name,COUNT(*) as order_count,
+        COALESCE(SUM(charge),0) as revenue
+      FROM orders WHERE user_id=?
+      GROUP BY service_id,service_name ORDER BY revenue DESC LIMIT 10`,
+      { replacements: [uid], type: sq.QueryTypes.SELECT });
+
+    const monthlyTrend = await sq.query(`
+      SELECT DATE_FORMAT(created_at,'%Y-%m') as month,
+        COALESCE(SUM(charge),0) as spending,COUNT(*) as order_count
+      FROM orders WHERE user_id=? AND created_at>=DATE_SUB(CURDATE(),INTERVAL 12 MONTH)
+      GROUP BY DATE_FORMAT(created_at,'%Y-%m') ORDER BY month ASC`,
+      { replacements: [uid], type: sq.QueryTypes.SELECT });
+
+    res.json({ status:'success', data:{ spending, depositStats, serviceBreakdown, monthlyTrend } });
+  } catch (err) { res.status(500).json({ status:'error', message: err.message }); }
+});
+
 // ====== 公告推送 ======
 
 // 推送公告给所有用户
@@ -772,7 +812,28 @@ router.get('/finance', authenticate, async (req, res) => {
       FROM users
     `, { type: sq.QueryTypes.SELECT });
 
-    // 6. 近30日每日趋势
+    // 5a. 用户总数（用于 ARPU 等指标）
+    const [userCount] = await sq.query(`
+      SELECT COUNT(*) as total_users,
+        COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END), 0) as new_users_30d
+      FROM users`, { type: sq.QueryTypes.SELECT });
+
+    // 5b. 上月充值对比
+    const [prevMonth] = await sq.query(`
+      SELECT COALESCE(SUM(amount), 0) as prev_month_deposit
+      FROM transactions
+      WHERE amount>0 AND type IN ('在线充值','微信充值','支付宝充值','USDT充值')
+        AND YEAR(created_at)=YEAR(DATE_SUB(CURDATE(),INTERVAL 1 MONTH))
+        AND MONTH(created_at)=MONTH(DATE_SUB(CURDATE(),INTERVAL 1 MONTH))
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 5c. 今日订单统计
+    const [todayOrders] = await sq.query(`
+      SELECT COUNT(*) as today_orders,
+        COALESCE(SUM(charge),0) as today_revenue,
+        COALESCE(SUM(CASE WHEN status='已完成' THEN 1 ELSE 0 END),0) as today_completed
+      FROM orders WHERE DATE(created_at)=CURDATE()
+    `, { type: sq.QueryTypes.SELECT });
     const dailyTrend = await sq.query(`
       SELECT
         DATE(created_at) as date,
@@ -784,10 +845,14 @@ router.get('/finance', authenticate, async (req, res) => {
       ORDER BY date ASC
     `, { type: sq.QueryTypes.SELECT });
 
-    // 7. Top 10 服务收入排行
+    // 7. Top 10 服务收入排行（含简介描述）
     const topServices = await sq.query(`
-      SELECT service_id, service_name, COUNT(*) as order_count, COALESCE(SUM(charge), 0) as revenue, COALESCE(SUM(charge - upstream_charge), 0) as profit
-      FROM orders GROUP BY service_id, service_name ORDER BY revenue DESC LIMIT 10
+      SELECT o.service_id, o.service_name, s.description,
+        COUNT(*) as order_count,
+        COALESCE(SUM(o.charge),0) as revenue,
+        COALESCE(SUM(o.charge-o.upstream_charge),0) as profit
+      FROM orders o LEFT JOIN services s ON o.service_id=s.service_id
+      GROUP BY o.service_id,o.service_name,s.description ORDER BY revenue DESC LIMIT 10
     `, { type: sq.QueryTypes.SELECT });
 
     // 8. Top 10 消费用户排行
@@ -830,11 +895,25 @@ router.get('/finance', authenticate, async (req, res) => {
         topUsers,
         registrationTrend,
         orderStatusDist,
+        userCount,
+        prevMonth: prevMonth || { prev_month_deposit: 0 },
+        todayOrders: todayOrders || { today_orders: 0, today_revenue: 0, today_completed: 0 },
         summary: {
           grossProfit: grossProfit.toFixed(2),
           profitRate,
           netIncome: netIncome.toFixed(2),
-          totalBalance: balance.total_balance
+          totalBalance: balance.total_balance,
+          refundRate: parseFloat(orderStats.total_charge) > 0
+            ? (parseFloat(refund.total_refund) / parseFloat(orderStats.total_charge) * 100).toFixed(2)
+            : '0.00',
+          arpu: parseFloat(userCount.total_users) > 0
+            ? (parseFloat(deposit.total_deposit) / parseFloat(userCount.total_users)).toFixed(2)
+            : '0.00',
+          growth: parseFloat(prevMonth.prev_month_deposit) > 0
+            ? (((parseFloat(deposit.month_deposit) - parseFloat(prevMonth.prev_month_deposit)) / parseFloat(prevMonth.prev_month_deposit)) * 100).toFixed(1)
+            : 'N/A',
+          totalUsers: userCount.total_users,
+          newUsers30d: userCount.new_users_30d
         }
       }
     });

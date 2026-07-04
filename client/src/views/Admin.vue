@@ -137,18 +137,21 @@ const saveOrderNote = async (o) => {
 };
 
 // 用户运营
-const userDetail = ref({ show: false, data: null, orders: [], transactions: [], loading: false, note: '', notifyTitle: '', notifyContent: '' });
+const userDetail = ref({ show: false, data: null, orders: [], transactions: [], analysis: null, loading: false, note: '', notifyTitle: '', notifyContent: '' });
 const openUserDetail = async (u) => {
-  userDetail.value = { show: true, data: u, orders: [], transactions: [], loading: true, note: u.admin_note || '', notifyTitle: '', notifyContent: '' };
+  userDetail.value = { show: true, data: u, orders: [], transactions: [], analysis: null, loading: true, note: u.admin_note || '', notifyTitle: '', notifyContent: '' };
   try {
-    const [oRes, tRes] = await Promise.all([
+    const [oRes, tRes, aRes] = await Promise.all([
       fetch(`/api/admin/users/${u.id}/orders`, { headers: { 'Authorization': `Bearer ${userStore.token}` } }),
-      fetch(`/api/admin/users/${u.id}/transactions`, { headers: { 'Authorization': `Bearer ${userStore.token}` } })
+      fetch(`/api/admin/users/${u.id}/transactions`, { headers: { 'Authorization': `Bearer ${userStore.token}` } }),
+      fetch(`/api/admin/users/${u.id}/analysis`, { headers: { 'Authorization': `Bearer ${userStore.token}` } })
     ]);
     const oData = await oRes.json();
     const tData = await tRes.json();
+    const aData = await aRes.json();
     if (oData.status === 'success') userDetail.value.orders = oData.data;
     if (tData.status === 'success') userDetail.value.transactions = tData.data;
+    if (aData.status === 'success') userDetail.value.analysis = aData.data;
   } catch (e) { ui.showToast('用户详情加载失败', 'error'); }
   finally { userDetail.value.loading = false; }
 };
@@ -395,11 +398,30 @@ const topServiceOption = computed(() => {
   if (!financeData.value?.topServices?.length) return {};
   const top = financeData.value.topServices.slice(0, 8);
   return {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 120, right: 20, top: 10, bottom: 30 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const s = top[top.length - 1 - (params[0]?.dataIndex || 0)];
+        if (!s) return '';
+        const desc = s.description ? s.description.slice(0, 80) : '暂无简介';
+        return `<div class="text-sm font-bold text-amber-400">[ID:${s.service_id}] ${s.service_name}</div>
+<div class="text-xs text-slate-400 mt-1">${desc}</div>
+<div class="text-xs mt-2">收入: <b>¥${app.formatMoney(s.revenue)}</b> | 利润: <b>¥${app.formatMoney(s.profit)}</b> | 订单: ${s.order_count}笔</div>`;
+      }
+    },
+    grid: { left: 140, right: 20, top: 10, bottom: 30 },
     xAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
-    yAxis: { type: 'category', data: top.map(s => (s.service_name || '').length > 12 ? (s.service_name || '').slice(0, 12) + '...' : (s.service_name || '')).reverse(), axisLabel: { color: '#94a3b8', fontSize: 10 } },
-    series: [{ type: 'bar', data: top.map(s => parseFloat(s.revenue)).reverse(), itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] } }]
+    yAxis: {
+      type: 'category',
+      data: top.map(s => `ID:${s.service_id} ${(s.service_name || '').length > 10 ? (s.service_name || '').slice(0, 10) + '...' : (s.service_name || '')}`).reverse(),
+      axisLabel: { color: '#94a3b8', fontSize: 10 }
+    },
+    series: [{
+      type: 'bar',
+      data: top.map(s => parseFloat(s.revenue)).reverse(),
+      itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: 'right', formatter: (p) => `¥${app.formatMoney(p.value)}`, color: '#94a3b8', fontSize: 9 }
+    }]
   };
 });
 const regTrendOption = computed(() => {
@@ -411,6 +433,24 @@ const regTrendOption = computed(() => {
     xAxis: { type: 'category', data: days.map(d => d.date?.slice(5) || ''), axisLabel: { color: '#64748b', fontSize: 9 } },
     yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
     series: [{ type: 'bar', data: days.map(d => parseInt(d.count)), itemStyle: { color: '#3b82f6', borderRadius: [4, 4, 0, 0] } }]
+  };
+});
+const orderStatusPieOption = computed(() => {
+  if (!financeData.value?.orderStatusDist?.length) return {};
+  const colors = { '已完成': '#22c55e', '进行中': '#3b82f6', '排队中': '#f59e0b', '部分完成': '#a855f7', '取消': '#ef4444', '退款': '#f97316' };
+  const data = financeData.value.orderStatusDist.map(s => ({
+    name: s.status,
+    value: parseInt(s.count),
+    itemStyle: { color: colors[s.status] || '#64748b' }
+  }));
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c}笔 ({d}%)' },
+    series: [{
+      type: 'pie', radius: ['35%', '65%'], center: ['50%', '50%'],
+      data: data.filter(d => d.value > 0),
+      label: { color: '#94a3b8', formatter: '{b}\n{c}笔' },
+      emphasis: { itemStyle: { shadowBlur: 10 } }
+    }]
   };
 });
 
@@ -546,26 +586,45 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             <div v-if="financeLoading" class="p-10 text-center text-slate-500">正在拉取财务数据...</div>
             <div v-else class="p-6 space-y-6">
               <!-- 摘要卡片 -->
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                  <div class="text-xs text-slate-400 mb-1">累计收入（充值总额）</div>
-                  <div class="text-2xl font-black text-green-400 font-mono">{{ app.formatMoney(financeData.deposit.total_deposit) }}</div>
-                  <div class="text-[10px] text-slate-500 mt-1">今日 +{{ app.formatMoney(financeData.deposit.today_deposit) }} / 本月 +{{ app.formatMoney(financeData.deposit.month_deposit) }}</div>
+                  <div class="text-[10px] text-slate-400 mb-1 flex items-center"><span class="w-2 h-2 bg-green-400 rounded-full mr-1.5"></span>累计收入（充值总额）</div>
+                  <div class="text-xl font-black text-green-400 font-mono">{{ app.formatMoney(financeData.deposit.total_deposit) }}</div>
+                  <div class="text-[10px] text-slate-500 mt-1">今日 <span class="text-green-400">+{{ app.formatMoney(financeData.deposit.today_deposit) }}</span> / 本月 <span class="text-green-400">+{{ app.formatMoney(financeData.deposit.month_deposit) }}</span></div>
                 </div>
                 <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                  <div class="text-xs text-slate-400 mb-1">总成本（上游进货）</div>
-                  <div class="text-2xl font-black text-red-400 font-mono">{{ app.formatMoney(financeData.orders.total_upstream_charge) }}</div>
+                  <div class="text-[10px] text-slate-400 mb-1 flex items-center"><span class="w-2 h-2 bg-red-400 rounded-full mr-1.5"></span>总成本（上游进货）</div>
+                  <div class="text-xl font-black text-red-400 font-mono">{{ app.formatMoney(financeData.orders.total_upstream_charge) }}</div>
                   <div class="text-[10px] text-slate-500 mt-1">总订单 {{ financeData.orders.total_orders }} 笔</div>
                 </div>
                 <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                  <div class="text-xs text-slate-400 mb-1">毛利润（订单差价）</div>
-                  <div class="text-2xl font-black text-amber-400 font-mono">{{ app.formatMoney(financeData.summary.grossProfit) }}</div>
-                  <div class="text-[10px] text-slate-500 mt-1">利润率 {{ financeData.summary.profitRate }}%</div>
+                  <div class="text-[10px] text-slate-400 mb-1 flex items-center"><span class="w-2 h-2 bg-amber-400 rounded-full mr-1.5"></span>毛利润（订单差价）</div>
+                  <div class="text-xl font-black text-amber-400 font-mono">{{ app.formatMoney(financeData.summary.grossProfit) }}</div>
+                  <div class="text-[10px] text-slate-500 mt-1">利润率 {{ financeData.summary.profitRate }}% | 退款率 {{ financeData.summary.refundRate }}%</div>
                 </div>
                 <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                  <div class="text-xs text-slate-400 mb-1">用户余额总负债</div>
-                  <div class="text-2xl font-black text-purple-400 font-mono">{{ app.formatMoney(financeData.userBalance.total_balance) }}</div>
+                  <div class="text-[10px] text-slate-400 mb-1 flex items-center"><span class="w-2 h-2 bg-purple-400 rounded-full mr-1.5"></span>用户余额总负债</div>
+                  <div class="text-xl font-black text-purple-400 font-mono">{{ app.formatMoney(financeData.userBalance.total_balance) }}</div>
                   <div class="text-[10px] text-slate-500 mt-1">已充值未消费金额</div>
+                </div>
+              </div>
+              <!-- 第二排指标：ARPU / 增长率 / 用户数 / 今日订单 -->
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-slate-900/50 rounded-2xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">ARPU（人均充值）</div>
+                  <div class="text-base font-black text-cyan-400 font-mono">{{ app.formatMoney(financeData.summary.arpu) }}</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">本月环比上月</div>
+                  <div class="text-base font-black font-mono" :class="parseFloat(financeData.summary.growth) >= 0 ? 'text-green-400' : 'text-red-400'">{{ financeData.summary.growth === 'N/A' ? '无上月数据' : financeData.summary.growth + '%' }}</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">用户总数 / 近30日新增</div>
+                  <div class="text-base font-black text-blue-400 font-mono">{{ financeData.summary.totalUsers }} <span class="text-xs text-slate-500">/ +{{ financeData.summary.newUsers30d }}</span></div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">今日订单 / 已完成</div>
+                  <div class="text-base font-black text-orange-400 font-mono">{{ financeData.todayOrders.today_orders }} <span class="text-xs text-slate-500">/ {{ financeData.todayOrders.today_completed }}</span></div>
                 </div>
               </div>
 
@@ -626,12 +685,47 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                   <v-chart :option="channelPieOption" style="height:240px" autoresize />
                 </div>
                 <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">订单状态分布</h4>
+                  <v-chart :option="orderStatusPieOption" style="height:240px" autoresize />
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">TOP 消费用户排行</h4>
+                  <div v-if="financeData.topUsers?.length" class="space-y-1.5">
+                    <div v-for="(u, i) in financeData.topUsers.slice(0, 8)" :key="u.id" class="flex items-center justify-between text-xs py-1 px-2 rounded-lg" :class="i % 2 === 0 ? 'bg-slate-800/50' : ''">
+                      <div class="flex items-center space-x-2">
+                        <span class="text-slate-500 font-mono w-4">{{ i + 1 }}</span>
+                        <span class="text-white font-bold">{{ u.phone }}</span>
+                        <span class="text-[10px] text-slate-500">UID {{ u.id }}</span>
+                      </div>
+                      <div class="flex items-center space-x-3">
+                        <span class="text-amber-400 font-mono font-bold">¥{{ app.formatMoney(u.total_spent) }}</span>
+                        <span class="text-slate-500">{{ u.order_count }}笔</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-xs text-slate-500 text-center py-8">暂无数据</div>
+                </div>
+              </div>
+              <!-- 第二排图表：服务排行 + 注册 + 服务详情 -->
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
                   <h4 class="text-sm font-bold text-white mb-3">TOP 服务收入排行</h4>
                   <v-chart :option="topServiceOption" style="height:240px" autoresize />
                 </div>
                 <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
                   <h4 class="text-sm font-bold text-white mb-3">每日新注册数</h4>
                   <v-chart :option="regTrendOption" style="height:240px" autoresize />
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">服务排行详情</h4>
+                  <div v-if="financeData.topServices?.length" class="space-y-1 max-h-[240px] overflow-y-auto custom-scrollbar">
+                    <div v-for="s in financeData.topServices" :key="s.service_id" class="text-xs border-b border-slate-700/30 pb-1.5 mb-1.5 last:border-0">
+                      <div class="text-amber-400 font-bold"><span class="text-slate-500">[ID:{{ s.service_id }}]</span> {{ s.service_name }}</div>
+                      <div class="text-slate-400 truncate" :title="s.description">{{ s.description || '暂无简介' }}</div>
+                      <div class="text-slate-500 mt-0.5">收入 <span class="text-green-400 font-mono">¥{{ app.formatMoney(s.revenue) }}</span> | 利润 <span class="text-amber-400 font-mono">¥{{ app.formatMoney(s.profit) }}</span> | {{ s.order_count }}笔</div>
+                    </div>
+                  </div>
+                  <div v-else class="text-xs text-slate-500 text-center py-8">暂无数据</div>
                 </div>
               </div>
             </div>
@@ -751,6 +845,57 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.register_ip || '--' }}</span></div>
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">最后登录 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.last_login_ip || '--' }}</span></div>
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册时间</span><span class="text-xs text-amber-400 font-mono">{{ formatTime(userDetail.data.createdAt || userDetail.data.created_at) }}</span></div>
+            </div>
+
+            <!-- 📊 用户分析卡片 -->
+            <div v-if="userDetail.analysis" class="mb-4">
+              <h4 class="text-sm font-bold text-white mb-3 flex items-center"><span class="text-emerald-400 mr-2">📊</span> 消费分析</h4>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">总消费</div>
+                  <div class="text-base font-black text-amber-400 font-mono">{{ app.formatMoney(userDetail.analysis.spending.total_spent) }}</div>
+                </div>
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">总订单</div>
+                  <div class="text-base font-black text-white font-mono">{{ userDetail.analysis.spending.total_orders }}</div>
+                </div>
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">均单价</div>
+                  <div class="text-base font-black text-cyan-400 font-mono">{{ app.formatMoney(userDetail.analysis.spending.avg_order_value) }}</div>
+                </div>
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">总充值</div>
+                  <div class="text-base font-black text-green-400 font-mono">{{ app.formatMoney(userDetail.analysis.depositStats.total_deposit) }}</div>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">总佣金</div>
+                  <div class="text-sm font-black text-purple-400 font-mono">{{ app.formatMoney(userDetail.analysis.depositStats.total_commission) }}</div>
+                </div>
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                  <div class="text-[10px] text-slate-400 mb-1">充值笔数</div>
+                  <div class="text-sm font-black text-white font-mono">{{ userDetail.analysis.depositStats.deposit_count }}</div>
+                </div>
+                <div class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50 col-span-2">
+                  <div class="text-[10px] text-slate-400 mb-1">活跃周期</div>
+                  <div class="text-xs text-slate-300 font-mono">
+                    {{ userDetail.analysis.spending.first_order_at ? formatTime(userDetail.analysis.spending.first_order_at) : '--' }}
+                    <span class="text-slate-500"> → </span>
+                    {{ userDetail.analysis.spending.last_order_at ? formatTime(userDetail.analysis.spending.last_order_at) : '--' }}
+                  </div>
+                </div>
+              </div>
+              <!-- 服务使用分布 -->
+              <div v-if="userDetail.analysis.serviceBreakdown?.length" class="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50">
+                <div class="text-[10px] text-slate-400 mb-2 font-bold">服务使用分布</div>
+                <div class="space-y-1.5">
+                  <div v-for="svc in userDetail.analysis.serviceBreakdown" :key="svc.service_id" class="flex justify-between text-xs items-center">
+                    <span class="text-slate-300 max-w-[200px] truncate"><span class="text-amber-500">[ID:{{ svc.service_id }}]</span> {{ svc.service_name }}</span>
+                    <span class="font-mono text-emerald-400">{{ svc.order_count }}笔 ¥{{ app.formatMoney(svc.revenue) }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- 管理员备注 -->
