@@ -138,8 +138,14 @@ const saveOrderNote = async (o) => {
 
 // 用户运营
 const userDetail = ref({ show: false, data: null, orders: [], transactions: [], analysis: null, loading: false, note: '', notifyTitle: '', notifyContent: '' });
+const userGeo = ref({ register: null, lastLogin: null });
+const fetchGeo = async (ip) => {
+  if (!ip || ['127.0.0.1','::1','localhost'].includes(ip)) return '';
+  try { const r = await fetch(`/api/admin/geo/${ip}`); const d = await r.json(); return d.city ? `${d.country} ${d.city}` : d.country || ''; } catch { return ''; }
+};
 const openUserDetail = async (u) => {
   userDetail.value = { show: true, data: u, orders: [], transactions: [], analysis: null, loading: true, note: u.admin_note || '', notifyTitle: '', notifyContent: '' };
+  userGeo.value = { register: null, lastLogin: null };
   const h = { headers: { 'Authorization': `Bearer ${userStore.token}` } };
   let ok = 0;
   const fetchOne = async (url, key) => {
@@ -148,7 +154,9 @@ const openUserDetail = async (u) => {
   await Promise.all([
     fetchOne(`/api/admin/users/${u.id}/orders`, 'orders'),
     fetchOne(`/api/admin/users/${u.id}/transactions`, 'transactions'),
-    fetchOne(`/api/admin/users/${u.id}/analysis`, 'analysis')
+    fetchOne(`/api/admin/users/${u.id}/analysis`, 'analysis'),
+    fetchGeo(u.register_ip).then(v => userGeo.value.register = v),
+    fetchGeo(u.last_login_ip).then(v => userGeo.value.lastLogin = v)
   ]);
   if (ok === 0) ui.showToast('用户详情加载失败', 'error');
   userDetail.value.loading = false;
@@ -840,8 +848,8 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">余额</span><span class="text-green-400 font-bold font-mono">{{ app.formatMoney(userDetail.data.balance) }}</span></div>
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">总佣金</span><span class="text-purple-400 font-bold font-mono">{{ app.formatMoney(userDetail.data.total_commission) }}</span></div>
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">封禁状态</span><span :class="userDetail.data.is_banned ? 'text-red-400 font-bold' : 'text-green-400'">{{ userDetail.data.is_banned ? '🚫 已封禁' : '✅ 正常' }}</span></div>
-              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.register_ip || '--' }}</span></div>
-              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">最后登录 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.last_login_ip || '--' }}</span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.register_ip || '--' }}<span v-if="userGeo.register" class="text-emerald-400 ml-1">({{ userGeo.register }})</span></span></div>
+              <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">最后登录 IP</span><span class="text-xs font-mono text-slate-300">{{ userDetail.data.last_login_ip || '--' }}<span v-if="userGeo.lastLogin" class="text-emerald-400 ml-1">({{ userGeo.lastLogin }})</span></span></div>
               <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50"><span class="text-xs text-slate-400 block mb-1">注册时间</span><span class="text-xs text-amber-400 font-mono">{{ formatTime(userDetail.data.createdAt || userDetail.data.created_at) }}</span></div>
             </div>
 

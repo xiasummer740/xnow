@@ -370,6 +370,18 @@ router.get('/users/:id/analysis', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ status:'error', message: err.message }); }
 });
 
+// IP 地理位置查询（代理 ip-api.com，避免前端跨域）
+router.get('/geo/:ip', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  const ip = req.params.ip;
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return res.json({ country: '本地', city: '' });
+  try {
+    const { data } = await axios.get(`http://ip-api.com/json/${ip}?lang=zh-CN`, { timeout: 3000 });
+    if (data.status === 'success') res.json({ country: data.country, city: data.city });
+    else res.json({ country: '', city: '' });
+  } catch { res.json({ country: '', city: '' }); }
+});
+
 // ====== 公告推送 ======
 
 // 推送公告给所有用户
