@@ -10,11 +10,11 @@ const router = express.Router();
 global.profileCodes = global.profileCodes || {};
 
 router.get('/status', authenticate, async (req, res) => {
-  if (req.user.role === 'super_admin') {
-    return res.json({ status: 'success', balance: '999999.00', role: 'super_admin', api_key: 'super_admin_key', phone: req.user.phone, email: req.user.email });
-  }
   const user = await User.findByPk(req.user.id);
   if (!user) return res.status(404).json({ status: 'error', message: '用户不存在' });
+  if (user.role === 'super_admin') {
+    return res.json({ status: 'success', balance: '999999.00', role: 'super_admin', api_key: 'super_admin_key', phone: user.phone, email: user.email });
+  }
   res.json({ status: 'success', balance: user.balance, role: user.role, vip_expire_at: user.vip_expire_at, api_key: user.api_key, phone: user.phone, email: user.email });
 });
 

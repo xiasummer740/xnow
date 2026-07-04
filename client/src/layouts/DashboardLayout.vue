@@ -250,8 +250,9 @@ const markAllNotifRead = async () => {
 };
 const formatNotifTime = (t) => { if (!t) return ''; try { const d = new Date(t); const now = new Date(); const diff = now - d; if (diff < 60000) return '刚刚'; if (diff < 3600000) return Math.floor(diff/60000) + '分钟前'; if (diff < 86400000) return Math.floor(diff/3600000) + '小时前'; return d.toLocaleDateString('zh-CN'); } catch(e) { return t; } };
 
-// 定期检查通知
+// 定期检查通知 & 同步用户状态
 let notifInterval = null;
+let statusInterval = null;
 onMounted(() => {
   appStore.fetchConfig(); syncUserStatus();
   // 每60秒检查一次新通知
@@ -259,8 +260,13 @@ onMounted(() => {
     fetchNotifs();
     notifInterval = setInterval(fetchNotifs, 60000);
   }
+  // 每30秒同步用户状态（角色/余额等），确保权限变更后自动更新
+  statusInterval = setInterval(syncUserStatus, 30000);
 });
-onUnmounted(() => { if (notifInterval) clearInterval(notifInterval); });
+onUnmounted(() => {
+  if (notifInterval) clearInterval(notifInterval);
+  if (statusInterval) clearInterval(statusInterval);
+});
 </script>
 
 <style>
