@@ -7,5 +7,6 @@ import Transaction from './Transaction.js';
 import Site from './Site.js';
 import VpnProduct from './VpnProduct.js';
 import VpnClient from './VpnClient.js';
+import AuditLog from './AuditLog.js';
 
-export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient };
+export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog };

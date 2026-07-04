@@ -4,7 +4,7 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Config, User, Order, Transaction, Service } from '../models/index.js';
+import { Config, User, Order, Transaction, Service, AuditLog } from '../models/index.js';
 import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -19,6 +19,21 @@ const safeBackupPath = (filename) => {
   if (!fullPath.startsWith(BACKUP_DIR)) return null;
   return fullPath;
 };
+
+// 审计日志辅助函数
+async function logAudit(req, action, targetType, targetId, details = {}) {
+  try {
+    await AuditLog.create({
+      admin_id: req.user.id,
+      admin_phone: req.user.phone || '',
+      action,
+      target_type: targetType,
+      target_id: String(targetId || ''),
+      details: JSON.stringify(details),
+      ip_address: req.ip || ''
+    });
+  } catch (e) { /* 审计日志失败不影响主流程 */ }
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, BACKUP_DIR),
@@ -38,6 +53,7 @@ router.post('/config/update', authenticate, async (req, res) => {
       if (!ALLOWED_KEYS.includes(key)) continue;
       if (value !== undefined && value !== null) await Config.upsert({ key, value: String(value) });
     }
+    await logAudit(req, 'config_update', 'config', Object.keys(req.body).join(','), { keys: Object.keys(req.body) });
     res.json({ status: 'success', message: '配置已保存' });
   } catch (err) { res.status(500).json({ status: 'error' }); }
 });
@@ -201,6 +217,7 @@ router.post("/user/role", authenticate, async (req, res) => {
     await user.save();
 
     const roleMap = { 'super_admin':'至尊管理员', 'admin':'管理员', 'agent':'👑 至尊代理', 'user':'黄金用户' };
+    await logAudit(req, 'user_role', 'user', userId, { oldRole, newRole: role, addDays });
     sendTgMessage('🛡️ [管理操作] 用户权限调度\n🆔 UID: <code>' + user.id + '</code>\n👤 账号: <code>' + user.phone + '</code>\n🔄 变更: ' + roleMap[oldRole] + ' ➡️ ' + roleMap[role] + '\n⏳ 赠送时长: ' + (addDays > 0 ? addDays + ' 天' : '无'));
     res.json({ status: "success", message: "权限与时长已同步更新" });
   } catch (e) { res.status(500).json({ status: "error", message: "调度失败" }); }
@@ -216,6 +233,7 @@ router.post('/user/update', authenticate, async (req, res) => {
       user.balance = (parseFloat(user.balance) + parseFloat(amount)).toFixed(6);
       await user.save();
       await Transaction.create({ user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance, type: '后台调账', description: '管理员手动调账: ' + (amount > 0 ? '+' : '') + amount });
+      await logAudit(req, 'user_fund', 'user', userId, { amount, newBalance: user.balance });
     } else if (type === 'multiplier') {
       user.custom_multiplier = (multiplier === 'default' || !multiplier) ? null : parseFloat(multiplier).toFixed(2);
       await user.save();
@@ -233,6 +251,7 @@ router.post('/user/ban', authenticate, async (req, res) => {
     targetUser.is_banned = !targetUser.is_banned;
     targetUser.ban_reason = targetUser.is_banned ? (reason || '管理员强制封禁') : null;
     await targetUser.save();
+    await logAudit(req, 'user_ban', 'user', userId, { banned: targetUser.is_banned, reason: targetUser.ban_reason });
     res.json({ status: 'success', message: '已' + (targetUser.is_banned ? '强制封禁' : '解封') });
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
@@ -243,9 +262,11 @@ router.post('/user/delete', authenticate, async (req, res) => {
   try {
     const targetUser = await User.findByPk(userId);
     if (targetUser.role === 'super_admin') return res.status(403).json({ status: 'error', message: '至尊管理员不可删除' });
+    const deletedPhone = targetUser.phone; const deletedRole = targetUser.role;
     await Transaction.destroy({ where: { user_id: targetUser.id } });
     await Order.destroy({ where: { user_id: targetUser.id } });
     await targetUser.destroy();
+    await logAudit(req, 'user_delete', 'user', userId, { phone: deletedPhone, role: deletedRole });
     res.json({ status: 'success', message: '已彻底抹除数据' });
   } catch (e) { res.status(500).json({ status: 'error' }); }
 });
@@ -267,6 +288,7 @@ router.post('/backup/create', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   try {
     await createBackup();
+    await logAudit(req, 'backup_create', 'backup', 'manual');
     res.json({ status: 'success', message: '冷冻级快照创建成功' });
   } catch (e) { res.status(500).json({ status: 'error', message: '数据库备份失败' }); }
 });
@@ -276,6 +298,7 @@ router.post('/backup/upload', authenticate, upload.single('file'), async (req, r
   if (!req.file) return res.status(400).json({ status: 'error', message: '请选择文件' });
   try {
     await restoreBackup(req.file.path);
+    await logAudit(req, 'backup_restore', 'backup', req.file.originalname, { method: 'upload' });
     sendTgMessage('🚨 [灾难级数据恢复] 上传还原成功\n执行官: <code>UID ' + req.user.id + '</code>\n数据包: <code>' + req.file.originalname + '</code>');
     res.json({ status: 'success', message: '上传数据已成功覆盖并唤醒全站！' });
   } catch (e) { res.status(500).json({ status: 'error', message: '数据包损坏或恢复失败' }); }
@@ -288,6 +311,7 @@ router.post('/backup/restore', authenticate, async (req, res) => {
     const filepath = safeBackupPath(filename);
     if (!filepath || !fs.existsSync(filepath)) return res.status(404).json({ status: 'error', message: '备份文件不存在' });
     await restoreBackup(filepath);
+    await logAudit(req, 'backup_restore', 'backup', filename, { method: 'named_restore' });
     sendTgMessage('🚨 [灾难级数据恢复] 历史快照重置成功\n执行官: <code>UID ' + req.user.id + '</code>\n快照名: <code>' + filename + '</code>');
     res.json({ status: 'success', message: '历史快照已成功注入！' });
   } catch (e) { res.status(500).json({ status: 'error', message: '快照恢复失败' }); }
@@ -308,6 +332,7 @@ router.post('/backup/delete', authenticate, async (req, res) => {
     const filepath = safeBackupPath(filename);
     if (filepath && fs.existsSync(filepath)) {
         fs.unlinkSync(filepath);
+        await logAudit(req, 'backup_delete', 'backup', filename);
         res.json({ status: 'success', message: '快照文件已从服务器物理移除' });
     } else {
         res.status(404).json({ status: 'error', message: '未找到该快照文件' });
@@ -447,6 +472,16 @@ router.get('/transactions/export', authenticate, async (req, res) => {
     const txs = await Transaction.findAll({ where, order: [['created_at', 'DESC']] });
     const headers = ['ID', 'UID', '手机号', '金额', '余额快照', '类型', '描述', '时间'];
     sendCSV(res, txs.map(t => [t.id, t.user_id, csvEscape(t.phone||''), t.amount, t.balance||'', t.type, csvEscape(t.description||''), t.created_at]), headers, 'transactions');
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ====== 审计日志查询 ======
+router.get('/audit-logs', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const limit = Math.min(200, parseInt(req.query.limit) || 50);
+    const logs = await AuditLog.findAll({ order: [['created_at', 'DESC']], limit });
+    res.json({ status: 'success', data: logs });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 

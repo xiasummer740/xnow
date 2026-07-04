@@ -85,6 +85,18 @@ watch([orderPage, orderLimit, orderSearch, orderStatus, orderDateFrom, orderDate
 
 const formatTime = (isoString) => { if (!isoString) return '--'; try { return new Date(isoString).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }); } catch (e) { return isoString; } };
 
+const showAudit = ref(false); const auditLogs = ref([]); const auditLoading = ref(false);
+const fetchAuditLogs = async () => {
+  auditLoading.value = true;
+  try {
+    const res = await fetch('/api/admin/audit-logs?limit=50', { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const j = await res.json();
+    if (j.status === 'success') auditLogs.value = j.data;
+  } catch (e) { ui.showToast('审计日志加载失败', 'error'); }
+  finally { auditLoading.value = false; }
+};
+watch(showAudit, (v) => { if (v && !auditLogs.value.length) fetchAuditLogs(); });
+
 const fetchDashboard = async (showLoading = true) => {
     if (showLoading) loading.value = true;
     try {
@@ -497,6 +509,33 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
           </div>
           <div v-else-if="showFinance && !financeData && !financeLoading" class="p-10 text-center text-slate-500">
             点击展开后自动加载数据
+          </div>
+        </div>
+
+        <!-- 📋 操作日志 -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6">
+          <div @click="showAudit = !showAudit" class="p-6 border-b border-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-700/30 transition">
+            <h3 class="text-lg font-bold text-white flex items-center"><span class="text-slate-400 mr-2">📋</span> 操作日志</h3>
+            <div class="flex items-center space-x-3">
+              <span v-if="auditLoading" class="text-xs text-amber-400 animate-pulse">加载中...</span>
+              <span class="text-slate-400 text-sm transition" :class="showAudit ? 'rotate-180' : ''">▼</span>
+            </div>
+          </div>
+          <div v-if="showAudit" class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="bg-slate-900/50 text-[10px] uppercase text-slate-400"><tr><th class="px-4 py-3">时间</th><th class="px-4 py-3">管理员</th><th class="px-4 py-3">操作</th><th class="px-4 py-3">目标</th><th class="px-4 py-3">详情</th><th class="px-4 py-3">IP</th></tr></thead>
+              <tbody class="divide-y divide-slate-700/50 text-slate-300">
+                <tr v-for="log in auditLogs" :key="log.id" class="hover:bg-slate-700/30 transition">
+                  <td class="px-4 py-2 font-mono text-[10px] text-amber-400/80">{{ formatTime(log.createdAt || log.created_at) }}</td>
+                  <td class="px-4 py-2"><span class="bg-slate-700 px-1 py-0.5 rounded text-[10px] mr-1">UID {{ log.admin_id }}</span>{{ log.admin_phone }}</td>
+                  <td class="px-4 py-2"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border" :class="log.action.includes('delete') || log.action.includes('ban') ? 'bg-red-500/10 text-red-400 border-red-500/20' : log.action.includes('fund') ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'">{{ log.action }}</span></td>
+                  <td class="px-4 py-2"><span class="text-slate-500">{{ log.target_type }}</span> <span class="font-mono">{{ log.target_id }}</span></td>
+                  <td class="px-4 py-2 max-w-[200px] truncate text-slate-400" :title="log.details">{{ log.details }}</td>
+                  <td class="px-4 py-2 font-mono text-[10px] text-slate-500">{{ log.ip_address }}</td>
+                </tr>
+                <tr v-if="!auditLogs.length"><td colspan="6" class="text-center py-8 text-slate-500">暂无操作记录</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
