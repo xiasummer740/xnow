@@ -115,5 +115,22 @@
 - 在服务器执行 `cd /var/www/xnow/client && npm run build` 重新构建前端
 - 重建后 hash 一致，页面正常访问
 
+## [2026-07-04] 第一期：Admin 面板数据基建（4项）
+
+### 完成
+1. **ECharts 图表集成** — 安装 echarts+vue-echarts，扩展 finance API（topServices/topUsers/registrationTrend/orderStatusDist），Admin 面板新增 4 个 ECharts 图表（收入趋势折线图、支付渠道饼图、服务排行柱状图、每日注册柱状图）
+2. **服务端分页 + 筛选** — 新增 `/api/admin/{users,orders,transactions}` 三个分页查询接口，支持 search/status/role/type/date range 筛选；Admin.vue 三张表改为服务端分页 + 筛选控件
+3. **CSV 导出** — 新增 `/api/admin/{users,orders,transactions}/export` 三个导出接口，前端每张表标题栏加 📥 导出 CSV 按钮
+4. **审计日志** — 新建 `AuditLog` 模型（audit_logs 表），admin 路由 7 处注入审计点（config/role/fund/ban/delete/backup），Admin 面板加 📋 操作日志查看区块
+
+### 踩坑
+- VPS 构建缺 `VpnAdmin-kkDSGsT6.js` chunk 导致页面白屏，最后本地构建上传解决
+- 全局 CLAUDE.md 加规则 13「自证完成」— 改完必须我亲自验证通过再交作业
+
+### 三方同步状态
+- 本地: `3232a8b0` ✅
+- GitHub: `3232a8b0` ✅
+- VPS: `3232a8b0` ✅（服务已重启，前端 dist 已上传）
+
 ## [2025-06-07] 项目初始化
 - 初始部署
