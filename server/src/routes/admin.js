@@ -410,4 +410,91 @@ router.get('/categories', authenticate, async (req, res) => {
   }
 });
 
+// ====== 财务聚合分析 ======
+router.get('/finance', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const sq = Transaction.sequelize;
+
+    // 1. 充值统计（按渠道分）
+    const [deposit] = await sq.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') THEN amount ELSE 0 END), 0) as total_deposit,
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) as today_deposit,
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE()) THEN amount ELSE 0 END), 0) as month_deposit,
+        COALESCE(SUM(CASE WHEN type = '微信充值' THEN amount ELSE 0 END), 0) as wechat_deposit,
+        COALESCE(SUM(CASE WHEN type = '支付宝充值' THEN amount ELSE 0 END), 0) as alipay_deposit,
+        COALESCE(SUM(CASE WHEN type = 'USDT充值' THEN amount ELSE 0 END), 0) as usdt_deposit
+      FROM transactions
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 2. 订单利润统计
+    const [orderStats] = await sq.query(`
+      SELECT
+        COALESCE(SUM(charge), 0) as total_charge,
+        COALESCE(SUM(upstream_charge), 0) as total_upstream_charge,
+        COALESCE(SUM(charge - upstream_charge), 0) as total_profit,
+        COUNT(*) as total_orders
+      FROM orders
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 3. 退款统计
+    const [refund] = await sq.query(`
+      SELECT COALESCE(SUM(amount), 0) as total_refund
+      FROM transactions WHERE type = '退款入账'
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 4. 佣金总支出
+    const [commission] = await sq.query(`
+      SELECT COALESCE(SUM(amount), 0) as total_commission
+      FROM transactions WHERE type = '推广返佣' AND amount > 0
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 5. 用户余额总负债
+    const [balance] = await sq.query(`
+      SELECT COALESCE(SUM(balance), 0) as total_balance
+      FROM users
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 6. 近30日每日趋势
+    const dailyTrend = await sq.query(`
+      SELECT
+        DATE(created_at) as date,
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') THEN amount ELSE 0 END), 0) as deposit,
+        COALESCE(SUM(CASE WHEN amount < 0 AND type IN ('订单扣款','批量订单扣款','VPN购买','VPN续费') THEN ABS(amount) ELSE 0 END), 0) as spending
+      FROM transactions
+      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 7. 总览汇总（利润模型）
+    const grossProfit = parseFloat(orderStats.total_charge) - parseFloat(orderStats.total_upstream_charge);
+    const netIncome = parseFloat(deposit.total_deposit) - parseFloat(refund.total_refund) - parseFloat(commission.total_commission);
+    const profitRate = parseFloat(orderStats.total_charge) > 0
+      ? (grossProfit / parseFloat(orderStats.total_charge) * 100).toFixed(1)
+      : '0.0';
+
+    res.json({
+      status: 'success',
+      data: {
+        deposit: deposit,
+        orders: orderStats,
+        refund: refund,
+        commission: commission,
+        userBalance: balance,
+        dailyTrend,
+        summary: {
+          grossProfit: grossProfit.toFixed(2),
+          profitRate,
+          netIncome: netIncome.toFixed(2),
+          totalBalance: balance.total_balance
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 export default router;

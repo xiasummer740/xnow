@@ -171,6 +171,20 @@ const toggleBan = async (u) => {
 let refreshTimer = null; watch(() => app.globalRefreshTrigger, () => fetchDashboard(false));
 const fetchVpnStatus = async () => { try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {} };
 const toggleVpnShop = async () => { vpnToggling.value = true; try { const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') { vpnShopEnabled.value = d.enabled; } else { alert(d.message || '操作失败'); } } catch (e) { alert('请求失败，请检查网络'); } finally { vpnToggling.value = false; } };
+// 💰 财务大盘
+const showFinance = ref(false); const financeData = ref(null); const financeLoading = ref(false);
+const fetchFinance = async () => {
+  financeLoading.value = true;
+  try {
+    const res = await fetch(`/api/admin/finance?_t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const json = await res.json();
+    if (json.status === 'success') financeData.value = json.data;
+    else ui.showToast('财务数据拉取失败', 'error');
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+  finally { financeLoading.value = false; }
+};
+watch(showFinance, (v) => { if (v && !financeData.value) fetchFinance(); });
+
 onMounted(() => { fetchDashboard(true); fetchVpnStatus(); refreshTimer = setInterval(() => { syncing.value = true; fetchDashboard(false); }, 10000); });
 onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 </script>
@@ -271,6 +285,114 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 <textarea v-model="form.ip_blacklist" class="w-full h-full min-h-[400px] bg-slate-900/80 border border-red-500/50 rounded-xl p-4 text-red-400 font-mono text-sm outline-none focus:border-red-400 transition shadow-inner leading-relaxed custom-scrollbar" placeholder="输入格式示例:\n192.168.1.1\n8.8.8.8"></textarea>
                 <button @click="saveConfig" class="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-lg py-4 rounded-xl transition shadow-[0_10px_30px_rgba(220,38,38,0.3)] transform hover:-translate-y-1 tracking-wider mt-auto">挂载全站 IP 拦截网</button>
             </div>
+        </div>
+
+        <!-- 💰 财务大盘 -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6">
+          <div @click="showFinance = !showFinance" class="p-6 border-b border-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-700/30 transition">
+            <h3 class="text-lg font-bold text-white flex items-center"><span class="text-emerald-400 mr-2">💰</span> 财务大盘</h3>
+            <div class="flex items-center space-x-3">
+              <span v-if="financeLoading" class="text-xs text-amber-400 animate-pulse">加载中...</span>
+              <span class="text-slate-400 text-sm transition" :class="showFinance ? 'rotate-180' : ''">▼</span>
+            </div>
+          </div>
+          <div v-if="showFinance && financeData">
+            <div v-if="financeLoading" class="p-10 text-center text-slate-500">正在拉取财务数据...</div>
+            <div v-else class="p-6 space-y-6">
+              <!-- 摘要卡片 -->
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <div class="text-xs text-slate-400 mb-1">累计收入（充值总额）</div>
+                  <div class="text-2xl font-black text-green-400 font-mono">{{ app.formatMoney(financeData.deposit.total_deposit) }}</div>
+                  <div class="text-[10px] text-slate-500 mt-1">今日 +{{ app.formatMoney(financeData.deposit.today_deposit) }} / 本月 +{{ app.formatMoney(financeData.deposit.month_deposit) }}</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <div class="text-xs text-slate-400 mb-1">总成本（上游进货）</div>
+                  <div class="text-2xl font-black text-red-400 font-mono">{{ app.formatMoney(financeData.orders.total_upstream_charge) }}</div>
+                  <div class="text-[10px] text-slate-500 mt-1">总订单 {{ financeData.orders.total_orders }} 笔</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <div class="text-xs text-slate-400 mb-1">毛利润（订单差价）</div>
+                  <div class="text-2xl font-black text-amber-400 font-mono">{{ app.formatMoney(financeData.summary.grossProfit) }}</div>
+                  <div class="text-[10px] text-slate-500 mt-1">利润率 {{ financeData.summary.profitRate }}%</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <div class="text-xs text-slate-400 mb-1">用户余额总负债</div>
+                  <div class="text-2xl font-black text-purple-400 font-mono">{{ app.formatMoney(financeData.userBalance.total_balance) }}</div>
+                  <div class="text-[10px] text-slate-500 mt-1">已充值未消费金额</div>
+                </div>
+              </div>
+
+              <!-- 充值渠道分布 + 支出项 -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">充值渠道分布</h4>
+                  <div class="space-y-2">
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-400">微信支付</span>
+                      <span class="text-white font-mono font-bold">{{ app.formatMoney(financeData.deposit.wechat_deposit) }}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-400">支付宝</span>
+                      <span class="text-white font-mono font-bold">{{ app.formatMoney(financeData.deposit.alipay_deposit) }}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-400">USDT</span>
+                      <span class="text-white font-mono font-bold">{{ app.formatMoney(financeData.deposit.usdt_deposit) }}</span>
+                    </div>
+                    <div class="border-t border-slate-700 pt-2 mt-2 flex justify-between text-xs">
+                      <span class="text-green-400 font-bold">合计</span>
+                      <span class="text-green-400 font-mono font-bold">{{ app.formatMoney(financeData.deposit.total_deposit) }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">支出明细</h4>
+                  <div class="space-y-2">
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-400">上游成本</span>
+                      <span class="text-red-400 font-mono font-bold">{{ app.formatMoney(financeData.orders.total_upstream_charge) }}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-400">佣金支出</span>
+                      <span class="text-red-400 font-mono font-bold">{{ app.formatMoney(financeData.commission.total_commission) }}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-400">退款支出</span>
+                      <span class="text-red-400 font-mono font-bold">{{ app.formatMoney(financeData.refund.total_refund) }}</span>
+                    </div>
+                    <div class="border-t border-slate-700 pt-2 mt-2 flex justify-between text-xs">
+                      <span class="text-amber-400 font-bold">净利润（充值-退款-佣金）</span>
+                      <span class="text-amber-400 font-mono font-bold">{{ app.formatMoney(financeData.summary.netIncome) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 近7日收支趋势（纯CSS条形图） -->
+              <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                <h4 class="text-sm font-bold text-white mb-3">近30日收支趋势</h4>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs">
+                    <thead><tr class="text-slate-500"><th class="text-left py-1 pr-2">日期</th><th class="text-right px-2">收入</th><th class="w-1/2 px-2"><div class="h-4"></div></th><th class="text-left px-2">支出</th><th class="w-1/2 px-2"><div class="h-4"></div></th></tr></thead>
+                    <tbody>
+                      <tr v-for="d in financeData.dailyTrend.slice(-7)" :key="d.date" class="hover:bg-slate-800/30 rounded-lg">
+                        <td class="text-slate-300 py-1.5 pr-2 whitespace-nowrap">{{ d.date?.slice(5) || d.date }}</td>
+                        <td class="text-green-400 font-mono text-right px-2 whitespace-nowrap">{{ app.formatMoney(d.deposit) }}</td>
+                        <td class="px-2"><div class="h-3 bg-green-500/30 rounded-full" :style="{ width: Math.min(100, d.deposit / Math.max(...financeData.dailyTrend.slice(-7).map(x => parseFloat(x.deposit)), 1) * 100) + '%' }"></div></td>
+                        <td class="text-red-400 font-mono px-2 whitespace-nowrap">{{ app.formatMoney(d.spending) }}</td>
+                        <td class="px-2"><div class="h-3 bg-red-500/30 rounded-full" :style="{ width: Math.min(100, d.spending / Math.max(...financeData.dailyTrend.slice(-7).map(x => parseFloat(x.spending)), 1) * 100) + '%' }"></div></td>
+                      </tr>
+                      <tr v-if="!financeData.dailyTrend || financeData.dailyTrend.length === 0"><td colspan="5" class="text-center py-4 text-slate-500">暂无近30日数据</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="showFinance && !financeData && !financeLoading" class="p-10 text-center text-slate-500">
+            点击展开后自动加载数据
+          </div>
         </div>
 
         <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6 relative"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h3 class="text-lg font-bold text-white flex items-center"><span class="text-blue-400 mr-2">🧾</span> 全站资金流水大盘</h3></div><div class="flex justify-between items-center bg-slate-900/50 p-3 border-b border-slate-700"><input type="text" v-model="searchTx" placeholder="搜索 UID / 账号 / 摘要" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs border border-slate-600 focus:border-amber-400 outline-none w-64"><div class="flex items-center space-x-2 text-xs text-slate-400"><span>单页显示</span><select v-model="sizeTx" class="bg-slate-800 text-white px-2 py-1 rounded border border-slate-600 outline-none"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></div></div><div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left text-sm whitespace-nowrap"><thead class="bg-slate-900/50 text-xs uppercase text-slate-400"><tr><th class="px-6 py-4">时间 (Time)</th><th class="px-6 py-4">用户账号</th><th class="px-6 py-4">变动金额</th><th class="px-6 py-4">当前余额</th><th class="px-6 py-4">资金摘要 (类型)</th></tr></thead><tbody class="divide-y divide-slate-700/50 text-slate-200"><tr v-for="t in pagedTx" :key="t.id" class="hover:bg-slate-700/30 transition"><td class="px-6 py-4 font-mono text-xs text-amber-400/80 font-bold">{{ formatTime(t.createdAt || t.created_at) }}</td><td class="px-6 py-4 font-bold text-white"><div class="flex items-center"><span class="bg-slate-700 px-1.5 py-0.5 rounded text-[10px] mr-2">UID {{ t.user_id }}</span>{{ t.phone || '未知' }}</div></td><td class="px-6 py-4 font-mono font-bold" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ t.amount }}</td><td class="px-6 py-4 font-mono text-amber-400 font-bold">{{ t.balance != null ? app.formatMoney(t.balance) : '--' }}</td><td class="px-6 py-4 text-xs"><span class="text-slate-300 font-bold mr-2">{{ t.description }}</span><span class="text-slate-500 font-mono">({{ t.type }})</span></td></tr><tr v-if="pagedTx.length === 0"><td colspan="5" class="text-center py-10 text-slate-500">暂无资金变动记录</td></tr></tbody></table></div><div class="flex justify-between items-center p-3 bg-slate-900/50 border-t border-slate-700"><span class="text-xs text-slate-400">共 {{ filteredTx.length }} 条记录，第 {{ pageTx }} / {{ totalPageTx }} 页</span><div class="flex space-x-2"><button @click="pageTx > 1 && pageTx--" :disabled="pageTx === 1" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">上一页</button><button @click="pageTx < totalPageTx && pageTx++" :disabled="pageTx === totalPageTx" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 transition">下一页</button></div></div></div>
