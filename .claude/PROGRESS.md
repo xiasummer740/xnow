@@ -132,5 +132,28 @@
 - GitHub: `3232a8b0` ✅
 - VPS: `3232a8b0` ✅（服务已重启，前端 dist 已上传）
 
+## [2026-07-04] 二~五期：Admin 面板全面增强 + Nginx 缓存 + 数据库迁移修复
+
+### 完成
+1. **二~五期 Admin 面板增强** — `65cc93c1`
+   - 二期: Admin 面板 Tab 化重构（概览/用户/订单/流水/财务/配置/日志 7 Tab）
+   - 三期: 订单运营增强（退款/状态刷新/详情弹窗/管理员备注）
+   - 四期: 用户运营增强（用户详情弹窗/订单流水历史/备注标签/站内通知）
+   - 五期: 营销工具（CSV 导出加备注列/全局公告推送/通知铃铛 UI）
+2. **修复 `admin_note` 缺列崩溃** — `Order.js`/`User.js` 模型加了 `admin_note` 字段但数据库没同步，导致所有查询报错 `Unknown column`，页面白屏。已为 `users`/`orders` 表补加列
+3. **Nginx 缓存策略** — HTML 设为 `no-store` 不缓存，assets 设为 `immutable` 永久缓存（文件名带 hash），防止更新后浏览器加载旧 JS 导致白屏
+4. **从备份恢复 System Core 配置** — dashboard 因缺列报错导致表单加载失败，用户保存时空值覆盖了数据库。从 `7月1日备份` 恢复全部配置（Telegram/Cryptomus/BufPay/SMTP/Logo 等）
+5. **credentials-vault 同步** — 更新 `config.md` 日期到 2026-07-04
+
+### 踩坑
+- 数据库模型加字段但没跑 migration → 整站崩溃，以后改模型必须同步加列
+- 表单加载失败时"保存系统配置"会覆写数据库空值 → 考虑加空值保护
+- credentials-vault 已有完整配置，以后凭证直接存那里
+
+### 三方同步状态
+- 本地: `65cc93c1` ✅
+- GitHub: `65cc93c1` ✅
+- VPS: `65cc93c1` ✅（admin_note 列已补，nginx 已 reload，配置已恢复）
+
 ## [2025-06-07] 项目初始化
 - 初始部署
