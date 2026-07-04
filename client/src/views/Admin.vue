@@ -140,20 +140,18 @@ const saveOrderNote = async (o) => {
 const userDetail = ref({ show: false, data: null, orders: [], transactions: [], analysis: null, loading: false, note: '', notifyTitle: '', notifyContent: '' });
 const openUserDetail = async (u) => {
   userDetail.value = { show: true, data: u, orders: [], transactions: [], analysis: null, loading: true, note: u.admin_note || '', notifyTitle: '', notifyContent: '' };
-  try {
-    const [oRes, tRes, aRes] = await Promise.all([
-      fetch(`/api/admin/users/${u.id}/orders`, { headers: { 'Authorization': `Bearer ${userStore.token}` } }),
-      fetch(`/api/admin/users/${u.id}/transactions`, { headers: { 'Authorization': `Bearer ${userStore.token}` } }),
-      fetch(`/api/admin/users/${u.id}/analysis`, { headers: { 'Authorization': `Bearer ${userStore.token}` } })
-    ]);
-    const oData = await oRes.json();
-    const tData = await tRes.json();
-    const aData = await aRes.json();
-    if (oData.status === 'success') userDetail.value.orders = oData.data;
-    if (tData.status === 'success') userDetail.value.transactions = tData.data;
-    if (aData.status === 'success') userDetail.value.analysis = aData.data;
-  } catch (e) { ui.showToast('用户详情加载失败', 'error'); }
-  finally { userDetail.value.loading = false; }
+  const h = { headers: { 'Authorization': `Bearer ${userStore.token}` } };
+  let ok = 0;
+  const fetchOne = async (url, key) => {
+    try { const r = await fetch(url, h); const d = await r.json(); if (d.status === 'success') { userDetail.value[key] = d.data; ok++; } } catch (e) { console.error(key, e); }
+  };
+  await Promise.all([
+    fetchOne(`/api/admin/users/${u.id}/orders`, 'orders'),
+    fetchOne(`/api/admin/users/${u.id}/transactions`, 'transactions'),
+    fetchOne(`/api/admin/users/${u.id}/analysis`, 'analysis')
+  ]);
+  if (ok === 0) ui.showToast('用户详情加载失败', 'error');
+  userDetail.value.loading = false;
 };
 const closeUserDetail = () => { userDetail.value.show = false; };
 
