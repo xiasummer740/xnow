@@ -468,7 +468,33 @@ router.get('/finance', authenticate, async (req, res) => {
       ORDER BY date ASC
     `, { type: sq.QueryTypes.SELECT });
 
-    // 7. 总览汇总（利润模型）
+    // 7. Top 10 服务收入排行
+    const topServices = await sq.query(`
+      SELECT service_id, service_name, COUNT(*) as order_count, COALESCE(SUM(charge), 0) as revenue, COALESCE(SUM(charge - upstream_charge), 0) as profit
+      FROM orders GROUP BY service_id, service_name ORDER BY revenue DESC LIMIT 10
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 8. Top 10 消费用户排行
+    const topUsers = await sq.query(`
+      SELECT u.id, u.phone, COALESCE(SUM(o.charge), 0) as total_spent, COUNT(o.id) as order_count
+      FROM users u INNER JOIN orders o ON u.id = o.user_id
+      GROUP BY u.id, u.phone ORDER BY total_spent DESC LIMIT 10
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 9. 每日新注册数（近30天）
+    const registrationTrend = await sq.query(`
+      SELECT DATE(created_at) as date, COUNT(*) as count
+      FROM users WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at) ORDER BY date ASC
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 10. 订单状态分布
+    const orderStatusDist = await sq.query(`
+      SELECT status, COUNT(*) as count, COALESCE(SUM(charge), 0) as total_charge
+      FROM orders GROUP BY status ORDER BY count DESC
+    `, { type: sq.QueryTypes.SELECT });
+
+    // 11. 总览汇总（利润模型）
     const grossProfit = parseFloat(orderStats.total_charge) - parseFloat(orderStats.total_upstream_charge);
     const netIncome = parseFloat(deposit.total_deposit) - parseFloat(refund.total_refund) - parseFloat(commission.total_commission);
     const profitRate = parseFloat(orderStats.total_charge) > 0
@@ -484,6 +510,10 @@ router.get('/finance', authenticate, async (req, res) => {
         commission: commission,
         userBalance: balance,
         dailyTrend,
+        topServices,
+        topUsers,
+        registrationTrend,
+        orderStatusDist,
         summary: {
           grossProfit: grossProfit.toFixed(2),
           profitRate,

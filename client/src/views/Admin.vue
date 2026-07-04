@@ -1,8 +1,14 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, shallowRef } from 'vue';
 import { useUserStore } from '../stores/user';
-import { useUiStore } from '../stores/ui'; 
+import { useUiStore } from '../stores/ui';
 import { useAppStore } from '../stores/app';
+import VChart from 'vue-echarts';
+import { use } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { LineChart, PieChart, BarChart } from 'echarts/charts';
+import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
+use([CanvasRenderer, LineChart, PieChart, BarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent]);
 
 const userStore = useUserStore(); const ui = useUiStore(); const app = useAppStore();
 const loading = ref(false); const syncing = ref(false); const announceSyncing = ref(false); const editorRef = ref(null);
@@ -184,6 +190,61 @@ const fetchFinance = async () => {
   finally { financeLoading.value = false; }
 };
 watch(showFinance, (v) => { if (v && !financeData.value) fetchFinance(); });
+
+// ECharts 选项
+const trendChartOption = computed(() => {
+  if (!financeData.value?.dailyTrend?.length) return {};
+  const days = financeData.value.dailyTrend;
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['收入', '支出'], textStyle: { color: '#94a3b8' } },
+    grid: { left: 50, right: 20, top: 40, bottom: 30 },
+    xAxis: { type: 'category', data: days.map(d => d.date?.slice(5) || ''), axisLabel: { color: '#64748b' } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
+    series: [
+      { name: '收入', type: 'line', smooth: true, data: days.map(d => parseFloat(d.deposit)), lineStyle: { color: '#22c55e' }, areaStyle: { color: 'rgba(34,197,94,0.15)' }, itemStyle: { color: '#22c55e' } },
+      { name: '支出', type: 'line', smooth: true, data: days.map(d => parseFloat(d.spending)), lineStyle: { color: '#ef4444' }, areaStyle: { color: 'rgba(239,68,68,0.1)' }, itemStyle: { color: '#ef4444' } }
+    ]
+  };
+});
+const channelPieOption = computed(() => {
+  if (!financeData.value?.deposit) return {};
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: ¥{c}' },
+    series: [{
+      type: 'pie', radius: ['40%', '70%'], center: ['50%', '50%'],
+      data: [
+        { name: '微信支付', value: parseFloat(financeData.value.deposit.wechat_deposit), itemStyle: { color: '#22c55e' } },
+        { name: '支付宝', value: parseFloat(financeData.value.deposit.alipay_deposit), itemStyle: { color: '#3b82f6' } },
+        { name: 'USDT', value: parseFloat(financeData.value.deposit.usdt_deposit), itemStyle: { color: '#a855f7' } }
+      ].filter(d => d.value > 0),
+      label: { color: '#94a3b8', formatter: '{b}\n¥{c}' },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0 } }
+    }]
+  };
+});
+const topServiceOption = computed(() => {
+  if (!financeData.value?.topServices?.length) return {};
+  const top = financeData.value.topServices.slice(0, 8);
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 120, right: 20, top: 10, bottom: 30 },
+    xAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
+    yAxis: { type: 'category', data: top.map(s => (s.service_name || '').length > 12 ? (s.service_name || '').slice(0, 12) + '...' : (s.service_name || '')).reverse(), axisLabel: { color: '#94a3b8', fontSize: 10 } },
+    series: [{ type: 'bar', data: top.map(s => parseFloat(s.revenue)).reverse(), itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] } }]
+  };
+});
+const regTrendOption = computed(() => {
+  if (!financeData.value?.registrationTrend?.length) return {};
+  const days = financeData.value.registrationTrend;
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 40, right: 20, top: 10, bottom: 30 },
+    xAxis: { type: 'category', data: days.map(d => d.date?.slice(5) || ''), axisLabel: { color: '#64748b', fontSize: 9 } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
+    series: [{ type: 'bar', data: days.map(d => parseInt(d.count)), itemStyle: { color: '#3b82f6', borderRadius: [4, 4, 0, 0] } }]
+  };
+});
 
 onMounted(() => { fetchDashboard(true); fetchVpnStatus(); refreshTimer = setInterval(() => { syncing.value = true; fetchDashboard(false); }, 10000); });
 onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
@@ -369,23 +430,23 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 </div>
               </div>
 
-              <!-- 近7日收支趋势（纯CSS条形图） -->
-              <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                <h4 class="text-sm font-bold text-white mb-3">近30日收支趋势</h4>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-xs">
-                    <thead><tr class="text-slate-500"><th class="text-left py-1 pr-2">日期</th><th class="text-right px-2">收入</th><th class="w-1/2 px-2"><div class="h-4"></div></th><th class="text-left px-2">支出</th><th class="w-1/2 px-2"><div class="h-4"></div></th></tr></thead>
-                    <tbody>
-                      <tr v-for="d in financeData.dailyTrend.slice(-7)" :key="d.date" class="hover:bg-slate-800/30 rounded-lg">
-                        <td class="text-slate-300 py-1.5 pr-2 whitespace-nowrap">{{ d.date?.slice(5) || d.date }}</td>
-                        <td class="text-green-400 font-mono text-right px-2 whitespace-nowrap">{{ app.formatMoney(d.deposit) }}</td>
-                        <td class="px-2"><div class="h-3 bg-green-500/30 rounded-full" :style="{ width: Math.min(100, d.deposit / Math.max(...financeData.dailyTrend.slice(-7).map(x => parseFloat(x.deposit)), 1) * 100) + '%' }"></div></td>
-                        <td class="text-red-400 font-mono px-2 whitespace-nowrap">{{ app.formatMoney(d.spending) }}</td>
-                        <td class="px-2"><div class="h-3 bg-red-500/30 rounded-full" :style="{ width: Math.min(100, d.spending / Math.max(...financeData.dailyTrend.slice(-7).map(x => parseFloat(x.spending)), 1) * 100) + '%' }"></div></td>
-                      </tr>
-                      <tr v-if="!financeData.dailyTrend || financeData.dailyTrend.length === 0"><td colspan="5" class="text-center py-4 text-slate-500">暂无近30日数据</td></tr>
-                    </tbody>
-                  </table>
+              <!-- 图表区域 -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">近30日收支趋势</h4>
+                  <v-chart :option="trendChartOption" style="height:240px" autoresize />
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">充值渠道分布</h4>
+                  <v-chart :option="channelPieOption" style="height:240px" autoresize />
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">TOP 服务收入排行</h4>
+                  <v-chart :option="topServiceOption" style="height:240px" autoresize />
+                </div>
+                <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+                  <h4 class="text-sm font-bold text-white mb-3">每日新注册数</h4>
+                  <v-chart :option="regTrendOption" style="height:240px" autoresize />
                 </div>
               </div>
             </div>

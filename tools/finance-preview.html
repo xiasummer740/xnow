@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>XNOW 财务大盘预览</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{slate:{900:'#0f172a',800:'#1e293b',700:'#334155',600:'#475569',500:'#64748b',400:'#94a3b8',300:'#cbd5e1'}}}}}</script>
+<style>body{background:#0f172a;font-family:system-ui,-apple-system,sans-serif}.font-mono{font-family:'JetBrains Mono','Cascadia Code',monospace}</style>
+</head>
+<body class="p-8">
+  <div class="max-w-7xl mx-auto space-y-6 pb-20 relative z-10">
+
+    <!-- 模拟 admin 已有的顶部卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 text-green-500/10 text-8xl">💰</div>
+        <div class="text-slate-400 text-xs font-bold mb-1 flex items-center justify-between"><span>上游余额 (API)</span><span class="flex items-center text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full border border-green-500/30"><span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse mr-1"></span>LIVE</span></div>
+        <div class="text-3xl font-black text-green-400 font-mono mt-2">1,250.50</div>
+      </div>
+      <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 text-amber-500/10 text-8xl">🏦</div>
+        <div class="text-slate-400 text-xs font-bold mb-1">本站玩家金库汇总</div>
+        <div class="text-3xl font-black text-amber-400 font-mono mt-2">¥ 36,580.00</div>
+      </div>
+      <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 text-blue-500/10 text-8xl">📈</div>
+        <div class="text-slate-400 text-xs font-bold mb-1">实时汇率 (USD/CNY)</div>
+        <div class="text-3xl font-black text-blue-400 font-mono mt-2">7.24</div>
+      </div>
+      <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 text-purple-500/10 text-8xl">📦</div>
+        <div class="text-slate-400 text-xs font-bold mb-1">全站累计处理订单</div>
+        <div class="text-3xl font-black text-purple-400 font-mono mt-2">2,847</div>
+      </div>
+    </div>
+
+    <!-- 💰 财务大盘 -->
+    <div class="bg-slate-800/80 border border-slate-700 rounded-3xl shadow-xl overflow-hidden mt-6">
+      <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+        <h3 class="text-lg font-bold text-white flex items-center"><span class="text-emerald-400 mr-2">💰</span> 财务大盘</h3>
+        <span class="text-slate-400 text-sm rotate-180">▼</span>
+      </div>
+      <div class="p-6 space-y-6">
+
+        <!-- 摘要卡片 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+            <div class="text-xs text-slate-400 mb-1">累计收入（充值总额）</div>
+            <div class="text-2xl font-black text-green-400 font-mono">¥ 128,560.50</div>
+            <div class="text-[10px] text-slate-500 mt-1">今日 +¥ 2,350.00 / 本月 +¥ 28,650.00</div>
+          </div>
+          <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+            <div class="text-xs text-slate-400 mb-1">总成本（上游进货）</div>
+            <div class="text-2xl font-black text-red-400 font-mono">¥ 59,100.00</div>
+            <div class="text-[10px] text-slate-500 mt-1">总订单 2,847 笔</div>
+          </div>
+          <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+            <div class="text-xs text-slate-400 mb-1">毛利润（订单差价）</div>
+            <div class="text-2xl font-black text-amber-400 font-mono">¥ 39,400.00</div>
+            <div class="text-[10px] text-slate-500 mt-1">利润率 40.0%</div>
+          </div>
+          <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+            <div class="text-xs text-slate-400 mb-1">用户余额总负债</div>
+            <div class="text-2xl font-black text-purple-400 font-mono">¥ 36,580.00</div>
+            <div class="text-[10px] text-slate-500 mt-1">已充值未消费金额</div>
+          </div>
+        </div>
+
+        <!-- 充值渠道分布 + 支出项 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+            <h4 class="text-sm font-bold text-white mb-3">充值渠道分布</h4>
+            <div class="space-y-3">
+              <div>
+                <div class="flex justify-between text-xs mb-1"><span class="text-slate-400">微信支付</span><span class="text-white font-mono font-bold">¥ 68,200.00</span></div>
+                <div class="h-2 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-green-500 rounded-full" style="width:53%"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1"><span class="text-slate-400">支付宝</span><span class="text-white font-mono font-bold">¥ 45,360.50</span></div>
+                <div class="h-2 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:35%"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1"><span class="text-slate-400">USDT</span><span class="text-white font-mono font-bold">¥ 15,000.00</span></div>
+                <div class="h-2 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-purple-500 rounded-full" style="width:12%"></div></div>
+              </div>
+              <div class="border-t border-slate-700 pt-3 flex justify-between text-xs">
+                <span class="text-green-400 font-bold">合计</span>
+                <span class="text-green-400 font-mono font-bold">¥ 128,560.50</span>
+              </div>
+            </div>
+          </div>
+          <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+            <h4 class="text-sm font-bold text-white mb-3">支出明细</h4>
+            <div class="space-y-3">
+              <div class="flex justify-between text-xs"><span class="text-slate-400">上游成本</span><span class="text-red-400 font-mono font-bold">¥ 59,100.00</span></div>
+              <div class="flex justify-between text-xs"><span class="text-slate-400">佣金支出</span><span class="text-red-400 font-mono font-bold">¥ 4,250.00</span></div>
+              <div class="flex justify-between text-xs"><span class="text-slate-400">退款支出</span><span class="text-red-400 font-mono font-bold">¥ 1,280.00</span></div>
+              <div class="border-t border-slate-700 pt-3 mt-3 flex justify-between text-xs">
+                <span class="text-amber-400 font-bold">净利润（充值-退款-佣金）</span>
+                <span class="text-amber-400 font-mono font-bold">¥ 123,030.50</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 近7日收支趋势 -->
+        <div class="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
+          <h4 class="text-sm font-bold text-white mb-4">近7日收支趋势</h4>
+          <div class="space-y-3">
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs text-slate-500 pb-1 border-b border-slate-700/50">
+              <span>日期</span><span class="text-right">收入</span><span></span><span class="text-right">支出</span><span></span>
+            </div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-05</span><span class="text-green-400 font-mono text-right">¥ 856</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:36%"></div></div><span class="text-red-400 font-mono text-right">¥ 420</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:38%"></div></div></div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-06</span><span class="text-green-400 font-mono text-right">¥ 1,200</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:51%"></div></div><span class="text-red-400 font-mono text-right">¥ 680</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:62%"></div></div></div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-07</span><span class="text-green-400 font-mono text-right">¥ 2,350</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:100%"></div></div><span class="text-red-400 font-mono text-right">¥ 920</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:84%"></div></div></div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-08</span><span class="text-green-400 font-mono text-right">¥ 680</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:29%"></div></div><span class="text-red-400 font-mono text-right">¥ 550</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:50%"></div></div></div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-09</span><span class="text-green-400 font-mono text-right">¥ 1,890</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:80%"></div></div><span class="text-red-400 font-mono text-right">¥ 780</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:71%"></div></div></div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-10</span><span class="text-green-400 font-mono text-right">¥ 1,520</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:65%"></div></div><span class="text-red-400 font-mono text-right">¥ 1,100</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:100%"></div></div></div>
+            <div class="grid grid-cols-[70px_90px_1fr_90px_1fr] gap-2 text-xs items-center"><span class="text-slate-300">06-11</span><span class="text-green-400 font-mono text-right">¥ 2,350</span><div><div class="h-3 bg-green-500/30 rounded-full" style="width:100%"></div></div><span class="text-red-400 font-mono text-right">¥ 890</span><div><div class="h-3 bg-red-500/30 rounded-full" style="width:81%"></div></div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 底部说明 -->
+    <div class="text-center text-slate-600 text-xs mt-8">预览数据为模拟展示，实际数据以线上为准</div>
+
+  </div>
+</body>
+</html>
