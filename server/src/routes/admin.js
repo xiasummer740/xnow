@@ -410,6 +410,72 @@ router.get('/categories', authenticate, async (req, res) => {
   }
 });
 
+// ====== 服务端分页查询 ======
+router.get('/users', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const { search, role, date_from, date_to } = req.query;
+    const where = {};
+    if (search) where[Op.or] = [
+      { phone: { [Op.like]: '%' + search + '%' } },
+      { email: { [Op.like]: '%' + search + '%' } },
+      { id: isNaN(search) ? 0 : parseInt(search) }
+    ];
+    if (role && ['user', 'gold', 'agent', 'admin', 'super_admin'].includes(role)) where.role = role;
+    if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
+    if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    const { count, rows } = await User.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
+    res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+router.get('/orders', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const { search, status, date_from, date_to } = req.query;
+    const where = {};
+    if (search) where[Op.or] = [
+      { order_no: { [Op.like]: '%' + search + '%' } },
+      { service_name: { [Op.like]: '%' + search + '%' } },
+      { phone: { [Op.like]: '%' + search + '%' } },
+      { user_id: isNaN(search) ? 0 : parseInt(search) }
+    ];
+    if (status) where.status = status;
+    if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
+    if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    const { count, rows } = await Order.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
+    res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+router.get('/transactions', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const { search, type, date_from, date_to, user_id } = req.query;
+    const where = {};
+    if (search) where[Op.or] = [
+      { phone: { [Op.like]: '%' + search + '%' } },
+      { description: { [Op.like]: '%' + search + '%' } },
+      { user_id: isNaN(search) ? 0 : parseInt(search) }
+    ];
+    if (type) where.type = type;
+    if (user_id) where.user_id = parseInt(user_id);
+    if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
+    if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    const { count, rows } = await Transaction.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
+    res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ====== 财务聚合分析 ======
 router.get('/finance', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
