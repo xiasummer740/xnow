@@ -139,9 +139,9 @@ const saveOrderNote = async (o) => {
 // 用户运营
 const userDetail = ref({ show: false, data: null, orders: [], transactions: [], analysis: null, loading: false, note: '', notifyTitle: '', notifyContent: '' });
 const userGeo = ref({ register: null, lastLogin: null });
-const fetchGeo = async (ip) => {
+const fetchGeo = async (ip, token) => {
   if (!ip || ['127.0.0.1','::1','localhost'].includes(ip)) return '';
-  try { const r = await fetch(`/api/admin/geo/${ip}`); const d = await r.json(); return d.city ? `${d.country} ${d.city}` : d.country || ''; } catch { return ''; }
+  try { const r = await fetch(`/api/admin/geo/${ip}`, { headers: { 'Authorization': `Bearer ${token}` } }); const d = await r.json(); return d.city ? `${d.country} ${d.city}` : d.country || ''; } catch { return ''; }
 };
 const openUserDetail = async (u) => {
   userDetail.value = { show: true, data: u, orders: [], transactions: [], analysis: null, loading: true, note: u.admin_note || '', notifyTitle: '', notifyContent: '' };
@@ -155,8 +155,8 @@ const openUserDetail = async (u) => {
     fetchOne(`/api/admin/users/${u.id}/orders`, 'orders'),
     fetchOne(`/api/admin/users/${u.id}/transactions`, 'transactions'),
     fetchOne(`/api/admin/users/${u.id}/analysis`, 'analysis'),
-    fetchGeo(u.register_ip).then(v => userGeo.value.register = v),
-    fetchGeo(u.last_login_ip).then(v => userGeo.value.lastLogin = v)
+    fetchGeo(u.register_ip, userStore.token).then(v => userGeo.value.register = v),
+    fetchGeo(u.last_login_ip, userStore.token).then(v => userGeo.value.lastLogin = v)
   ]);
   if (ok === 0) ui.showToast('用户详情加载失败', 'error');
   userDetail.value.loading = false;
