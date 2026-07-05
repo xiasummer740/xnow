@@ -214,4 +214,32 @@
 ### 三方同步状态
 - 本地: `48760d4` ✅
 - GitHub: `48760d4` ✅
+
+## [2026-07-05] 八期：VPS PM2迁移 + 角色样式统一 + 公告编辑区重构 + 管理员余额改造
+
+### 完成
+1. **PM2 接管应用** — `49581f7`
+   - 修复 PM2 symlink 断链，停用旧 systemd 服务（`xnow-api.service`），PM2 管理 xnow-app
+   - `xnow verify` health check 200 ✅
+2. **角色显示统一** — `49581f7` / `a5bcc65`
+   - DashboardLayout 右上角、Admin.vue 用户列表、详情弹窗的角色名称统一使用 i18n
+   - `admin` →「至尊管理员」，使用 `x-badge badge-admin` CSS 样式（红色脉冲+流光）
+3. **公告编辑区重构** — `5dcb6b6`
+   - 拆分为「上游公告预览（只读）」和「正式公告编辑器」两个区域
+   - 一键拉取上游不再覆盖编辑器内容，需要「填入编辑器」确认
+   - sync-announcement 路由不再自动存 DB（由定时任务负责）
+4. **管理员余额显示上游余额** — `ceb7319e` / `16c7324` / `ffee917d` / `49ace16`
+   - 概览卡片上游余额 < 30 时显示红色 ⚠️ 余额不足
+   - 玩家金库汇总、财务负债 SQL 排除管理员账号
+   - 右上角头部、用户列表、详情弹窗的管理员余额统一显示上游 API 余额
+
+### 踩坑
+- DashboardLayout 变量名 `app`→`appStore` 写错导致 Vue 白屏
+- VPS `client/dist/index.html` 有本地改动导致 git pull 被拦，需先 stash
+- 上游公告定时间步疑似因 EADDRINUSE 崩溃重启导致重复触发通知
+
+### 三方同步状态
+- 本地: `49ace166` ✅
+- GitHub: `49ace166` ✅
+- VPS: `49ace166` ✅（PM2 运行中，前端 dist 已构建）
 - VPS: `48760d4` ✅（服务已重启）
