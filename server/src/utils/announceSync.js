@@ -137,15 +137,28 @@ export const autoSyncAnnouncement = async () => {
 
     const oldText = _stripHtml(existingClean)
     const newText = _stripHtml(newContent)
-    if (oldText !== newText) {
+
+    // 提取版本号优先比较 — 避免上游页面动态内容导致误判
+    const _extractVersion = (s) => {
+      const m = s.match(/【([^】]+)】/)
+      return m ? m[1].trim() : ''
+    }
+    const oldVersion = _extractVersion(oldText)
+    const newVersion = _extractVersion(newText)
+
+    if (oldText === newText) {
+      // 完全一致：不处理
+    } else if (oldVersion !== newVersion) {
+      // 版本号变了 → 真正的公告更新：更新 + 通知
       await Config.upsert({ key: 'announcement', value: newContent })
-      const dateMatch = newContent.match(/【([^】]+)】/)
-      const version = dateMatch ? dateMatch[1] : '最新'
-      console.log('📢 [AutoAnnounce] 公告已自动更新为: ' + version)
-      // debug: 打印差异
-      if (oldText) console.log('📢 [AutoAnnounce] 旧文本:', oldText.substring(0, 200))
-      if (newText) console.log('📢 [AutoAnnounce] 新文本:', newText.substring(0, 200))
+      const version = newVersion || '最新'
+      console.log('📢 [AutoAnnounce] 公告已更新至: ' + version)
       sendTgMessage('📢 <b>公告已自动同步</b>\n版本: ' + version)
+    } else {
+      // 版本号相同但文本有差异 → 上游页面动态元素导致的误判
+      // 静默更新内容但不发通知
+      await Config.upsert({ key: 'announcement', value: newContent })
+      console.log('📢 [AutoAnnounce] 公告内容微调（静默同步，版本不变）')
     }
     // 静默：内容无变化时不输出任何日志，不通知
   } catch (e) {
