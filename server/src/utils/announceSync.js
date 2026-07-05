@@ -1,4 +1,5 @@
 import https from 'https'
+import crypto from 'crypto'
 import { Config } from '../models/index.js'
 import { sendTgMessage } from './tgBot.js'
 
@@ -138,7 +139,7 @@ export const autoSyncAnnouncement = async () => {
     const oldText = _stripHtml(existingClean)
     const newText = _stripHtml(newContent)
 
-    // 提取版本号优先比较 — 避免上游页面动态内容导致误判
+    // 提取版本号
     const _extractVersion = (s) => {
       const m = s.match(/【([^】]+)】/)
       return m ? m[1].trim() : ''
@@ -155,10 +156,27 @@ export const autoSyncAnnouncement = async () => {
       console.log('📢 [AutoAnnounce] 公告已更新至: ' + version)
       sendTgMessage('📢 <b>公告已自动同步</b>\n版本: ' + version)
     } else {
-      // 版本号相同但文本有差异 → 上游页面动态元素导致的误判
-      // 静默更新内容但不发通知
-      await Config.upsert({ key: 'announcement', value: newContent })
-      console.log('📢 [AutoAnnounce] 公告内容微调（静默同步，版本不变）')
+      // 版本号相同但文本有差异
+      // 用去噪比对确认是否是真正的内容变更，还是上游页面的动态干扰
+      const newHash = crypto.createHash('md5').update(newText).digest('hex')
+
+      // 读取上次记录的"待确认"hash
+      const pendingConf = await Config.findOne({ where: { key: 'announce_pending_hash' } })
+      const pendingHash = pendingConf?.value || ''
+
+      if (pendingHash === newHash) {
+        // 连续两次都是同一个"新内容" → 真正的变更，通知
+        await Config.upsert({ key: 'announcement', value: newContent })
+        await Config.upsert({ key: 'announce_pending_hash', value: '' }) // 清空待确认
+        console.log('📢 [AutoAnnounce] 公告内容已更新（二次确认）')
+        sendTgMessage('📢 <b>公告已自动同步</b>\n版本: ' + (newVersion || '最新'))
+      } else {
+        // 第一次看到这个新内容 → 记下hash，下次再确认
+        await Config.upsert({ key: 'announce_pending_hash', value: newHash })
+        // 也更新存储内容，但先不发通知
+        await Config.upsert({ key: 'announcement', value: newContent })
+        console.log('📢 [AutoAnnounce] 公告内容疑似变更，等待下次确认')
+      }
     }
     // 静默：内容无变化时不输出任何日志，不通知
   } catch (e) {
