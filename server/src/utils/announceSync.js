@@ -135,11 +135,16 @@ export const autoSyncAnnouncement = async () => {
         .replace(/\s+/g, ' ')
         .trim()
 
-    if (_stripHtml(newContent) !== _stripHtml(existingClean)) {
+    const oldText = _stripHtml(existingClean)
+    const newText = _stripHtml(newContent)
+    if (oldText !== newText) {
       await Config.upsert({ key: 'announcement', value: newContent })
       const dateMatch = newContent.match(/【([^】]+)】/)
       const version = dateMatch ? dateMatch[1] : '最新'
       console.log('📢 [AutoAnnounce] 公告已自动更新为: ' + version)
+      // debug: 打印差异
+      if (oldText) console.log('📢 [AutoAnnounce] 旧文本:', oldText.substring(0, 200))
+      if (newText) console.log('📢 [AutoAnnounce] 新文本:', newText.substring(0, 200))
       sendTgMessage('📢 <b>公告已自动同步</b>\n版本: ' + version)
     }
     // 静默：内容无变化时不输出任何日志，不通知
