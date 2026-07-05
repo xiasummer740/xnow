@@ -191,10 +191,6 @@ router.post('/sync-announcement', authenticate, async (req, res) => {
     const siteNameConf = await Config.findOne({ where: { key: 'site_name' } });
     const currentDomain = siteNameConf ? siteNameConf.value : 'XNOW';
 
-    await Config.upsert({ key: 'announcement', value: announcementHtml });
-
-    sendTgMessage('📢 公告已从上游自动同步【' + (announcementHtml.match(/【([^】]+)】/) || ['', '最新'])[1] + '】，长度: ' + announcementHtml.length + ' 字符');
-
     res.json({ status: 'success', data: { announcement: announcementHtml }, message: '公告同步成功' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '同步失败: ' + e.message });

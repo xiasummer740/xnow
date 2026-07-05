@@ -12,6 +12,7 @@ use([CanvasRenderer, LineChart, PieChart, BarChart, GridComponent, TooltipCompon
 
 const userStore = useUserStore(); const ui = useUiStore(); const app = useAppStore();
 const loading = ref(false); const syncing = ref(false); const announceSyncing = ref(false); const editorRef = ref(null);
+const upstreamPreview = ref('');
 const tabs = [
   { key: 'overview', label: '📊 概览' },
   { key: 'users', label: '👥 用户' },
@@ -211,7 +212,7 @@ const fetchDashboard = async (showLoading = true) => {
             if (data.value.users) { data.value.users.forEach(u => { u.customInput = u.custom_multiplier; }); }
             if (showLoading && json.config) {
                 Object.keys(form.value).forEach(key => { if (json.config[key] !== undefined) form.value[key] = json.config[key]; });
-                if (editorRef.value && !editorRef.value.innerHTML) { editorRef.value.innerHTML = form.value.announcement; }
+                if (editorRef.value) editorRef.value.innerHTML = form.value.announcement;
             }
         }
     } catch (e) { ui.showToast('数据同步失败', 'error'); } finally { if (showLoading) loading.value = false; syncing.value = false; }
@@ -225,14 +226,20 @@ const syncUpstreamAnnouncement = async () => {
     const res = await fetch('/api/admin/sync-announcement', { method: 'POST', headers: { 'Authorization': `Bearer ${userStore.token}` } });
     const data = await res.json();
     if (data.status === 'success') {
-      form.value.announcement = data.data.announcement;
-      if (editorRef.value) editorRef.value.innerHTML = data.data.announcement;
-      ui.showToast('上游公告已同步到编辑器，请确认后点击「同步发布公告」保存', 'success');
+      upstreamPreview.value = data.data.announcement;
+      ui.showToast('上游公告已拉取，点击「填入编辑器」使用', 'success');
     } else {
       ui.showToast(data.message || '同步失败', 'error');
     }
   } catch (e) { ui.showToast('网络异常', 'error'); }
   announceSyncing.value = false;
+};
+
+const copyUpstreamToEditor = () => {
+  if (!upstreamPreview.value) return;
+  form.value.announcement = upstreamPreview.value;
+  if (editorRef.value) editorRef.value.innerHTML = upstreamPreview.value;
+  ui.showToast('已填入编辑器，点击「同步发布公告」保存', 'success');
 };
 
 const announcePushing = ref(false);
@@ -523,15 +530,29 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-3xl shadow-xl flex flex-col">
                 <h3 class="text-lg font-bold text-white mb-4 flex items-center"><span class="text-pink-500 mr-2">📢</span> 全站公告编辑</h3>
+
+                <!-- 区域A: 上游公告预览 -->
+                <div class="bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 mb-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-bold text-indigo-400 flex items-center"><span class="mr-2">📥</span> 上游公告预览</h4>
+                        <button @click="syncUpstreamAnnouncement" :disabled="announceSyncing" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow disabled:opacity-50">{{ announceSyncing ? '同步中...' : '🔄 一键拉取上游公告' }}</button>
+                    </div>
+                    <div v-if="upstreamPreview" class="bg-slate-950/80 border border-slate-700/50 rounded-lg p-3 text-xs text-slate-300 max-h-40 overflow-y-auto custom-scrollbar mb-3 leading-relaxed" v-html="upstreamPreview"></div>
+                    <div v-else class="bg-slate-950/80 border border-slate-700/50 rounded-lg p-3 text-xs text-slate-500 italic mb-3">点击上方按钮拉取上游最新公告</div>
+                    <div class="flex justify-end">
+                        <button @click="copyUpstreamToEditor" :disabled="!upstreamPreview" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs transition disabled:opacity-40 disabled:cursor-not-allowed">📋 填入编辑器</button>
+                    </div>
+                </div>
+
+                <!-- 区域B: 正式公告编辑器 -->
                 <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/80 p-2 rounded-t-xl border border-slate-600 border-b-0 select-none">
                     <button @click="execCmd('bold')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold text-xs shadow-sm" title="加粗">B</button><button @click="execCmd('italic')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white italic text-xs shadow-sm" title="斜体">I</button><button @click="execCmd('underline')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white underline text-xs shadow-sm" title="下划线">U</button><button @click="execCmd('strikeThrough')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white line-through text-xs shadow-sm" title="删除线">S</button><div class="w-px h-4 bg-slate-600 mx-1"></div><button @click="execCmd('justifyLeft')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="左对齐">⇤</button><button @click="execCmd('justifyCenter')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="居中">⇥⇤</button><button @click="execCmd('justifyRight')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="右对齐">⇥</button><div class="w-px h-4 bg-slate-600 mx-1"></div><button @click="execCmd('insertUnorderedList')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="无序列表">•</button><button @click="execCmd('insertOrderedList')" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="有序列表">1.</button><div class="w-px h-4 bg-slate-600 mx-1"></div><select @change="e => { execCmd('fontSize', e.target.value); e.target.selectedIndex=0 }" class="bg-slate-700 text-white text-xs rounded px-1 py-1 outline-none shadow-sm cursor-pointer"><option value="">字号</option><option value="1">极小</option><option value="3">标准</option><option value="5">大</option><option value="7">特大</option></select><select @change="e => { execCmd('foreColor', e.target.value); e.target.selectedIndex=0 }" class="bg-slate-700 text-white text-xs rounded px-1 py-1 outline-none shadow-sm cursor-pointer"><option value="">A 颜色</option><option value="#ef4444">🔴 红</option><option value="#f59e0b">🟠 橙</option><option value="#fbbf24">🟡 黄</option><option value="#22c55e">🟢 绿</option><option value="#3b82f6">🔵 蓝</option><option value="#a855f7">🟣 紫</option><option value="#ffffff">⚪ 白</option></select><select @change="e => { execCmd('hiliteColor', e.target.value); e.target.selectedIndex=0 }" class="bg-slate-700 text-white text-xs rounded px-1 py-1 outline-none shadow-sm cursor-pointer"><option value="">背景色</option><option value="#ef4444">🔴 红</option><option value="#f59e0b">🟠 橙</option><option value="#fbbf24">🟡 黄</option><option value="#22c55e">🟢 绿</option><option value="#3b82f6">🔵 蓝</option><option value="#1e293b">⚫ 黑</option></select><div class="w-px h-4 bg-slate-600 mx-1"></div><button @click="insertLink" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="插入链接">🔗</button><button @click="insertImage" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs shadow-sm" title="插入图片">🖼️</button><button @click="execCmd('removeFormat')" class="px-2 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded text-xs ml-auto border border-red-500/30 transition shadow-sm" title="清除格式">🧹 清除格式</button>
                 </div>
                 <div ref="editorRef" contenteditable="true" @input="syncEditorContent" @blur="syncEditorContent" class="w-full h-48 bg-slate-900/80 border border-slate-600 rounded-b-xl p-4 text-slate-200 outline-none focus:border-pink-500 transition overflow-y-auto custom-scrollbar mb-3 text-sm leading-relaxed" style="min-height: 12rem;"></div>
-                
+
                 <div class="flex justify-between items-center mb-6">
                     <span class="text-xs text-slate-500">超强富媒体支持，图文并茂</span>
                     <div class="flex space-x-3">
-                      <button @click="syncUpstreamAnnouncement" :disabled="announceSyncing" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">{{ announceSyncing ? '同步中...' : '🔄 一键拉取上游公告' }}</button>
                       <button @click="saveConfig" class="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-900 font-black transition shadow-[0_0_15px_rgba(251,191,36,0.3)]">同步发布公告</button>
                       <button @click="pushAnnouncementToAll" :disabled="announcePushing" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">{{ announcePushing ? '推送中...' : '📢 推送给所有用户' }}</button>
                     </div>
