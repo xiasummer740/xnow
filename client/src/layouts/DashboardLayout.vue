@@ -39,7 +39,7 @@
         <div class="flex items-center space-x-1 text-slate-300"><button @click="isSidebarOpen = true" class="md:hidden p-1 mr-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button><span class="font-bold hidden sm:block text-slate-100 tracking-widest text-sm">{{ appStore.t('console') }}</span></div>
         <div class="flex items-center space-x-2 md:space-x-5 text-sm">
           <div @click="appStore.toggleCurrency" class="hidden sm:flex bg-slate-800 border border-slate-700 rounded-full p-0.5 cursor-pointer text-xs transition hover:border-amber-400 select-none"><span :class="['px-2 py-0.5 rounded-full font-bold transition', appStore.currency === 'CNY' ? 'bg-amber-400 text-black' : 'text-slate-400']">CNY</span><span :class="['px-2 py-0.5 rounded-full font-bold transition', appStore.currency === 'USD' ? 'bg-amber-400 text-black' : 'text-slate-400']">USD</span></div>
-          <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1">{{ appStore.t('balance') }}</span><span class="text-amber-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
+          <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1">{{ appStore.t('balance') }}</span><span v-if="['admin','super_admin'].includes(userStore.userInfo?.role)" class="text-green-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]">{{ upstreamHeaderBalance || '查询中...' }}</span><span v-else class="text-amber-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
           <!-- 通知铃铛 -->
           <div class="relative" v-if="userStore.token && userStore.userInfo?.role !== 'super_admin'">
             <button @click="toggleNotifPanel" class="relative text-slate-400 hover:text-white transition p-1">
@@ -142,6 +142,7 @@ import { useRoute } from 'vue-router';
 const userStore = useUserStore(); const appStore = useAppStore(); const uiStore = useUiStore();
 const route = useRoute(); const isSidebarOpen = ref(false);
 const isProfileMenuOpen = ref(false);
+const upstreamHeaderBalance = ref('');
 
 const handleNav = (path) => { isSidebarOpen.value = false; if (route.path === path) appStore.triggerRefresh(); };
 const handleLogout = async () => {
@@ -214,6 +215,14 @@ const syncUserStatus = async () => {
     const data = await res.json();
     if (data.status === 'success') {
       userStore.updateUserInfo({ balance: data.balance, role: data.role, vip_expire_at: data.vip_expire_at, api_key: data.api_key, phone: data.phone, email: data.email });
+      // 管理员额外获取上游余额
+      if (['admin', 'super_admin'].includes(data.role)) {
+        try {
+          const dash = await fetch(`/api/admin/dashboard?_t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+          const dashData = await dash.json();
+          if (dashData.status === 'success') upstreamHeaderBalance.value = dashData.upstreamBalance?.balance || '0.00';
+        } catch(e) {}
+      }
     }
   } catch (e) {}
 };
