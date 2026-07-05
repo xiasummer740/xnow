@@ -818,6 +818,7 @@ router.get('/finance', authenticate, async (req, res) => {
     const [balance] = await sq.query(`
       SELECT COALESCE(SUM(balance), 0) as total_balance
       FROM users
+      WHERE role NOT IN ('admin', 'super_admin')
     `, { type: sq.QueryTypes.SELECT });
 
     // 5a. 用户总数（用于 ARPU 等指标）
