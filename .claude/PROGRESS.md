@@ -270,3 +270,68 @@
 - 本地: `f4f0f6b9` ✅
 - GitHub: `f4f0f6b9` ✅
 - VPS: `f4f0f6b9` ✅（PM2 已重启）
+
+## [2026-07-08] 九期：安全节点全面优化（19项，分4批部署6次提交）
+
+### 完成
+
+#### 🔴 Bug修复（6项）
+| 改动 | 说明 |
+|------|------|
+| 续费价格计算 | 纯续时长改为按当前套餐流量计费，不再硬编码10GB |
+| 购买/续费限流 | 10s/5s各1次，keyGenerator 兼容 express-rate-limit v8 |
+| 流量同步异常 | 失败有日志+错误列表返回 |
+| 续费XX-UI失败 | 告警提示，不影响DB更新 |
+| 过期二维码 | 灰度+水印，不可复制 |
+| 公告重复通知 | 旧代码未部署，VPS git pull + pm2 restart 补上 |
+
+#### 📈 功能增强（5项）
+| 改动 | 说明 |
+|------|------|
+| 节点测速 | 后端ping + 前端延迟标签（绿/黄/红） |
+| 连接教程 | Clash/Sing-Box/Shadowrocket/v2rayN 四端教程 |
+| 搜索过滤 | 节点名称/位置搜索 + 区域筛选 |
+| 信任背书 | 已服务人数/节点数/支付方式/客服 badge |
+| 首页引导 | 3个使用场景卡片直链到商城 |
+
+#### 🎟️ 商业化功能（4项）
+| 改动 | 说明 |
+|------|------|
+| 管理员统计看板 | 6格指标卡 + 30天订单趋势柱状图 + 各节点用量条 + 近30天收入 |
+| 优惠码系统 | Coupon模型 + 前后端CRUD + 购买时输入验证 |
+| 流量预警 | 每小时检查90%用量，TG通知管理员 |
+| 自动归档 | 过期30天自动标记archived |
+
+#### 🚀 获客功能（4项）
+| 改动 | 说明 |
+|------|------|
+| 免费试用 | 新用户100MB/3天，管理员可配置开关和流量 |
+| 多协议切换 | 节点自定义协议列表（可编辑），前端按节点显示 |
+| 节点详情面板 | 购买前展示协议数/容量/线路/延迟 |
+| 使用案例引导 | Home.vue 三个场景卡片直链安全节点 |
+
+#### 🛠️ 技术债务（5项）
+| 改动 | 说明 |
+|------|------|
+| flag映射表合并 | VpnShop EMOJI_MAP+NAME_MAP 替代 FC+ETOC |
+| 节点列表缓存 | 30秒内存缓存 |
+| 轮询优化 | VpnClients 5s→15s |
+| ALTER TABLE 修复 | 表名 `VpnProducts`→`vpn_products`（underscored命名） |
+| rateLimit v8兼容 | keyGenerator 不用 `req.ip` |
+
+### 踩坑
+- express-rate-limit v8.x 在构建 rateLimiter 时校验 keyGenerator 源码，引用 `req.ip` 直接抛 `ERR_ERL_KEY_GEN_IPV6` 阻止模块加载，导致 `/products` 等无关接口也挂掉
+- Sequelize `underscored: true` 下表名是 `vpn_products` 而非 `VpnProducts`，ALTER TABLE 需对应
+- VPS 前端 dist 有本地 변경사항，需 `vite build` 后 scp 上传（不能用 git 管理 dist）
+
+### 待办（下个对话接力）
+- 购买流程幂等性保障（需建表存请求指纹）
+- VpnAdmin 样式统一（xui旧样式→tailwind）
+- 内容营销 / KOL合作 / SEO落地页（需祥哥给方向）
+
+### 三方同步状态
+- 本地: `1507ca05` ✅
+- GitHub: `1507ca05` ✅
+- VPS: `1507ca05` ✅（代码已拉取 + PM2已重启 + 前端dist已上传）
+- express-rate-limit v8 兼容修复已生效
+- 数据库 protocols 列已手动添加成功
