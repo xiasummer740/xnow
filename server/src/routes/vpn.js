@@ -13,13 +13,13 @@ const router = express.Router();
 const buyLimiter = rateLimit({
   windowMs: 10 * 1000,
   max: 1,
-  keyGenerator: (req) => String(req.user?.id || req.ip),
+  keyGenerator: (req) => String(req.user?.id || 'anon'),
   message: { status: 'error', message: '操作太频繁，请10秒后再试' }
 });
 const renewLimiter = rateLimit({
   windowMs: 5 * 1000,
   max: 1,
-  keyGenerator: (req) => String(req.user?.id || req.ip),
+  keyGenerator: (req) => String(req.user?.id || 'anon'),
   message: { status: 'error', message: '操作太频繁，请5秒后再试' }
 });
 
