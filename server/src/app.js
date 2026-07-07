@@ -94,7 +94,9 @@ app.use('/api/vpn', vpnRoutes);
 const initDatabase = async () => {
   try {
     await sequelize.sync({ alter: false });
-    
+    // 数据库迁移：新增字段（产品 protocols）
+    try { await sequelize.query("ALTER TABLE VpnProducts ADD COLUMN protocols TEXT DEFAULT '[\"VLESS + Reality\",\"VMess + WS\",\"Trojan + TLS\",\"Shadowsocks\",\"Hysteria2\"]'"); } catch (e) { /* 字段已存在则忽略 */ }
+
     const defaultConfigCount = await Config.count();
     if (defaultConfigCount === 0) {
       await Config.bulkCreate([ 

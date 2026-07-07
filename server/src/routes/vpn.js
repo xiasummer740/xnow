@@ -86,6 +86,91 @@ router.get('/ping', async (req, res) => {
   }
 });
 
+// Check if trial is available (public)
+router.get('/trial-check', async (req, res) => {
+  const enabled = await getConfig('vpn_trial_enabled');
+  res.json({ status: 'success', enabled: enabled !== 'false' });
+});
+
+// Free trial: create a temporary client with limited traffic
+router.post('/trial', authenticate, async (req, res) => {
+  try {
+    const trialEnabled = await getConfig('vpn_trial_enabled');
+    if (trialEnabled === 'false') return res.json({ status: 'error', message: '试用暂未开放' });
+
+    // Check if user already had a trial
+    const existingTrial = await VpnClient.findOne({ where: { user_id: req.user.id, email: { [sequelize.Sequelize.Op.like]: 'trial-%' } } });
+    if (existingTrial) return res.json({ status: 'error', message: '每个用户仅限试用一次' });
+
+    // Check if user has purchased before
+    const existingPurchase = await VpnClient.findOne({ where: { user_id: req.user.id, email: { [sequelize.Sequelize.Op.notLike]: 'trial-%' } } });
+    if (existingPurchase) return res.json({ status: 'error', message: '老用户已无需试用' });
+
+    // Find the cheapest/first active node for trial
+    const product = await VpnProduct.findOne({ where: { active: true }, order: [['price_per_gb', 'ASC']] });
+    if (!product) return res.json({ status: 'error', message: '暂无可用节点' });
+
+    const trialTrafficGB = parseFloat(await getConfig('vpn_trial_gb')) || 0.1;
+    const trialDays = parseInt(await getConfig('vpn_trial_days')) || 3;
+    const now = Date.now();
+    const expiryTime = now + trialDays * 86400 * 1000;
+    const email = 'trial-' + newClientEmail(product.id, req.user.id);
+    const uuid = newClientUUID();
+    const apiKey = product.xxui_api_key || await getConfig('xxui_api_key');
+
+    if (!product.xxui_url || !product.xxui_inbound_id || !apiKey) {
+      return res.json({ status: 'error', message: '节点未完成配置' });
+    }
+
+    let subId;
+    for (let retry = 0; retry < 3; retry++) {
+      subId = crypto.randomBytes(8).toString('hex');
+      try {
+        await createXXUIClient(product.xxui_url, apiKey, product.xxui_inbound_id, email, uuid, subId, trialTrafficGB, expiryTime);
+        break;
+      } catch (e) {
+        if (e.message?.includes('Duplicate') || e.message?.includes('duplicate')) continue;
+        throw e;
+      }
+    }
+
+    const panelParsed = new URL((product.xxui_url || '').replace(/\/+$/, ''));
+    const subUrl = `${panelParsed.protocol}//${panelParsed.hostname}:${product.sub_port || 2096}${(product.sub_path || '/sub/').replace(/\/+$/, '')}/${subId}`;
+
+    await VpnClient.create({
+      user_id: req.user.id, product_id: product.id,
+      email, uuid, sub_id: subId,
+      subscription_url: subUrl,
+      traffic_gb: trialTrafficGB,
+      expiry_time: expiryTime,
+      vps_location: product.vps_location,
+      flag_emoji: product.flag_emoji || ''
+    });
+
+    sendTgMessage(`🎁 <b>VPN 试用</b>\n🆔 UID: <code>${req.user.id}</code>\n📍 ${product.name}\n📦 ${trialTrafficGB}GB / ${trialDays}天`);
+
+    res.json({ status: 'success', data: { email, uuid, subscription_url: subUrl, expiry_time: expiryTime, traffic_gb: trialTrafficGB, vps_location: product.vps_location, flag_emoji: product.flag_emoji } });
+  } catch (e) {
+    console.error('[VPN Trial] 创建失败:', e.message);
+    res.json({ status: 'error', message: '试用创建失败，请联系管理员' });
+  }
+});
+
+// Admin: get/set trial config
+router.get('/admin/trial-config', authenticate, requireAdmin, async (req, res) => {
+  const enabled = await getConfig('vpn_trial_enabled');
+  const gb = await getConfig('vpn_trial_gb');
+  const days = await getConfig('vpn_trial_days');
+  res.json({ status: 'success', data: { enabled: enabled !== 'false', traffic_gb: parseFloat(gb) || 0.1, days: parseInt(days) || 3 } });
+});
+router.post('/admin/trial-config', authenticate, requireAdmin, async (req, res) => {
+  const { enabled, traffic_gb, days } = req.body;
+  if (enabled !== undefined) await Config.upsert({ key: 'vpn_trial_enabled', value: String(enabled) });
+  if (traffic_gb !== undefined) await Config.upsert({ key: 'vpn_trial_gb', value: String(traffic_gb) });
+  if (days !== undefined) await Config.upsert({ key: 'vpn_trial_days', value: String(days) });
+  res.json({ status: 'success' });
+});
+
 // Purchase — user selects VPS + traffic + duration
 router.post('/buy', authenticate, buyLimiter, async (req, res) => {
   const { product_id, traffic_gb, duration_days, coupon_id } = req.body;
@@ -397,12 +482,13 @@ router.get('/admin/servers', authenticate, requireAdmin, async (req, res) => {
 
 // Create/update server (admin)
 router.post('/admin/server', authenticate, requireAdmin, async (req, res) => {
-  const { id, name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port, sub_path, xxui_api_key, max_traffic_gb, price_per_gb, active, description } = req.body;
+  const { id, name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port, sub_path, xxui_api_key, max_traffic_gb, price_per_gb, active, description, protocols } = req.body;
   try {
+    const fields = { name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port, sub_path, xxui_api_key, max_traffic_gb, price_per_gb, active, description, protocols };
     if (id) {
-      await VpnProduct.update({ name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port, sub_path, xxui_api_key, max_traffic_gb, price_per_gb, active, description }, { where: { id } });
+      await VpnProduct.update(fields, { where: { id } });
     } else {
-      await VpnProduct.create({ name, vps_location, flag_emoji, xxui_url, xxui_inbound_id, sub_port: sub_port || 2096, sub_path: sub_path || '/sub/', xxui_api_key: xxui_api_key || '', max_traffic_gb: max_traffic_gb || 2000, price_per_gb: price_per_gb || 0.5, active, description });
+      await VpnProduct.create({ ...fields, sub_port: sub_port || 2096, sub_path: sub_path || '/sub/', xxui_api_key: xxui_api_key || '', max_traffic_gb: max_traffic_gb || 2000, price_per_gb: price_per_gb || 0.5 });
     }
     res.json({ status: 'success' });
   } catch (e) {

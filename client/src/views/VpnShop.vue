@@ -38,6 +38,14 @@
       </div>
     </div>
 
+    <!-- Trial CTA -->
+    <div v-if="trialEnabled" class="text-center pt-1 pb-3">
+      <button @click="startTrial" :disabled="trialBusy" class="bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-900 font-black px-6 py-2.5 rounded-xl transition transform hover:-translate-y-0.5 shadow-[0_8px_25px_rgba(251,146,60,0.3)] text-sm">
+        {{ trialBusy ? '创建中...' : (appStore.lang==='zh' ? '🎁 免费试用节点 100MB' : '🎁 Free Trial') }}
+      </button>
+      <p class="text-[10px] text-slate-600 mt-1">{{ appStore.lang==='zh' ? '新用户专享，无需付费，注册即用' : 'For new users, no payment required' }}</p>
+    </div>
+
     <!-- Trust signals -->
     <div class="flex flex-wrap justify-center gap-4 text-[11px]">
       <span class="text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-full px-3 py-1.5">🎉 已服务 <span class="text-emerald-400 font-bold">1,200+</span> 位创作者</span>
@@ -49,7 +57,12 @@
 
     <!-- Protocol bar -->
     <div class="flex justify-center gap-3 flex-wrap">
-      <span v-for="p in ['VLESS + Reality','VMess + WS','Trojan + TLS','Shadowsocks','Hysteria2']" :key="p" class="text-[11px] font-bold text-slate-500 bg-slate-800/60 border border-slate-700 rounded-full px-3 py-1">{{ p }}</span>
+      <template v-if="selectedNode">
+        <span v-for="p in getProtocols(selectedNode)" :key="p" class="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">{{ p }}</span>
+      </template>
+      <template v-else>
+        <span v-for="p in ['VLESS + Reality','VMess + WS','Trojan + TLS','Shadowsocks','Hysteria2']" :key="p" class="text-[11px] font-bold text-slate-500 bg-slate-800/60 border border-slate-700 rounded-full px-3 py-1">{{ p }}</span>
+      </template>
     </div>
 
     <!-- Why VPN matters -->
@@ -141,6 +154,19 @@
           </div>
         </div>
 
+        <!-- Node details -->
+        <div v-if="selectedNode" class="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-4 text-sm">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div><div class="text-lg">{{ getProtocols(selectedNode).length }}</div><div class="text-[10px] text-slate-500">协议数</div></div>
+            <div><div class="text-lg text-emerald-400">{{ selectedNode.max_traffic_gb }}GB</div><div class="text-[10px] text-slate-500">容量上限</div></div>
+            <div><div class="text-lg">{{ selectedNode.description || 'BGP' }}</div><div class="text-[10px] text-slate-500">线路类型</div></div>
+            <div><div class="text-lg" :class="latencyMap[selectedNode.id] !== undefined ? (latencyMap[selectedNode.id] < 100 ? 'text-emerald-400' : latencyMap[selectedNode.id] < 250 ? 'text-amber-400' : 'text-red-400') : 'text-slate-500'">{{ latencyMap[selectedNode.id] !== undefined ? latencyMap[selectedNode.id]+'ms' : (latencyMap[selectedNode.id] === null ? '···' : '—') }}</div><div class="text-[10px] text-slate-500">延迟</div></div>
+          </div>
+          <div v-if="getProtocols(selectedNode).length" class="mt-2 flex flex-wrap gap-1 justify-center">
+            <span v-for="p in getProtocols(selectedNode)" :key="p" class="text-[10px] text-slate-500 bg-slate-700/50 rounded px-2 py-0.5">{{ p }}</span>
+          </div>
+        </div>
+
         <!-- Coupon -->
         <div class="flex gap-2 items-center">
           <input v-model="couponCode" @keyup.enter="applyCoupon" type="text" maxlength="20" :placeholder="appStore.lang==='zh'?'优惠码（可选）':'Coupon (opt)'"
@@ -211,6 +237,7 @@ const getFlagCode = (n) => {
   return null;
 };
 const getFlagUrl = (n) => { const c=getFlagCode(n); return c?`https://flagcdn.com/w80/${c}.png`:''; };
+const getProtocols = (n) => { try { const p = JSON.parse(n.protocols || '[]'); return Array.isArray(p) && p.length ? p : ['VLESS + Reality','VMess + WS','Trojan + TLS','Shadowsocks','Hysteria2']; } catch (e) { return ['VLESS + Reality','VMess + WS','Trojan + TLS','Shadowsocks','Hysteria2']; } };
 
 const nodes = ref([]); const trafficOptions = ref([100,200,500,1000,2000]);
 const durationOptions = ref([{days:30,label:'1个月',discount:1},{days:90,label:'3个月',discount:.9},{days:180,label:'6个月',discount:.85},{days:360,label:'12个月',discount:.75}]);
@@ -219,6 +246,20 @@ const selectedNode = ref(null); const selectedTraffic = ref(200); const selected
 const latencyMap = ref({});
 const searchQuery = ref('');
 const regionFilter = ref('');
+const trialEnabled = ref(false);
+const trialBusy = ref(false);
+
+const startTrial = async () => {
+  if (!userStore.token) { uiStore.showToast('请先登录', 'error'); return; }
+  trialBusy.value = true;
+  try {
+    const r = await fetch('/api/vpn/trial', { method: 'POST', headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const d = await r.json();
+    if (d.status === 'success') { uiStore.showToast('试用节点已创建，查看我的节点', 'success'); router.push('/vpn/clients'); }
+    else uiStore.showToast(d.message || '试用失败', 'error');
+  } catch (e) { uiStore.showToast('网络错误', 'error'); }
+  trialBusy.value = false;
+};
 const couponCode = ref('');
 const couponApplied = ref(null);
 const couponError = ref('');
@@ -274,6 +315,8 @@ onMounted(async () => {
   if(nodes.value.length===0){nodes.value=[{id:1,name:'美国洛杉矶',flag_emoji:'🇺🇸',vps_location:'洛杉矶·CN2 GIA',price_per_gb:.3,max_traffic_gb:2000,_demo:true},{id:2,name:'英国伦敦',flag_emoji:'🇬🇧',vps_location:'伦敦·9929',price_per_gb:.35,max_traffic_gb:1000,_demo:true}];selectedNode.value=nodes.value[0]}
   loading.value=false;
   setTimeout(pingNodes, 500);
+  // 检查试用是否开放
+  try { const r2 = await fetch('/api/vpn/trial-check'); const d2 = await r2.json(); trialEnabled.value = d2.status === 'success' && d2.enabled; } catch (e) {}
 });
 
 const selectNode = (n) => {

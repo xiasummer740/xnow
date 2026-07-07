@@ -17,7 +17,8 @@ const VpnProduct = sequelize.define('VpnProduct', {
   max_traffic_gb: { type: DataTypes.INTEGER, defaultValue: 2000 },
   price_per_gb: { type: DataTypes.DECIMAL(10, 4), defaultValue: 0.5000 },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
-  sort: { type: DataTypes.INTEGER, defaultValue: 0 }
+  sort: { type: DataTypes.INTEGER, defaultValue: 0 },
+  protocols: { type: DataTypes.TEXT, defaultValue: '["VLESS + Reality","VMess + WS","Trojan + TLS","Shadowsocks","Hysteria2"]' }
 });
 
 export default VpnProduct;

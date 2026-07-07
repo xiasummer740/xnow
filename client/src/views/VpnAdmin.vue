@@ -196,6 +196,10 @@
               </select>
               <input v-model="editing.description" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.4rem 0.75rem;outline:none;font-size:0.75rem" placeholder="或手动输入">
             </div>
+            <div>
+              <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">支持的协议 (逗号分隔)</div>
+              <input v-model="editing.protocolsStr" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-size:0.75rem" placeholder="VLESS + Reality, VMess + WS, ..." />
+            </div>
           </div>
           <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">XX-UI 面板地址 *</div><input v-model="editing.xxui_url" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-family:monospace;font-size:0.75rem" placeholder="https://panel.example.com"></div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem">
@@ -242,7 +246,7 @@ const editMode = ref(null); const editErr = ref('');
 const savingNode = ref(false);
 const apiKey = ref(''); const savingKey = ref(false); const showKey = ref(false);
 const keyMsg = ref(''); const keyMsgOk = ref(false);
-const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '' });
+const editing = ref({ id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '', protocolsStr: '' });
 
 onMounted(() => { fetchData(); fetchApiKey(); fetchShopStatus(); fetchStats(); fetchCoupons(); });
 
@@ -293,7 +297,16 @@ const fetchData = async () => {
 };
 
 const onFlagChange = () => { const sel = editing.value.flag_emoji; for (const g of flagGroups) { const found = g.items.find(i => i.emoji === sel); if (found) { editing.value.vps_location = found.location; break; } } };
-const editServer = (s) => { editErr.value = ''; connResult.value = null; editMode.value = true; editing.value = s ? { ...s } : { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '' }; };
+const editServer = (s) => {
+  editErr.value = ''; connResult.value = null; editMode.value = true;
+  if (s) {
+    let p = [];
+    try { p = JSON.parse(s.protocols || '[]'); } catch (e) {}
+    editing.value = { ...s, protocolsStr: p.join(', ') };
+  } else {
+    editing.value = { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '', protocolsStr: '' };
+  }
+};
 
 const flagGroups = [
   { label: '东亚', items: [{ emoji: '🇭🇰', name: '香港', location: '香港 · BGP' },{ emoji: '🇯🇵', name: '日本', location: '日本东京 · BGP' },{ emoji: '🇰🇷', name: '韩国', location: '韩国首尔 · BGP' },{ emoji: '🇹🇼', name: '台湾', location: '台湾台北 · BGP' }] },
@@ -309,7 +322,14 @@ const flagGroups = [
 const descPresets = ['BGP 高速线路', 'CN2 GIA 优质线路', '9929 精品线路', 'CMIN2 移动优化', 'IIJ 日本直连', '软银 日本专线', 'HKT 家宽', 'HGC 商宽', 'NTT 国际线路', 'HE 国际线路', 'Cogent 国际线路'];
 const testingConn = ref(false); const connResult = ref(null);
 const testConnection = async () => { testingConn.value = true; connResult.value = null; try { const r = await fetch('/api/vpn/admin/test-connection', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ xxui_url: editing.value.xxui_url, api_key: editing.value.xxui_api_key, inbound_id: editing.value.xxui_inbound_id }) }); connResult.value = await r.json(); } catch (e) { connResult.value = { status: 'error', message: '网络异常' }; } testingConn.value = false; };
-const saveServer = async () => { if (!editing.value.name || !editing.value.xxui_inbound_id) { editErr.value = '名称和入站 ID 为必填项'; return; } savingNode.value = true; editErr.value = ''; try { const r = await fetch('/api/vpn/admin/server', { method: 'POST', headers: apiHeaders(), body: JSON.stringify(editing.value) }); const d = await r.json(); if (d.status === 'success') { editMode.value = null; fetchData(); fetchStats(); uiStore.showToast('已保存', 'success'); } else editErr.value = d.message || '保存失败'; } catch (e) { editErr.value = '后端未部署'; } savingNode.value = false; };
+const saveServer = async () => {
+  if (!editing.value.name || !editing.value.xxui_inbound_id) { editErr.value = '名称和入站 ID 为必填项'; return; }
+  savingNode.value = true; editErr.value = '';
+  const payload = { ...editing.value };
+  payload.protocols = JSON.stringify((payload.protocolsStr || '').split(/,\s*/).filter(Boolean));
+  delete payload.protocolsStr;
+  try { const r = await fetch('/api/vpn/admin/server', { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) }); const d = await r.json(); if (d.status === 'success') { editMode.value = null; fetchData(); fetchStats(); uiStore.showToast('已保存', 'success'); } else editErr.value = d.message || '保存失败'; } catch (e) { editErr.value = '后端未部署'; } savingNode.value = false;
+};
 
 const syncing = ref(false); const syncInterval = ref(0); let syncTimer = null;
 const doSync = async () => { syncing.value = true; try { const r = await fetch('/api/vpn/admin/sync-traffic', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ clients: clients.value.map(c => ({ id: c.id, email: c.email, product_id: c.product_id })) }) }); const d = await r.json(); if (d.status === 'success' && d.data) { d.data.forEach(u => { const c = clients.value.find(x => x.id === u.id); if (c) { c.traffic_used_up = u.up; c.traffic_used_down = u.down; } }); } } catch (e) {} syncing.value = false; };
