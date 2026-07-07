@@ -9,5 +9,6 @@ import VpnProduct from './VpnProduct.js';
 import VpnClient from './VpnClient.js';
 import AuditLog from './AuditLog.js';
 import Notification from './Notification.js';
+import Coupon from './Coupon.js';
 
-export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification };
+export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon };

@@ -141,11 +141,24 @@
           </div>
         </div>
 
+        <!-- Coupon -->
+        <div class="flex gap-2 items-center">
+          <input v-model="couponCode" @keyup.enter="applyCoupon" type="text" maxlength="20" :placeholder="appStore.lang==='zh'?'优惠码（可选）':'Coupon (opt)'"
+            class="flex-1 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 placeholder:text-slate-600 outline-none focus:border-emerald-500/50 uppercase" />
+          <button @click="applyCoupon" :disabled="couponApplying" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-4 py-2 rounded-xl transition text-xs whitespace-nowrap">{{ couponApplying?'...':'使用' }}</button>
+          <button v-if="couponApplied" @click="removeCoupon" class="text-red-400 hover:text-red-300 text-xs font-bold">✕</button>
+        </div>
+        <div v-if="couponApplied" class="text-xs text-emerald-400">🎟️ 优惠码 {{ couponApplied.code }}：已减 ¥{{ couponApplied.discount }}</div>
+        <div v-if="couponError" class="text-xs text-red-400">{{ couponError }}</div>
+
         <!-- Price + Buy -->
         <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div class="text-sm text-slate-400">{{ selectedNode.name }} · {{ selectedTraffic }}GB · {{ selectedDuration?.label }}</div>
-            <div class="text-3xl font-black text-emerald-400 mt-1">¥{{ finalPrice.toFixed(2) }}</div>
+            <div class="flex items-baseline gap-2">
+              <div class="text-3xl font-black text-emerald-400 mt-1">¥{{ (couponApplied ? couponApplied.final_amount : finalPrice).toFixed(2) }}</div>
+              <div v-if="couponApplied" class="text-sm text-slate-500 line-through">¥{{ finalPrice.toFixed(2) }}</div>
+            </div>
             <div :class="['inline-block text-xs font-bold px-2 py-0.5 rounded-full mt-1.5', balanceOk ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30']">
               余额 ¥{{ parseFloat(userStore.userInfo?.balance||0).toFixed(2) }}
               <span v-if="!balanceOk"> ⚠️ 不足</span>
@@ -206,6 +219,26 @@ const selectedNode = ref(null); const selectedTraffic = ref(200); const selected
 const latencyMap = ref({});
 const searchQuery = ref('');
 const regionFilter = ref('');
+const couponCode = ref('');
+const couponApplied = ref(null);
+const couponError = ref('');
+const couponApplying = ref(false);
+
+const applyCoupon = async () => {
+  if (!couponCode.value.trim()) return;
+  couponApplying.value = true; couponError.value = ''; couponApplied.value = null;
+  try {
+    const r = await fetch('/api/vpn/coupon/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: couponCode.value, amount: finalPrice.value })
+    });
+    const d = await r.json();
+    if (d.status === 'success') { couponApplied.value = d.data; couponError.value = ''; }
+    else { couponError.value = d.message; couponApplied.value = null; }
+  } catch(e) { couponError.value = '验证失败'; }
+  couponApplying.value = false;
+};
+const removeCoupon = () => { couponApplied.value = null; couponCode.value = ''; couponError.value = ''; };
 
 const regionMap = { '🇭🇰':'asia','🇯🇵':'asia','🇰🇷':'asia','🇹🇼':'asia','🇸🇬':'asia','🇹🇭':'asia','🇻🇳':'asia','🇲🇾':'asia','🇵🇭':'asia','🇮🇩':'asia','🇮🇳':'asia','🇨🇳':'asia','🇦🇪':'middle-east','🇸🇦':'middle-east','🇹🇷':'middle-east','🇺🇸':'americas','🇨🇦':'americas','🇲🇽':'americas','🇧🇷':'americas','🇦🇷':'americas','🇬🇧':'europe','🇩🇪':'europe','🇳🇱':'europe','🇫🇷':'europe','🇷🇺':'europe','🇸🇪':'europe','🇨🇭':'europe','🇮🇹':'europe','🇪🇸':'europe','🇵🇱':'europe','🇦🇺':'oceania','🇿🇦':'africa' };
 const filteredNodes = computed(() => {
@@ -233,7 +266,8 @@ const pingNodes = async () => {
 
 const basePrice = computed(() => { if(!selectedNode.value)return 0; const ppg=parseFloat(selectedNode.value.price_per_gb||.5); const m=(selectedDuration.value?.days||30)/30; return parseFloat((ppg*selectedTraffic.value*m).toFixed(2)); });
 const finalPrice = computed(() => { const raw=parseFloat((basePrice.value*(selectedDuration.value?.discount||1)).toFixed(2)); return raw<10?10:raw; });
-const balanceOk = computed(() => parseFloat(userStore.userInfo?.balance||0) >= finalPrice.value);
+const actualPrice = computed(() => couponApplied.value ? couponApplied.value.final_amount : finalPrice.value);
+const balanceOk = computed(() => parseFloat(userStore.userInfo?.balance||0) >= actualPrice.value);
 
 onMounted(async () => {
   try{const r=await fetch('/api/vpn/products');const d=await r.json();if(d.status==='success'){nodes.value=d.data.nodes||[];if(d.data.trafficOptions)trafficOptions.value=d.data.trafficOptions;if(d.data.durationOptions)durationOptions.value=d.data.durationOptions;if(nodes.value.length>0)selectedNode.value=nodes.value[0];}}catch(e){}
@@ -251,10 +285,11 @@ const buy = async () => {
   if(!selectedNode.value)return; const nd=selectedNode.value;
   if(nd._demo)return uiStore.showToast('演示模式','error');
   if(!userStore.token)return uiStore.showToast('请先登录','error');
-  if(parseFloat(userStore.userInfo?.balance||0) < finalPrice.value) return uiStore.showToast('余额不足，请先充值','error');
-  if(!await uiStore.showConfirm(`确认购买 ${nd.name} · ${selectedTraffic.value}GB · ${selectedDuration.value.label}？¥${finalPrice.value.toFixed(2)}`,'确认订单'))return;
+  const price = actualPrice.value;
+  if(parseFloat(userStore.userInfo?.balance||0) < price) return uiStore.showToast('余额不足，请先充值','error');
+  if(!await uiStore.showConfirm(`确认购买 ${nd.name} · ${selectedTraffic.value}GB · ${selectedDuration.value.label}？¥${price.toFixed(2)}`,'确认订单'))return;
   buying.value=true;
-  try{const r=await fetch('/api/vpn/buy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`},body:JSON.stringify({product_id:nd.id,traffic_gb:selectedTraffic.value,duration_days:selectedDuration.value.days})});const d=await r.json();if(d.status==='success'){if(d.data?.balance)userStore.updateUserInfo({balance:d.data.balance});purchaseResult.value=d.data;showSuccess.value=true}else uiStore.showToast(d.message||'失败','error')}catch(e){uiStore.showToast('网络错误','error')}
+  try{const r=await fetch('/api/vpn/buy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`},body:JSON.stringify({product_id:nd.id,traffic_gb:selectedTraffic.value,duration_days:selectedDuration.value.days,coupon_id:couponApplied.value?.id||null})});const d=await r.json();if(d.status==='success'){if(d.data?.balance)userStore.updateUserInfo({balance:d.data.balance});purchaseResult.value=d.data;showSuccess.value=true}else uiStore.showToast(d.message||'失败','error')}catch(e){uiStore.showToast('网络错误','error')}
   buying.value=false;
 };
 const goToClients = () => { showSuccess.value=false; router.push('/vpn/clients'); };

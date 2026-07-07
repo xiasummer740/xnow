@@ -1,7 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middleware/auth.js';
-import { VpnProduct, VpnClient, Config, Transaction, User, sequelize } from '../models/index.js';
+import { VpnProduct, VpnClient, Config, Transaction, User, Coupon, sequelize } from '../models/index.js';
 import { createXXUIClient, newClientEmail, newClientUUID, getXXUIClient, updateXXUIClient } from '../utils/xxui.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import crypto from 'crypto';
@@ -88,7 +88,7 @@ router.get('/ping', async (req, res) => {
 
 // Purchase — user selects VPS + traffic + duration
 router.post('/buy', authenticate, buyLimiter, async (req, res) => {
-  const { product_id, traffic_gb, duration_days } = req.body;
+  const { product_id, traffic_gb, duration_days, coupon_id } = req.body;
   if (!product_id || !traffic_gb || !duration_days) {
     return res.json({ status: 'error', message: 'Missing required parameters' });
   }
@@ -125,6 +125,27 @@ router.post('/buy', authenticate, buyLimiter, async (req, res) => {
     basePrice = basePrice * durationMonths;
     let finalPrice = parseFloat((basePrice * dur.discount).toFixed(2));
     if (finalPrice < 10) finalPrice = 10; // min 10 CNY
+
+    // Apply coupon
+    let couponCode = '';
+    if (coupon_id) {
+      const coupon = await Coupon.findByPk(coupon_id);
+      if (coupon && coupon.active) {
+        if (coupon.expires_at > 0 && coupon.expires_at < now) { /* expired */ }
+        else if (coupon.max_uses > 0 && coupon.used_count >= coupon.max_uses) { /* used up */ }
+        else {
+          let discount = 0;
+          if (coupon.type === 'percent') discount = finalPrice * (parseFloat(coupon.value) / 100);
+          else discount = parseFloat(coupon.value);
+          if (discount > finalPrice) discount = finalPrice;
+          finalPrice = parseFloat((finalPrice - discount).toFixed(2));
+          if (finalPrice < 0) finalPrice = 0;
+          coupon.used_count += 1;
+          await coupon.save();
+          couponCode = coupon.code;
+        }
+      }
+    }
 
     // Check balance
     const user = await User.findByPk(req.user.id, { transaction: t });
@@ -465,6 +486,115 @@ router.post('/admin/sync-traffic', authenticate, requireAdmin, async (req, res) 
     console.error('[VPN Sync] 批量同步异常:', e.message);
     res.json({ status: 'error', message: '同步失败' });
   }
+});
+
+// 统计看板数据
+router.get('/admin/stats', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const now = Date.now();
+    const allClients = await VpnClient.findAll();
+    const activeClients = allClients.filter(c => c.expiry_time && c.expiry_time > now);
+    const expiredClients = allClients.filter(c => !c.expiry_time || c.expiry_time <= now);
+
+    // 按节点统计
+    const productTraffic = {};
+    for (const c of allClients) {
+      const pid = c.product_id || 0;
+      if (!productTraffic[pid]) productTraffic[pid] = { total: 0, used: 0, count: 0, active: 0 };
+      productTraffic[pid].total += c.traffic_gb || 0;
+      productTraffic[pid].used += ((c.traffic_used_up || 0) + (c.traffic_used_down || 0)) / 1073741824;
+      productTraffic[pid].count++;
+      if (c.expiry_time && c.expiry_time > now) productTraffic[pid].active++;
+    }
+
+    // 按天统计订单（近30天）
+    const dailyOrders = {};
+    for (const c of allClients) {
+      const day = new Date(c.id ? c.id * 1000 : now).toISOString().slice(0, 10);
+      dailyOrders[day] = (dailyOrders[day] || 0) + 1;
+    }
+
+    // 近30天收入（从Transaction表）
+    let recentRevenue = 0;
+    try {
+      const thirtyDaysAgo = now - 30 * 86400 * 1000;
+      const txs = await Transaction.findAll({
+        where: { type: ['VPN购买', 'VPN续费'], created_at: { [sequelize.Sequelize.Op.gte]: new Date(thirtyDaysAgo) } }
+      });
+      recentRevenue = txs.reduce((s, t) => s + Math.abs(parseFloat(t.amount || 0)), 0);
+    } catch (e) {}
+
+    res.json({
+      status: 'success',
+      data: {
+        total: allClients.length,
+        active: activeClients.length,
+        expired: expiredClients.length,
+        totalTrafficGB: allClients.reduce((s, c) => s + (c.traffic_gb || 0), 0),
+        usedTrafficGB: Math.round(allClients.reduce((s, c) => s + ((c.traffic_used_up || 0) + (c.traffic_used_down || 0)), 0) / 1073741824 * 100) / 100,
+        recentRevenue: Math.round(recentRevenue * 100) / 100,
+        dailyOrders: Object.entries(dailyOrders).sort((a, b) => a[0].localeCompare(b[0])).slice(-30).map(([d, c]) => ({ date: d, count: c })),
+        productStats: Object.entries(productTraffic).map(([pid, s]) => ({ product_id: Number(pid), ...s, usedPercent: s.total > 0 ? Math.round((s.used / s.total) * 100) : 0 })),
+      }
+    });
+  } catch (e) {
+    console.error('[VPN Stats] 获取失败:', e.message);
+    res.json({ status: 'error', message: '获取统计失败' });
+  }
+});
+
+// ====== 优惠码 ======
+
+// 验证优惠码（公开接口，供用户购买时调用）
+router.post('/coupon/validate', async (req, res) => {
+  try {
+    const { code, amount } = req.body;
+    if (!code) return res.json({ status: 'error', message: '请输入优惠码' });
+    const coupon = await Coupon.findOne({ where: { code: code.trim().toUpperCase(), active: true } });
+    if (!coupon) return res.json({ status: 'error', message: '优惠码无效' });
+    if (coupon.expires_at > 0 && coupon.expires_at < Date.now()) return res.json({ status: 'error', message: '优惠码已过期' });
+    if (coupon.max_uses > 0 && coupon.used_count >= coupon.max_uses) return res.json({ status: 'error', message: '优惠码已被用完' });
+
+    let discount = 0;
+    if (coupon.type === 'percent') discount = (amount || 0) * (parseFloat(coupon.value) / 100);
+    else discount = parseFloat(coupon.value);
+    if (discount > (amount || 0)) discount = amount || 0;
+    const finalAmount = Math.max(0, (amount || 0) - discount);
+
+    res.json({ status: 'success', data: { id: coupon.id, code: coupon.code, type: coupon.type, value: coupon.value, discount: Math.round(discount * 100) / 100, final_amount: Math.round(finalAmount * 100) / 100 } });
+  } catch (e) {
+    res.json({ status: 'error', message: '验证失败' });
+  }
+});
+
+// 管理员：列出所有优惠码
+router.get('/admin/coupons', authenticate, requireAdmin, async (req, res) => {
+  try { const coupons = await Coupon.findAll({ order: [['id', 'DESC']] }); res.json({ status: 'success', data: coupons }); } catch (e) { res.json({ status: 'error', message: '获取失败' }); }
+});
+
+// 管理员：创建/更新优惠码
+router.post('/admin/coupon', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id, code, type, value, min_amount, max_uses, expires_at, description } = req.body;
+    if (id) {
+      await Coupon.update({ type, value, min_amount, max_uses, expires_at, description }, { where: { id } });
+    } else {
+      await Coupon.create({ code: code.trim().toUpperCase(), type: type || 'percent', value, min_amount: min_amount || 0, max_uses: max_uses || 0, expires_at: expires_at || 0, description: description || '' });
+    }
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.json({ status: 'error', message: e.name === 'SequelizeUniqueConstraintError' ? '优惠码已存在' : '保存失败' });
+  }
+});
+
+// 管理员：删除优惠码
+router.delete('/admin/coupon/:id', authenticate, requireAdmin, async (req, res) => {
+  try { await Coupon.destroy({ where: { id: req.params.id } }); res.json({ status: 'success' }); } catch (e) { res.json({ status: 'error', message: '删除失败' }); }
+});
+
+// 管理员：切换优惠码启用状态
+router.post('/admin/coupon/:id/toggle', authenticate, requireAdmin, async (req, res) => {
+  try { const c = await Coupon.findByPk(req.params.id); if (c) { c.active = !c.active; await c.save(); } res.json({ status: 'success', active: c?.active }); } catch (e) { res.json({ status: 'error', message: '操作失败' }); }
 });
 
 // 流量预警检查（定时任务用）
