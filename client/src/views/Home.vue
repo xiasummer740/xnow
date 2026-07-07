@@ -43,8 +43,30 @@
       </div>
     </main>
 
+    <!-- Use cases -->
+    <section class="relative z-20 max-w-5xl mx-auto px-6 py-16">
+      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 他们都在用安全节点' : '🎯 Who Uses Secure Nodes' }}</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+          <div class="text-3xl mb-3">🎬</div>
+          <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'TikTok创作者':'TikTok Creators' }}</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'0播放、限流、Shadow Ban？独享原生IP，让算法认为你是本地用户。' : 'Zero views? Shadow ban? Dedicated residential IPs make the algorithm see you as local.' }}</p>
+        </router-link>
+        <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+          <div class="text-3xl mb-3">📺</div>
+          <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'直播带货':'Live Streamers' }}</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'直播卡顿掉帧丢单？CN2 GIA/CMIN2优化线路，跨国直播稳60帧。' : 'Laggy streams losing sales? Premium routes for stable 60fps cross-border streaming.' }}</p>
+        </router-link>
+        <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+          <div class="text-3xl mb-3">👥</div>
+          <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'矩阵运营':'Multi-Account' }}</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'多号同IP=批量送死。每号独立IP，矩阵稳如磐石。' : 'Same IP for multiple accounts = mass ban. Dedicated IP per account.' }}</p>
+        </router-link>
+      </div>
+    </section>
+
     <!-- How it works -->
-    <section class="relative z-20 max-w-4xl mx-auto px-6 py-16">
+    <section class="relative z-20 max-w-4xl mx-auto px-6 py-8">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '📋 三步开始' : '📋 How It Works' }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">

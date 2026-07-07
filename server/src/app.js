@@ -10,6 +10,7 @@ import { sequelize, User, Config } from './models/index.js';
 import { autoSyncServices } from './utils/sync.js';
 import { autoSyncOrders } from './utils/orderSync.js';
 import { autoSyncAnnouncement } from './utils/announceSync.js';
+import { autoTrafficWarning } from './routes/vpn.js';
 
 import payRoutes from './routes/pay.js';
 import adminRoutes from './routes/admin.js';
@@ -125,4 +126,5 @@ app.listen(PORT, async () => {
   setTimeout(autoSyncAnnouncement, 30000);
   setInterval(autoSyncAnnouncement, 1000 * 60 * 30);
   setInterval(reconcilePayments, 1000 * 60 * 2);
+  setInterval(autoTrafficWarning, 1000 * 60 * 60); // 每小时检查流量预警
 });

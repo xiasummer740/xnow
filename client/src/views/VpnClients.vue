@@ -56,10 +56,34 @@
           </div>
         </div>
         <div v-if="detail.subscription_url" class="flex justify-center gap-8 py-2">
-          <div class="flex flex-col items-center cursor-pointer" @click="copy(detail.subscription_url)"><img :src="qrSubDataUri" class="w-32 h-32 bg-white rounded-2xl p-1" alt="QR" /><span class="text-[10px] text-slate-500 mt-1 font-bold">📡 订阅</span></div>
-          <div v-if="detail.config_url" class="flex flex-col items-center cursor-pointer" @click="copy(detail.config_url)"><img :src="qrNodeDataUri" class="w-32 h-32 bg-white rounded-2xl p-1" alt="QR" /><span class="text-[10px] text-slate-500 mt-1 font-bold">🔗 节点</span></div>
+          <div v-if="!isExpired(detail)" class="flex flex-col items-center cursor-pointer" @click="copy(detail.subscription_url)"><img :src="qrSubDataUri" class="w-32 h-32 bg-white rounded-2xl p-1" alt="QR" /><span class="text-[10px] text-slate-500 mt-1 font-bold">📡 订阅</span></div>
+          <div v-if="isExpired(detail)" class="flex flex-col items-center opacity-40 relative"><img :src="qrSubDataUri" class="w-32 h-32 bg-white rounded-2xl p-1 grayscale" alt="QR" /><span class="absolute inset-0 flex items-center justify-center text-red-400 text-xs font-black bg-black/40 rounded-2xl">已过期</span><span class="text-[10px] text-slate-600 mt-1 font-bold">📡 订阅</span></div>
+          <div v-if="detail.config_url && !isExpired(detail)" class="flex flex-col items-center cursor-pointer" @click="copy(detail.config_url)"><img :src="qrNodeDataUri" class="w-32 h-32 bg-white rounded-2xl p-1" alt="QR" /><span class="text-[10px] text-slate-500 mt-1 font-bold">🔗 节点</span></div>
+          <div v-if="detail.config_url && isExpired(detail)" class="flex flex-col items-center opacity-40 relative"><img :src="qrNodeDataUri" class="w-32 h-32 bg-white rounded-2xl p-1 grayscale" alt="QR" /><span class="absolute inset-0 flex items-center justify-center text-red-400 text-xs font-black bg-black/40 rounded-2xl">已过期</span><span class="text-[10px] text-slate-600 mt-1 font-bold">🔗 节点</span></div>
         </div>
-        <p v-if="detail.subscription_url" class="text-[10px] text-slate-500 text-center">点击二维码自动复制</p>
+        <p v-if="detail.subscription_url && !isExpired(detail)" class="text-[10px] text-slate-500 text-center">点击二维码自动复制</p>
+        <details class="bg-slate-800/60 rounded-xl">
+          <summary class="text-xs font-bold text-slate-400 cursor-pointer px-4 py-2.5 select-none hover:text-white transition">📖 使用教程（点击展开）</summary>
+          <div class="px-4 pb-4 space-y-3 text-xs text-slate-300">
+            <div>
+              <p class="font-bold text-emerald-400 mb-1">Clash Meta / 小火箭</p>
+              <p class="text-slate-500">复制订阅链接 → 打开客户端 → 添加订阅 → 粘贴链接 → 完成</p>
+            </div>
+            <div>
+              <p class="font-bold text-emerald-400 mb-1">Sing-Box</p>
+              <p class="text-slate-500">复制节点链接 → 打开 Sing-Box → 导入配置 → 选择节点 → 启动</p>
+            </div>
+            <div>
+              <p class="font-bold text-emerald-400 mb-1">Shadowrocket</p>
+              <p class="text-slate-500">复制订阅链接 → 打开 Shadowrocket → "+" → "Subscribe" → 粘贴链接 → 保存</p>
+            </div>
+            <div>
+              <p class="font-bold text-emerald-400 mb-1">v2rayN (Windows)</p>
+              <p class="text-slate-500">复制订阅链接 → v2rayN → 订阅设置 → 粘贴 → 更新订阅 → 右键启用</p>
+            </div>
+            <p class="text-slate-600 pt-1">⚠️ 如遇问题请联系客服</p>
+          </div>
+        </details>
         <button @click="detail=null" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition">关闭</button>
       </div>
     </div>
@@ -109,7 +133,7 @@ const doRenew = async () => {
   try {
     const r = await fetch(`/api/vpn/client/${c.id}/renew`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${userStore.token}`}, body:JSON.stringify({traffic_gb:renewForm.value.traffic,duration_days:renewForm.value.days}) });
     const d = await r.json();
-    if (d.status==='success') { c.traffic_gb=d.data.traffic_gb; c.expiry_time=d.data.expiry_time; if(d.data.balance)userStore.updateUserInfo({balance:d.data.balance}); uiStore.showToast('续费成功','success'); renewModal.value=null; }
+    if (d.status==='success') { c.traffic_gb=d.data.traffic_gb; c.expiry_time=d.data.expiry_time; if(d.data.balance)userStore.updateUserInfo({balance:d.data.balance}); uiStore.showToast((d.data.xxui_warning?'⚠️ 续费成功但XX-UI同步失败，请联系管理员':'续费成功'), d.data.xxui_warning?'warning':'success'); renewModal.value=null; }
     else uiStore.showToast(d.message||'失败','error');
   } catch(e) { uiStore.showToast('网络错误','error'); }
 };
@@ -125,6 +149,6 @@ onMounted(async () => {
   if(!userStore.token){loading.value=false;return}
   try{const res=await fetch('/api/vpn/clients',{headers:{'Authorization':`Bearer ${userStore.token}`}});const data=await res.json();if(data.status==='success')clients.value=data.data}catch(e){}
   loading.value=false;
-  refreshTimer=setInterval(()=>{clients.value.forEach(c=>{if(!c._demo)refreshOne(c)})},5000);
+  refreshTimer=setInterval(()=>{clients.value.forEach(c=>{if(!c._demo)refreshOne(c)})},15000);
 });
 </script>

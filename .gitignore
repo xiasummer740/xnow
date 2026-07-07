@@ -96,3 +96,4 @@ client/dist/
 *.db
 *.sql
 client/dist.tar.gz
+nul

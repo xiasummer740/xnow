@@ -1,8 +1,9 @@
 {
-  "project": "xnow",
-  "xnowPath": "C:\\Users\\Administrator\\bin\\xnow",
-  "xnow": "ready",
   "version": "",
+  "xnow": "ready",
+  "project": "xnow",
+  "credentialsVault": "synced",
+  "platform": "Windows",
   "xianggeEnv": "synced",
-  "credentialsVault": "synced"
+  "xnowPath": "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\xnow.exe"
 }

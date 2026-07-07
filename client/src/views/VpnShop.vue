@@ -38,6 +38,15 @@
       </div>
     </div>
 
+    <!-- Trust signals -->
+    <div class="flex flex-wrap justify-center gap-4 text-[11px]">
+      <span class="text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-full px-3 py-1.5">🎉 已服务 <span class="text-emerald-400 font-bold">1,200+</span> 位创作者</span>
+      <span class="text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-full px-3 py-1.5">🌐 <span class="text-emerald-400 font-bold">{{ nodes.length || '—' }}</span> 个全球节点</span>
+      <span class="text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-full px-3 py-1.5">⏱️ 平均响应 <span class="text-emerald-400 font-bold">&lt;180ms</span></span>
+      <span class="text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-full px-3 py-1.5">💳 支付宝 / 微信 / USDT</span>
+      <span class="text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-full px-3 py-1.5">👥 7×12h 客服在线</span>
+    </div>
+
     <!-- Protocol bar -->
     <div class="flex justify-center gap-3 flex-wrap">
       <span v-for="p in ['VLESS + Reality','VMess + WS','Trojan + TLS','Shadowsocks','Hysteria2']" :key="p" class="text-[11px] font-bold text-slate-500 bg-slate-800/60 border border-slate-700 rounded-full px-3 py-1">{{ p }}</span>
@@ -72,18 +81,34 @@
       <!-- Step 1: Select node -->
       <div>
         <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">① {{ appStore.lang === 'zh' ? '选择节点位置' : 'Select Location' }}</p>
+        <!-- Search + Filter -->
+        <div class="flex gap-2 mb-3">
+          <input v-model="searchQuery" type="text" :placeholder="appStore.lang==='zh'?'🔍 搜索节点...':'🔍 Search...'"
+            class="flex-1 bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 placeholder:text-slate-600 outline-none focus:border-emerald-500/50 transition" />
+          <select v-model="regionFilter" class="bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-emerald-500/50 transition">
+            <option value="">{{ appStore.lang==='zh'?'全部区域':'All' }}</option>
+            <option value="asia">{{ appStore.lang==='zh'?'亚洲':'Asia' }}</option>
+            <option value="americas">{{ appStore.lang==='zh'?'美洲':'Americas' }}</option>
+            <option value="europe">{{ appStore.lang==='zh'?'欧洲':'Europe' }}</option>
+            <option value="oceania">{{ appStore.lang==='zh'?'大洋洲':'Oceania' }}</option>
+            <option value="middle-east">{{ appStore.lang==='zh'?'中东':'Middle East' }}</option>
+          </select>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div v-for="n in nodes" :key="n.id" @click="selectNode(n)"
+          <div v-for="n in filteredNodes" :key="n.id" @click="selectNode(n)"
             :class="['p-4 rounded-2xl border cursor-pointer transition-all flex items-center gap-3', selectedNode?.id === n.id ? 'bg-emerald-500/10 border-emerald-400/50 ring-1 ring-emerald-400/30' : 'bg-slate-800/60 border-slate-700 hover:border-slate-600 hover:bg-slate-800']">
             <img :src="getFlagUrl(n)" class="w-8 h-6 object-cover rounded flex-shrink-0" @error="e=>e.target.style.display='none'" />
             <div class="min-w-0 flex-1">
-              <div class="font-bold text-white text-sm">{{ n.name }}</div>
+              <div class="font-bold text-white text-sm flex items-center gap-1.5">{{ n.name }}
+                <span v-if="latencyMap[n.id] !== undefined" :class="['text-[10px] font-bold px-1.5 py-0.5 rounded-full', latencyMap[n.id] < 100 ? 'bg-emerald-500/10 text-emerald-400' : latencyMap[n.id] < 250 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400']">{{ latencyMap[n.id] }}ms</span>
+                <span v-else-if="latencyMap[n.id] === null" class="text-[10px] text-slate-600">···</span>
+              </div>
               <div class="text-xs text-slate-500">¥{{ parseFloat(n.price_per_gb).toFixed(2) }}/GB · 上限{{ n.max_traffic_gb }}GB</div>
             </div>
             <div v-if="selectedNode?.id === n.id" class="w-5 h-5 bg-emerald-400 rounded-full flex items-center justify-center text-slate-900 text-xs font-black flex-shrink-0">✓</div>
           </div>
-          <div v-if="nodes.length===0" class="col-span-full text-center py-12 text-slate-500">
-            <div class="text-4xl mb-3">🖥️</div><p>暂无可用节点</p>
+          <div v-if="filteredNodes.length===0" class="col-span-full text-center py-12 text-slate-500">
+            <div class="text-4xl mb-3">🔍</div><p>{{ appStore.lang==='zh'?'没有匹配的节点':'No nodes found' }}</p>
           </div>
         </div>
       </div>
@@ -161,15 +186,50 @@ import { useUiStore } from '../stores/ui';
 const router = useRouter();
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
 
-const FC = { hk:'hk',hongkong:'hk',jp:'jp',japan:'jp',kr:'kr',korea:'kr',tw:'tw',taiwan:'tw',sg:'sg',singapore:'sg',th:'th',thailand:'th',vn:'vn',vietnam:'vn',my:'my',malaysia:'my',ph:'ph',philippines:'ph',id:'id',indonesia:'id',in:'in',india:'in',ae:'ae',uae:'ae',us:'us',usa:'us',ca:'ca',canada:'ca',uk:'gb',gb:'gb',de:'de',germany:'de',nl:'nl',netherlands:'nl',fr:'fr',france:'fr',ru:'ru',russia:'ru',au:'au',australia:'au',br:'br',brazil:'br',ar:'ar',argentina:'ar',za:'za',southafrica:'za',mx:'mx',mexico:'mx' };
-const ETOC = { '🇭🇰':'hk','🇯🇵':'jp','🇰🇷':'kr','🇹🇼':'tw','🇸🇬':'sg','🇹🇭':'th','🇻🇳':'vn','🇲🇾':'my','🇵🇭':'ph','🇮🇩':'id','🇮🇳':'in','🇦🇪':'ae','🇺🇸':'us','🇨🇦':'ca','🇬🇧':'gb','🇩🇪':'de','🇳🇱':'nl','🇫🇷':'fr','🇷🇺':'ru','🇦🇺':'au','🇧🇷':'br','🇦🇷':'ar','🇿🇦':'za','🇲🇽':'mx' };
-const getFlagCode = (n) => { const r=(n.flag_emoji||'').toLowerCase().trim(); if(FC[r]&&r.length<=4)return FC[r]; if(ETOC[n.flag_emoji||''])return ETOC[n.flag_emoji]; for(const[k,v]of Object.entries(FC)){if(k.length>2&&(n.vps_location||'').toLowerCase().startsWith(k))return v;} return null; };
+const EMOJI_MAP = { '🇭🇰':'hk','🇯🇵':'jp','🇰🇷':'kr','🇹🇼':'tw','🇸🇬':'sg','🇹🇭':'th','🇻🇳':'vn','🇲🇾':'my','🇵🇭':'ph','🇮🇩':'id','🇮🇳':'in','🇦🇪':'ae','🇺🇸':'us','🇨🇦':'ca','🇬🇧':'gb','🇩🇪':'de','🇳🇱':'nl','🇫🇷':'fr','🇷🇺':'ru','🇦🇺':'au','🇧🇷':'br','🇦🇷':'ar','🇿🇦':'za','🇲🇽':'mx' };
+const NAME_MAP = { hk:'hk',hongkong:'hk',jp:'jp',japan:'jp',kr:'kr',korea:'kr',tw:'tw',taiwan:'tw',sg:'sg',singapore:'sg',th:'th',thailand:'th',vn:'vn',vietnam:'vn',my:'my',malaysia:'my',ph:'ph',philippines:'ph',id:'id',indonesia:'id',in:'in',india:'in',ae:'ae',uae:'ae',us:'us',usa:'us',ca:'ca',canada:'ca',uk:'gb',gb:'gb',de:'de',germany:'de',nl:'nl',netherlands:'nl',fr:'fr',france:'fr',ru:'ru',russia:'ru',au:'au',australia:'au',br:'br',brazil:'br',ar:'ar',argentina:'ar',za:'za',southafrica:'za',mx:'mx',mexico:'mx' };
+const getFlagCode = (n) => {
+  const emoji = n.flag_emoji || '';
+  if (EMOJI_MAP[emoji]) return EMOJI_MAP[emoji];
+  const lower = emoji.toLowerCase().trim();
+  if (NAME_MAP[lower] && lower.length <= 4) return NAME_MAP[lower];
+  const loc = (n.vps_location || '').toLowerCase();
+  for (const [k, v] of Object.entries(NAME_MAP)) if (k.length > 2 && loc.startsWith(k)) return v;
+  return null;
+};
 const getFlagUrl = (n) => { const c=getFlagCode(n); return c?`https://flagcdn.com/w80/${c}.png`:''; };
 
 const nodes = ref([]); const trafficOptions = ref([100,200,500,1000,2000]);
 const durationOptions = ref([{days:30,label:'1个月',discount:1},{days:90,label:'3个月',discount:.9},{days:180,label:'6个月',discount:.85},{days:360,label:'12个月',discount:.75}]);
 const loading = ref(true); const buying = ref(false); const showSuccess = ref(false); const purchaseResult = ref(null);
 const selectedNode = ref(null); const selectedTraffic = ref(200); const selectedDuration = ref(durationOptions.value[0]);
+const latencyMap = ref({});
+const searchQuery = ref('');
+const regionFilter = ref('');
+
+const regionMap = { '🇭🇰':'asia','🇯🇵':'asia','🇰🇷':'asia','🇹🇼':'asia','🇸🇬':'asia','🇹🇭':'asia','🇻🇳':'asia','🇲🇾':'asia','🇵🇭':'asia','🇮🇩':'asia','🇮🇳':'asia','🇨🇳':'asia','🇦🇪':'middle-east','🇸🇦':'middle-east','🇹🇷':'middle-east','🇺🇸':'americas','🇨🇦':'americas','🇲🇽':'americas','🇧🇷':'americas','🇦🇷':'americas','🇬🇧':'europe','🇩🇪':'europe','🇳🇱':'europe','🇫🇷':'europe','🇷🇺':'europe','🇸🇪':'europe','🇨🇭':'europe','🇮🇹':'europe','🇪🇸':'europe','🇵🇱':'europe','🇦🇺':'oceania','🇿🇦':'africa' };
+const filteredNodes = computed(() => {
+  let list = nodes.value;
+  if (regionFilter.value) list = list.filter(n => regionMap[n.flag_emoji || ''] === regionFilter.value);
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    list = list.filter(n => (n.name||'').toLowerCase().includes(q) || (n.vps_location||'').toLowerCase().includes(q));
+  }
+  return list;
+});
+
+const pingNodes = async () => {
+  if (!nodes.value.length) return;
+  for (const n of nodes.value) {
+    if (n._demo) continue;
+    latencyMap.value[n.id] = null;
+    try {
+      const r = await fetch('/api/vpn/ping?id=' + n.id);
+      const d = await r.json();
+      if (d.status === 'success') latencyMap.value[n.id] = d.data.latency;
+    } catch (e) {}
+  }
+};
 
 const basePrice = computed(() => { if(!selectedNode.value)return 0; const ppg=parseFloat(selectedNode.value.price_per_gb||.5); const m=(selectedDuration.value?.days||30)/30; return parseFloat((ppg*selectedTraffic.value*m).toFixed(2)); });
 const finalPrice = computed(() => { const raw=parseFloat((basePrice.value*(selectedDuration.value?.discount||1)).toFixed(2)); return raw<10?10:raw; });
@@ -179,6 +239,7 @@ onMounted(async () => {
   try{const r=await fetch('/api/vpn/products');const d=await r.json();if(d.status==='success'){nodes.value=d.data.nodes||[];if(d.data.trafficOptions)trafficOptions.value=d.data.trafficOptions;if(d.data.durationOptions)durationOptions.value=d.data.durationOptions;if(nodes.value.length>0)selectedNode.value=nodes.value[0];}}catch(e){}
   if(nodes.value.length===0){nodes.value=[{id:1,name:'美国洛杉矶',flag_emoji:'🇺🇸',vps_location:'洛杉矶·CN2 GIA',price_per_gb:.3,max_traffic_gb:2000,_demo:true},{id:2,name:'英国伦敦',flag_emoji:'🇬🇧',vps_location:'伦敦·9929',price_per_gb:.35,max_traffic_gb:1000,_demo:true}];selectedNode.value=nodes.value[0]}
   loading.value=false;
+  setTimeout(pingNodes, 500);
 });
 
 const selectNode = (n) => {

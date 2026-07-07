@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middleware/auth.js';
 import { VpnProduct, VpnClient, Config, Transaction, User, sequelize } from '../models/index.js';
 import { createXXUIClient, newClientEmail, newClientUUID, getXXUIClient, updateXXUIClient } from '../utils/xxui.js';
@@ -7,6 +8,20 @@ import crypto from 'crypto';
 import axios from 'axios';
 
 const router = express.Router();
+
+// 购买限流：同一用户每10秒最多1次
+const buyLimiter = rateLimit({
+  windowMs: 10 * 1000,
+  max: 1,
+  keyGenerator: (req) => String(req.user?.id || req.ip),
+  message: { status: 'error', message: '操作太频繁，请10秒后再试' }
+});
+const renewLimiter = rateLimit({
+  windowMs: 5 * 1000,
+  max: 1,
+  keyGenerator: (req) => String(req.user?.id || req.ip),
+  message: { status: 'error', message: '操作太频繁，请5秒后再试' }
+});
 
 // Traffic presets users can choose from (GB)
 const TRAFFIC_OPTIONS = [100, 200, 500, 1000, 2000];
@@ -30,25 +45,49 @@ async function getConfig(key) {
   return c ? c.value : '';
 }
 
+// 简单内存缓存
+let productsCache = { data: null, time: 0 };
+const CACHE_TTL = 30 * 1000; // 30秒
+
 // List available VPS nodes
 router.get('/products', async (req, res) => {
   try {
+    if (Date.now() - productsCache.time < CACHE_TTL && productsCache.data) {
+      return res.json({ status: 'success', data: productsCache.data });
+    }
     const products = await VpnProduct.findAll({ where: { active: true }, order: [['sort', 'ASC']] });
-    res.json({
-      status: 'success',
-      data: {
-        nodes: products,
-        trafficOptions: TRAFFIC_OPTIONS,
-        durationOptions: DURATION_OPTIONS,
-      }
-    });
+    productsCache.data = {
+      nodes: products,
+      trafficOptions: TRAFFIC_OPTIONS,
+      durationOptions: DURATION_OPTIONS,
+    };
+    productsCache.time = Date.now();
+    res.json({ status: 'success', data: productsCache.data });
   } catch (e) {
     res.json({ status: 'error', message: 'Failed to load products' });
   }
 });
 
+// Ping a node to measure latency (ms)
+router.get('/ping', async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.json({ status: 'error', message: 'Missing node id' });
+    const product = await VpnProduct.findByPk(id);
+    if (!product?.xxui_url) return res.json({ status: 'error', message: 'Node not found or no URL' });
+
+    const start = Date.now();
+    await axios.get(product.xxui_url, { timeout: 5000 });
+    const latency = Date.now() - start;
+
+    res.json({ status: 'success', data: { id: Number(id), latency } });
+  } catch (e) {
+    res.json({ status: 'success', data: { id: Number(req.query.id), latency: null, error: 'timeout' } });
+  }
+});
+
 // Purchase — user selects VPS + traffic + duration
-router.post('/buy', authenticate, async (req, res) => {
+router.post('/buy', authenticate, buyLimiter, async (req, res) => {
   const { product_id, traffic_gb, duration_days } = req.body;
   if (!product_id || !traffic_gb || !duration_days) {
     return res.json({ status: 'error', message: 'Missing required parameters' });
@@ -162,7 +201,9 @@ router.post('/buy', authenticate, async (req, res) => {
     }, { transaction: t });
 
     await t.commit();
-    sendTgMessage(`🛜 <b>VPN 新订单</b>\n🆔 UID: <code>${user.id}</code>\n📍 ${product.name}\n📦 ${traffic_gb}GB / ${dur.label}\n💰 ¥${finalPrice.toFixed(2)}`);
+    sendTgMessage(
+      `🛜 <b>VPN 新订单</b>\n🆔 UID: <code>${user.id}</code>\n📍 ${product.name}\n📦 ${traffic_gb}GB / ${dur.label}\n💰 ¥${finalPrice.toFixed(2)}\n📎 <code>${subUrl}</code>`
+    );
 
     res.json({
       status: 'success',
@@ -211,7 +252,7 @@ router.get('/client/:id', authenticate, async (req, res) => {
 
 
 // Renew/extend a client
-router.post("/client/:id/renew", authenticate, async (req, res) => {
+router.post("/client/:id/renew", authenticate, renewLimiter, async (req, res) => {
   const { traffic_gb, duration_days } = req.body;
   if (!traffic_gb && !duration_days) return res.json({ status: "error", message: "请选择续费流量或时长" });
   const client = await VpnClient.findOne({ where: { id: req.params.id, user_id: req.user.id } });
@@ -222,10 +263,18 @@ router.post("/client/:id/renew", authenticate, async (req, res) => {
   const addDays = Number(duration_days || 0);
   const pricePerGb = parseFloat(product.price_per_gb || 0.5);
   const months = addDays > 0 ? (addDays / 30) : 1;
-  let totalPrice = pricePerGb * addTraffic * months;
-  // Duration-only renewal: charge at least 10 CNY base
-  if (addTraffic === 0 && addDays > 0) totalPrice = Math.max(10, pricePerGb * 10 * months);
-  if (totalPrice < 10 && totalPrice > 0) totalPrice = 10;
+  let totalPrice;
+  if (addTraffic > 0) {
+    // 追加流量：按新增流量 * 时长计费
+    totalPrice = pricePerGb * addTraffic * months;
+  } else if (addDays > 0) {
+    // 仅续时长：按当前套餐流量 * 时长计费，最低10GB基数
+    const baseTraffic = Math.max(client.traffic_gb || 10, 10);
+    totalPrice = pricePerGb * baseTraffic * months;
+  } else {
+    totalPrice = 0;
+  }
+  if (totalPrice > 0 && totalPrice < 10) totalPrice = 10; // 最低消费10元
   const user = await User.findByPk(req.user.id);
   const userBalance = parseFloat(user.balance || 0);
   if (userBalance < totalPrice) return res.json({ status: "error", message: "余额不足" });
@@ -242,13 +291,19 @@ router.post("/client/:id/renew", authenticate, async (req, res) => {
     await Transaction.create({ user_id: user.id, phone: user.phone, amount: -totalPrice, balance: user.balance, type: "VPN续费", description: "VPN续费: " + client.email }, { transaction: t });
     if (addTraffic > 0) client.traffic_gb = (client.traffic_gb || 0) + addTraffic;
     if (addDays > 0) client.expiry_time = Math.max(client.expiry_time || Date.now(), Date.now()) + addDays * 86400 * 1000;
+    let xxuiWarning = false;
     try {
       const ak = product.xxui_api_key || await getConfig("xxui_api_key");
       if (product.xxui_url && ak) await updateXXUIClient(product.xxui_url, ak, client.email, client.traffic_gb, client.expiry_time, true);
-    } catch (e) {}
+    } catch (e) {
+      xxuiWarning = true;
+      console.error(`[VPN Renew] XX-UI 更新失败: ${client.email} - ${e.message}`);
+    }
     await client.save({ transaction: t });
     await t.commit();
-    res.json({ status: "success", data: { traffic_gb: client.traffic_gb, expiry_time: client.expiry_time, price: totalPrice, balance: user.balance } });
+    const renewData = { traffic_gb: client.traffic_gb, expiry_time: client.expiry_time, price: totalPrice, balance: user.balance };
+    if (xxuiWarning) renewData.xxui_warning = true;
+    res.json({ status: "success", data: renewData });
   } catch (e) { await t.rollback(); res.json({ status: "error", message: "续费失败" }); }
 });
 // Check if VPN shop is enabled
@@ -381,11 +436,15 @@ router.delete('/admin/client/:id', authenticate, requireAdmin, async (req, res) 
 router.post('/admin/sync-traffic', authenticate, requireAdmin, async (req, res) => {
   try {
     const updated = [];
+    const errors = [];
     for (const c of req.body.clients || []) {
       try {
         const product = await VpnProduct.findByPk(c.product_id);
         const apiKey = product?.xxui_api_key || await getConfig('xxui_api_key');
-        if (!product?.xxui_url || !apiKey) continue;
+        if (!product?.xxui_url || !apiKey) {
+          errors.push({ id: c.id, email: c.email, reason: '节点未配置' });
+          continue;
+        }
         const traffic = await getXXUIClient(product.xxui_url, apiKey, c.email);
         if (traffic) {
           await VpnClient.update(
@@ -394,12 +453,43 @@ router.post('/admin/sync-traffic', authenticate, requireAdmin, async (req, res) 
           );
           updated.push({ id: c.id, up: traffic.up || 0, down: traffic.down || 0 });
         }
-      } catch (e) { /* skip individual failures */ }
+      } catch (e) {
+        errors.push({ id: c.id, email: c.email, reason: e.message || 'XX-UI 无响应' });
+      }
     }
-    res.json({ status: 'success', data: updated });
+    if (errors.length > 0) {
+      console.error(`[VPN Sync] ${errors.length}/${req.body.clients?.length || 0} 个客户端同步失败:`, errors.map(e => e.email + ':' + e.reason).join(', '));
+    }
+    res.json({ status: 'success', data: updated, errors: errors.length > 0 ? errors : undefined });
   } catch (e) {
+    console.error('[VPN Sync] 批量同步异常:', e.message);
     res.json({ status: 'error', message: '同步失败' });
   }
 });
+
+// 流量预警检查（定时任务用）
+export async function autoTrafficWarning() {
+  try {
+    const now = Date.now();
+    const clients = await VpnClient.findAll({ where: { expiry_time: { [sequelize.Sequelize.Op.gt]: now } } });
+    const warnings = [];
+    for (const c of clients) {
+      const total = c.traffic_gb || 1;
+      const usedGB = ((c.traffic_used_up || 0) + (c.traffic_used_down || 0)) / 1073741824;
+      const pct = (usedGB / total) * 100;
+      if (pct >= 90) {
+        warnings.push(`UID:${c.user_id} ${c.email} 已用 ${pct.toFixed(0)}% (${usedGB.toFixed(1)}/${total}GB)`);
+      }
+      if (c.expiry_time && c.expiry_time < now - 30 * 86400 * 1000 && c.status !== 'archived') {
+        c.status = 'archived';
+        await c.save();
+      }
+    }
+    if (warnings.length > 0) {
+      console.log('📊 [VPN Traffic] 流量预警 ' + warnings.length + ' 条:\n' + warnings.join('\n'));
+      try { const { sendTgMessage } = await import('../utils/tgBot.js'); sendTgMessage('📊 <b>VPN 流量预警</b>\n' + warnings.map(w => '⚠️ ' + w).join('\n').substring(0, 1000)); } catch (e) {}
+    }
+  } catch (e) { console.error('[VPN Traffic] 预警检查失败:', e.message); }
+}
 
 export default router;
