@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { Config } from '../models/index.js';
-import { sendTgMessage } from './tgBot.js';
+import { sendTgMessage, sendTgDocument } from './tgBot.js';
 
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -50,6 +50,7 @@ export const autoBackupTask = async () => {
                 for (let i = 24; i < files.length; i++) fs.unlinkSync(path.join(BACKUP_DIR, files[i]));
             }
             sendTgMessage(`💾 <b>[系统自检] 自动化容灾备份完成</b>\n📦 文件名: <code>${backup.filename}</code>\n📊 文件大小: ${(backup.size/1024).toFixed(2)} KB\n⏳ 频率策略: 每 ${intervalHours} 小时一次`);
+            sendTgDocument(backup.filepath, `💾 <b>异地容灾备份</b>\n📦 ${backup.filename}\n📊 ${(backup.size/1024).toFixed(2)} KB`);
         }
     } catch (e) {
         console.error('Auto Backup Error:', e);
