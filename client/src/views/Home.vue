@@ -198,7 +198,7 @@ const platforms = [
   { name: 'TikTok', icon: '🎵' },
   { name: 'Instagram', icon: '📸' },
   { name: 'YouTube', icon: '▶️' },
-  { name: 'Telegram', icon: '✈️' },
+  { name: '电报', icon: '✈️' },
   { name: 'Facebook', icon: '📘' },
   { name: 'X/Twitter', icon: '🐦' },
   { name: 'Shopee', icon: '🛍️' },

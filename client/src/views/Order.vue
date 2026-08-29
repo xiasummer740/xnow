@@ -132,10 +132,10 @@ import { useAppStore } from '../stores/app';
 
 const userStore = useUserStore(); const uiStore = useUiStore(); const appStore = useAppStore();
 
-const platforms = { 'TikTok': '🎵', 'Telegram': '✈️', 'Facebook': '📘', 'Instagram': '📸', 'Twitter': '🐦', 'YouTube': '▶️', 'Spotify': '🎧', 'Snapchat': '👻', 'Google': '🔍', 'Discord': '🎮', 'LinkedIn': '💼', 'Reddit': '🤖', 'Traffic': '🌐', '其他': '➕', '全部': '≡' };
+const platforms = { 'TikTok': '🎵', '电报': '✈️', 'Facebook': '📘', 'Instagram': '📸', 'Twitter': '🐦', 'YouTube': '▶️', 'Spotify': '🎧', 'Snapchat': '👻', 'Google': '🔍', 'Discord': '🎮', 'LinkedIn': '💼', 'Reddit': '🤖', 'Traffic': '🌐', '其他': '➕', '全部': '≡' };
 const platformKeywords = {
   'TikTok': ['tiktok', 'tk', '抖音'],
-  'Telegram': ['telegram', 'tg', '电报'],
+  '电报': ['telegram', 'tg', '电报'],
   'Facebook': ['facebook', 'fb', '脸书'],
   'Instagram': ['instagram', 'ig', 'ins', '照片'],
   'Twitter': ['twitter', 'x', '推特'],
@@ -154,7 +154,7 @@ const platformKeywords = {
 
 const platformGuideLinks = {
     'TikTok': atob('aHR0cHM6Ly93d3cudGlrdG9rLmNvbS9AdXNlcm5hbWU='),
-    'Telegram': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'),
+    '电报': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'),
     'Facebook': atob('aHR0cHM6Ly93d3cuZmFjZWJvb2suY29tL3VzZXJuYW1l'),
     'Instagram': atob('aHR0cHM6Ly93d3cuaW5zdGFncmFtLmNvbS91c2VybmFtZQ=='),
     'Twitter': atob('aHR0cHM6Ly90d2l0dGVyLmNvbS91c2VybmFtZQ=='),
