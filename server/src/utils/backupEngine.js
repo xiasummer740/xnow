@@ -50,7 +50,14 @@ export const autoBackupTask = async () => {
                 for (let i = 24; i < files.length; i++) fs.unlinkSync(path.join(BACKUP_DIR, files[i]));
             }
             sendTgMessage(`💾 <b>[系统自检] 自动化容灾备份完成</b>\n📦 文件名: <code>${backup.filename}</code>\n📊 文件大小: ${(backup.size/1024).toFixed(2)} KB\n⏳ 频率策略: 每 ${intervalHours} 小时一次`);
-            sendTgDocument(backup.filepath, `💾 <b>异地容灾备份</b>\n📦 ${backup.filename}\n📊 ${(backup.size/1024).toFixed(2)} KB`);
+
+            // TG 每日只发一份异地存档（日期标记文件，pm2 重启也不重发；本地仍每12h滚动24份）
+            const shanghaiDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+            const sentFlag = path.join(BACKUP_DIR, `.tg_sent_${shanghaiDate}`);
+            if (!fs.existsSync(sentFlag)) {
+                sendTgDocument(backup.filepath, `💾 <b>异地容灾备份</b>\n📦 ${backup.filename}\n📊 ${(backup.size/1024).toFixed(2)} KB`);
+                fs.writeFileSync(sentFlag, backup.filename);
+            }
         }
     } catch (e) {
         console.error('Auto Backup Error:', e);
