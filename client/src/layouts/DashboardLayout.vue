@@ -209,7 +209,7 @@ const submitDeleteAccount = async () => {
 };
 
 const syncUserStatus = async () => {
-  if (!userStore.token || userStore.token === 'super-admin-offline-token') return;
+  if (!userStore.token) return;
   try {
     const res = await fetch(`/api/user/status?_t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
     const data = await res.json();
@@ -236,7 +236,7 @@ const toggleNotifPanel = () => {
   if (showNotifPanel.value) fetchNotifs();
 };
 const fetchNotifs = async () => {
-  if (!userStore.token || userStore.token === 'super-admin-offline-token') return;
+  if (!userStore.token) return;
   try {
     const res = await fetch('/api/user/notifications', { headers: { 'Authorization': `Bearer ${userStore.token}` } });
     const j = await res.json();
@@ -265,7 +265,7 @@ let statusInterval = null;
 onMounted(() => {
   appStore.fetchConfig(); syncUserStatus();
   // 每60秒检查一次新通知
-  if (userStore.token && userStore.token !== 'super-admin-offline-token') {
+  if (userStore.token) {
     fetchNotifs();
     notifInterval = setInterval(fetchNotifs, 60000);
   }

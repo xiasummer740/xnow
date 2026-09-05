@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { User, Config } from '../models/index.js';
+import { User } from '../models/index.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sendEmailCode } from '../utils/email.js';
 import { Op } from 'sequelize';
@@ -91,14 +91,7 @@ router.post('/login', async (req, res) => {
   const cleanAccount = String(accountStr).trim();
 
   try {
-    if (cleanAccount === 'admin' && String(password) === 'admin123') {
-      const realAdminExists = await User.findOne({ where: { role: ['admin', 'super_admin'] } });
-      if (realAdminExists) return res.status(403).json({ status: 'error', message: '正式管理员已登基，测试通道已永久自毁封闭！' });
-      const testToken = jwt.sign({ id: 0, role: 'super_admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
-      return res.json({ status: 'success', token: 'super-admin-offline-token', user: { id: 0, phone: 'admin', role: 'super_admin', balance: 0 } });
-    }
-
-    const user = await User.findOne({ 
+    const user = await User.findOne({
         where: { 
             [Op.or]: [
                 { phone: cleanAccount }, 
