@@ -366,16 +366,51 @@ router.get('/users/:id/analysis', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ status:'error', message: err.message }); }
 });
 
-// IP 地理位置查询（代理 ip-api.com，避免前端跨域）
+// ====== IP 地理位置查询（代理 ip-api.com，避免前端跨域 + 批量 + 内存缓存，防打爆免费限流）======
+const geoCache = new Map();        // ip -> {country, city}
+const geoCacheTime = new Map();    // ip -> 时间戳
+const GEO_TTL = 30 * 60 * 1000;    // 缓存 30 分钟
+const isLocalIp = (ip) => !ip || ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
+
 router.get('/geo/:ip', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const ip = req.params.ip;
-  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return res.json({ country: '本地', city: '' });
+  if (isLocalIp(ip)) return res.json({ country: '本地', city: '' });
+  const now = Date.now();
+  if (geoCache.has(ip) && now - (geoCacheTime.get(ip) || 0) < GEO_TTL) return res.json(geoCache.get(ip));
   try {
     const { data } = await axios.get(`http://ip-api.com/json/${ip}?lang=zh-CN`, { timeout: 3000 });
-    if (data.status === 'success') res.json({ country: data.country, city: data.city });
-    else res.json({ country: '', city: '' });
+    const geo = data.status === 'success' ? { country: data.country, city: data.city } : { country: '', city: '' };
+    geoCache.set(ip, geo); geoCacheTime.set(ip, now);
+    res.json(geo);
   } catch { res.json({ country: '', city: '' }); }
+});
+
+// 批量查询（用户列表一次拿一页的 IP → 走 ip-api /batch，1 次请求即可，回填各行地区）
+router.post('/geo/batch', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  const ips = Array.isArray(req.body?.ips) ? [...new Set(req.body.ips.filter((x) => !isLocalIp(x)))] : [];
+  const result = {};
+  const now = Date.now();
+  const missing = ips.filter((ip) => {
+    if (geoCache.has(ip) && now - (geoCacheTime.get(ip) || 0) < GEO_TTL) { result[ip] = geoCache.get(ip); return false; }
+    return true;
+  });
+  if (missing.length) {
+    try {
+      const { data } = await axios.post(`http://ip-api.com/batch?lang=zh-CN`, missing, { timeout: 6000 });
+      if (Array.isArray(data)) {
+        data.forEach((g, i) => {
+          const ip = missing[i];
+          const geo = g && g.status === 'success' ? { country: g.country, city: g.city } : { country: '', city: '' };
+          geoCache.set(ip, geo); geoCacheTime.set(ip, now);
+          result[ip] = geo;
+        });
+      }
+    } catch { /* 外呼失败：缺失 IP 下面统一补空，不崩 */ }
+  }
+  ips.forEach((ip) => { if (!result[ip]) result[ip] = { country: '', city: '' }; });
+  res.json({ status: 'success', data: result });
 });
 
 // ====== 公告推送 ======
