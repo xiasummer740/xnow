@@ -23,7 +23,12 @@ const WHITELIST = {
 };
 
 export const sanitizeAnnouncement = (html) =>
-  sanitizeHtml(String(html ?? ''), WHITELIST);
+  sanitizeHtml(String(html ?? ''), WHITELIST)
+    // 统一移除内联 font-size：字号交由前端样式一处控制，
+    // 避免上游/后台各自内联字号造成公告字体忽大忽小、无法统一调节
+    .replace(/font-size\s*:\s*[^;"']*;?\s*/gi, '')
+    // 顺带清掉因此变空的 style 属性
+    .replace(/\s+style\s*=\s*["']\s*;?\s*["']/gi, '');
 
 // 富文本 → 纯文本（去掉全部标签），用于站内通知等纯文本展示位，避免 HTML 源码裸露
 export const announcementToText = (html) =>

@@ -385,20 +385,21 @@ onMounted(() => fetchInitData());
 .fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 .fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-10px) scale(0.98); }
 
-/* 系统公告富文本排版：内容已由后端白名单净化，v-html 安全。给无内联样式的标签兜底可读性 */
-.announcement-body { line-height: 1.8; word-break: break-word; }
+/* 系统公告富文本排版：内容已由后端白名单净化，v-html 安全。
+   内联 font-size 已在服务端剥离 → 字号全部在此一处控制，祥哥要调大调小只改下面字号值即可 */
+.announcement-body { line-height: 1.6; word-break: break-word; }
 .announcement-body h1, .announcement-body h2, .announcement-body h3,
 .announcement-body h4, .announcement-body h5, .announcement-body h6 {
-  font-weight: 700; color: #fff; margin: 0.6em 0 0.35em; line-height: 1.5;
+  font-weight: 700; color: #fff; margin: 0.45em 0 0.25em; line-height: 1.45;
 }
-.announcement-body h1 { font-size: 1.35em; }
-.announcement-body h2 { font-size: 1.25em; }
-.announcement-body h3 { font-size: 1.15em; }
-.announcement-body h4, .announcement-body h5, .announcement-body h6 { font-size: 1.05em; }
-.announcement-body p { margin: 0.45em 0; }
-.announcement-body ul, .announcement-body ol { margin: 0.45em 0; padding-left: 1.7em; }
-.announcement-body li { margin: 0.25em 0; }
+.announcement-body h1 { font-size: 1.3em; }
+.announcement-body h2 { font-size: 1.2em; }
+.announcement-body h3 { font-size: 1.12em; }
+.announcement-body h4, .announcement-body h5, .announcement-body h6 { font-size: 1.04em; }
+.announcement-body p { margin: 0.35em 0; }
+.announcement-body ul, .announcement-body ol { margin: 0.35em 0; padding-left: 1.6em; }
+.announcement-body li { margin: 0.2em 0; }
 .announcement-body a { color: #7dd3fc; text-decoration: underline; }
 .announcement-body del, .announcement-body s { text-decoration: line-through; color: #94a3b8; }
-.announcement-body blockquote { border-left: 3px solid rgba(255,255,255,0.25); padding-left: 0.8em; margin: 0.5em 0; }
+.announcement-body blockquote { border-left: 3px solid rgba(255,255,255,0.25); padding-left: 0.8em; margin: 0.4em 0; }
 </style>

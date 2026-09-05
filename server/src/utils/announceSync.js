@@ -34,8 +34,7 @@ const fetchPage = (urlStr, options = {}) => {
 const getCleanAnnouncement = (raw) => {
   let html = raw.trim()
   html = html.replace(/var\(--color-id-\d+\)/g, '#ffffff')
-  html = html.replace(/font-size:\s*\d{2,}px/gi, 'font-size: 17px')
-  html = html.replace(/font-size:\s*2[7-9]px/gi, 'font-size: 17px')
+  // 字号不再在此规整：入库前 sanitizeAnnouncement 会统一移除内联 font-size，交由前端样式一处控制
   // 清除上游广告和敏感信息
   html = html.replace(/<p[^>]*>[\s\S]*?tk7188\.top[\s\S]*?<\/p>/gi, '')
   html = html.replace(/<p[^>]*>[\s\S]*?tg频道[\s\S]*?<\/p>/gi, '')
