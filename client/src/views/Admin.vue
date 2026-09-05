@@ -269,8 +269,12 @@ const submitFund = async () => {
     if (fundModal.value.amount <= 0) return ui.showToast('金额必须大于0', 'error');
     try {
         const finalAmount = fundModal.value.type === 'add' ? fundModal.value.amount : -fundModal.value.amount;
-        await fetch('/api/admin/user/update', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ userId: fundModal.value.userId, type: 'fund', amount: finalAmount, phone: fundModal.value.phone }) });
-        ui.showToast('资金操作成功', 'success'); fundModal.value.show = false; fetchDashboard(false);
+        const res = await fetch('/api/admin/user/update', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ userId: fundModal.value.userId, type: 'fund', amount: finalAmount, phone: fundModal.value.phone }) });
+        const json = await res.json();
+        if (json.status !== 'success') return ui.showToast(json.message || '资金操作失败', 'error'); // 失败不关弹窗，可改金额重试
+        ui.showToast('资金操作成功', 'success'); fundModal.value.show = false;
+        fetchUsers(); // 💡 刷新用户列表当前页，让该行余额即时显示最新值
+        fetchDashboard(false); // 同步刷新 overview 金库汇总等大盘数据
     } catch (e) { ui.showToast('操作失败', 'error'); }
 };
 
