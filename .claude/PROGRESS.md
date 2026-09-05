@@ -335,3 +335,26 @@
 - VPS: `1507ca05` ✅（代码已拉取 + PM2已重启 + 前端dist已上传）
 - express-rate-limit v8 兼容修复已生效
 - 数据库 protocols 列已手动添加成功
+
+## [2026-09-05] 资金/支付/公告安全加固批次（9项，含安全审查8高危全修）
+
+### 完成
+1. **管理员加款/扣款后即时刷新余额** + 校验后端响应防假报成功（`bcfdf79f`）
+2. **用户列表 IP 旁显示地区**（广东深圳/美国洛杉矶，后端批量 geo + 缓存防限流）（`22d6e2c9`）
+3. **AutoAnnounce 公告抓取崩溃修复** + 下单页加载失败/登录失效明确引导（`48b35d7e`）
+4. **安全审查 8 项全修**（`734131da`）：支付伪造补单 / 负倍率刷余额 / 权限提升 / v-html XSS / 充值iframe origin / 空数组同步清空数据 / 退款·备份静默失败 / 缺路由角色守卫
+5. **支付入账失败不再误标完成**（防真实付款被跳过资金静默丢失）+ 金额 NaN 护栏（`e6cd73a0`）
+6. **移除硬编码超管离线口令** `super-admin-offline-token`（`c824db8b`）
+7. **Cryptomus USDT 回调修复**——原为空 handler 导致 USDT 付款不到账：验签入账 + 服务端签名对账兜底 + 下单即登记待支付单，补单引擎支持 USDT（1小时发票不按5次重试判死）（`b2c61af5`）
+8. **系统公告恢复富文本排版**——上轮 XSS 修复把公告 v-html 降级纯文本导致 HTML 源码裸露：后端 sanitize-html 白名单净化入库（announceSync / config/update 双入口），前端安全 v-html，站内通知推送转纯文本（`b895f651`）
+9. **公告字号/行距统一收敛**——内联 font-size 在净化时剥离，字号归前端 CSS 一处控制可整体调节（`da939a6d`）
+
+### 验证
+- 每项 node --check / client build 通过后部署；线上 health=db connected、首页 200、日志零新增报错
+- 存量公告数据已两次净化迁移（剥危险内容 + 剥内联字号）
+- 新增服务端依赖 `sanitize-html`（`server/src/utils/sanitize.js`）
+
+### 三方同步状态
+- 本地: `da939a6d` ✅
+- GitHub: `da939a6d` ✅
+- VPS: `da939a6d` ✅（pull + pm2 restart + client 重建均已执行）
