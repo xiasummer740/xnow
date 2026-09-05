@@ -98,9 +98,12 @@ router.get('/status', authenticate, async (req, res) => {
             try {
                 const response = await axios.get(`https://bufpay.com/api/query?order_id=${encodeURIComponent(order_id)}`, { timeout: 3000 });
                 if (response.data && (response.data.status === 'success' || response.data.status === 'payed')) {
-                    await handleSuccessPay(order_id, req.user.id, pending.amount, 'BufPay补单');
-                    markCompleted(order_id);
-                    return res.json({ status: 'success' });
+                    const ok = await handleSuccessPay(order_id, req.user.id, pending.amount, 'BufPay补单');
+                    if (ok) {
+                        markCompleted(order_id);
+                        return res.json({ status: 'success' });
+                    }
+                    // 失败/在途：不标完成、不回 success，保持 wait 让客户端续轮询/引擎重试
                 }
             } catch (ignore) {}
         }
@@ -114,7 +117,10 @@ router.get('/return/bufpay', async (req, res) => {
         const conf = await Config.findOne({ where: { key: 'bufpay_key' } });
         if (conf) {
             const localSign = md5(aoid + order_id + order_uid + price + pay_price + conf.value);
-            if (localSign === sign) { await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回'); markCompleted(order_id); }
+            if (localSign === sign) {
+              const ok = await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回');
+              if (ok) markCompleted(order_id); // 失败不标完成，补单引擎会接手重试
+            }
         }
     } catch (e) {}
     res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>支付成功</title><style>body { background: #0f172a; color: #34d399; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }</style></head><body><h2>支付成功，正在自动跳转...</h2><script>if(window.parent!==window){window.parent.postMessage({type:'pay_success'},window.location.origin);}else{window.location.href='/recharge';}</script></body></html>`);
@@ -127,7 +133,8 @@ router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req
         if (!conf) return res.status(500).send('No Config');
         const localSign = md5(aoid + order_id + order_uid + price + pay_price + conf.value);
         if (localSign !== sign) return res.status(400).send('Sign Error');
-        await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay异步回调');
+        const ok = await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay异步回调');
+        if (!ok) return res.status(500).send('入账失败，请网关稍后重试'); // 保持 pending，等网关/补单引擎重试
         markCompleted(order_id);
         res.status(200).send('ok');
     } catch (e) { res.status(500).send('Error'); }
@@ -135,15 +142,17 @@ router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req
 
 router.post('/notify/cryptomus', async (req, res) => { res.status(200).send('ok'); });
 
+// 返回 true = 已成功入账/本单已处理完；返回 false = 入账失败或在途，
+// 调用方收到 false 时【不得 markCompleted】，须保持 pending 交给补单引擎重试，防资金静默丢失。
 async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
     // 🔒 同单并发入账锁：轮询 /pay/status 与补单引擎同刻触发时只入账一次
-    if (creditLock.has(orderId)) return;
+    if (creditLock.has(orderId)) return false;
     creditLock.add(orderId);
     const t = await sequelize.transaction();
     try {
         const exist = await Transaction.findOne({ where: { description: { [sequelize.Sequelize.Op.like]: `%${orderId}%` } }, transaction: t });
-        if (exist) { await t.commit(); return; } 
-        
+        if (exist) { await t.commit(); return true; }
+
         let prefix = '在线充值';
         if (orderId.includes('_wechat_')) prefix = '微信充值';
         else if (orderId.includes('_alipay_')) prefix = '支付宝充值';
@@ -156,7 +165,10 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
         } else if (orderId.startsWith('USDT_') && parts.length >= 3) {
             realAddAmount = parseFloat(parts[1].replace('d', '.'));
         }
-        
+
+        // 🔒 金额护栏：非正/NaN 一律拒绝入账（走 catch→返回 false 保持 pending），防余额被写成 NaN/负数
+        if (!(realAddAmount > 0)) throw new Error('入账金额非法 order=' + orderId);
+
         const user = await User.findByPk(userId, { transaction: t });
         if (user) {
             user.balance = (parseFloat(user.balance) + realAddAmount).toFixed(6);
@@ -194,9 +206,11 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
             }
         }
         await t.commit();
+        return !!user; // 用户不存在 → 不标完成，让补单引擎重试到上限后 TG 告警
     } catch (e) {
         await t.rollback();
         console.error('💥 [支付入账] 失败 order=' + orderId + ' err=' + (e && e.message || e));
+        return false;
     } finally {
         creditLock.delete(orderId);
     }
@@ -224,9 +238,12 @@ export async function reconcilePayments() {
       try {
         const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
         if (res.data && (res.data.status === 'success' || res.data.status === 'payed')) {
-          await handleSuccessPay(pay.order_id, pay.user_id, res.data.pay_price || pay.amount, 'BufPay auto')
-          markCompleted(pay.order_id)
-          continue
+          const ok = await handleSuccessPay(pay.order_id, pay.user_id, res.data.pay_price || pay.amount, 'BufPay auto')
+          if (ok) {
+            markCompleted(pay.order_id)
+            continue
+          }
+          // 入账失败：不标完成，下一轮自动重试（retry_count 到上限才会 markFailed + TG 告警）
         }
       } catch(e) {}
       if (age > 1800000) {
