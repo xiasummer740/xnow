@@ -58,6 +58,43 @@ const cryptomusSign = (data, apiKey) => {
     return md5(base64Str + apiKey);
 };
 
+// 读取本站 Cryptomus 商户参数（下单与回调查证共用，避免重复查表）
+const loadCryptomusConf = async () => {
+    const configs = await Config.findAll({ where: { key: ['cryptomus_id', 'cryptomus_key'] } });
+    const conf = {}; configs.forEach(c => conf[c.key] = c.value);
+    if (!conf.cryptomus_id || !conf.cryptomus_key) return null;
+    return { id: conf.cryptomus_id, key: conf.cryptomus_key };
+};
+
+// 回调验签：sign = md5(base64(去掉 sign 后的 JSON) + paymentKey)
+// PHP 默认转义 '/'，Node 不转义 → 同一载荷两种序列化各算一次都放行
+const cryptomusVerify = (data, apiKey) => {
+    try {
+        if (!data || !apiKey) return false;
+        const { sign, ...rest } = data;
+        if (!sign) return false;
+        const plain = JSON.stringify(rest);
+        const escaped = plain.replace(/\//g, '\\/');
+        return [plain, escaped].some(jsonStr =>
+            md5(Buffer.from(jsonStr).toString('base64') + apiKey) === sign
+        );
+    } catch { return false; }
+};
+
+// 服务端签名向 Cryptomus 查证某单是否真付（不信回调明文，防伪造回调直接写余额）
+const cryptomusCheckPaid = async (orderId) => {
+    const conf = await loadCryptomusConf();
+    if (!conf) throw new Error('cryptomus 商户参数未配置，无法对账');
+    const payload = { order_id: orderId };
+    const sign = cryptomusSign(payload, conf.key);
+    const resp = await axios.post('https://api.cryptomus.com/v1/payment/info', payload, {
+        headers: { 'merchant': conf.id, 'sign': sign, 'Content-Type': 'application/json' },
+        timeout: 8000
+    });
+    const st = resp.data?.result?.status;
+    return st === 'paid' || st === 'paid_over';
+};
+
 router.post('/usd', authenticate, async (req, res) => {
     const { amount } = req.body;
     try {
@@ -67,15 +104,21 @@ router.post('/usd', authenticate, async (req, res) => {
 
         const domain = getDomain(req);
         const amountFloat = parseFloat(amount);
+        // 🔒 金额护栏：非正/NaN 一律拒绝，防负数/NaN 单进队列
+        if (!(amountFloat > 0) || !isFinite(amountFloat)) return res.json({ status: 'error', message: '金额非法' });
         const safeAmountStr = amountFloat.toFixed(2).replace('.', 'd');
         const order_id = `USDT_${safeAmountStr}_${Date.now()}`;
-        
+
         const payload = { amount: String(amount), currency: 'USD', order_id: order_id, url_return: `${domain}/recharge`, url_callback: `${domain}/api/pay/notify/cryptomus`, is_payment_multiple: true, lifetime: 3600, to_currency: 'USDT' };
         const sign = cryptomusSign(payload, conf.cryptomus_key);
-        
+
         const response = await axios.post('https://api.cryptomus.com/v1/payment', payload, { headers: { 'merchant': conf.cryptomus_id, 'sign': sign, 'Content-Type': 'application/json' } });
-        
-        if (response.data?.result?.url) res.json({ status: 'success', url: response.data.result.url });
+
+        if (response.data?.result?.url) {
+            // 下单成功 → 登记本站待支付单，补单引擎才能接手（回调查不到也不丢）
+            addPendingPayment({ order_id, user_id: req.user.id, amount: amountFloat, pay_type: 'USDT' });
+            res.json({ status: 'success', url: response.data.result.url });
+        }
         else res.json({ status: 'error', message: '网关未返回支付链接' });
     } catch (e) { 
         res.json({ status: 'error', message: `网关阻断，请联系管理员` }); 
@@ -96,9 +139,16 @@ router.get('/status', authenticate, async (req, res) => {
         const pending = getPendingPayments().find(p => p.order_id === order_id && String(p.user_id) === String(req.user.id));
         if (pending && Date.now() - new Date(pending.created_at).getTime() >= 180000) {
             try {
-                const response = await axios.get(`https://bufpay.com/api/query?order_id=${encodeURIComponent(order_id)}`, { timeout: 3000 });
-                if (response.data && (response.data.status === 'success' || response.data.status === 'payed')) {
-                    const ok = await handleSuccessPay(order_id, req.user.id, pending.amount, 'BufPay补单');
+                let paid = false;
+                if (pending.pay_type === 'USDT') {
+                    // USDT 走服务端签名向 Cryptomus 查证（bufpay 查询接口管不了 USDT 单）
+                    paid = await cryptomusCheckPaid(order_id);
+                } else {
+                    const response = await axios.get(`https://bufpay.com/api/query?order_id=${encodeURIComponent(order_id)}`, { timeout: 3000 });
+                    paid = !!(response.data && (response.data.status === 'success' || response.data.status === 'payed'));
+                }
+                if (paid) {
+                    const ok = await handleSuccessPay(order_id, req.user.id, pending.amount, pending.pay_type === 'USDT' ? 'Cryptomus补单' : 'BufPay补单');
                     if (ok) {
                         markCompleted(order_id);
                         return res.json({ status: 'success' });
@@ -140,7 +190,42 @@ router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req
     } catch (e) { res.status(500).send('Error'); }
 });
 
-router.post('/notify/cryptomus', async (req, res) => { res.status(200).send('ok'); });
+// 💳 Cryptomus (USDT) 异步回调 —— 真实入账入口。
+// 验签通过 → 直接入账；验签失败（merchant 与 payment key 可能不同）→ 不信任回调明文，
+// 改由服务端签名向 Cryptomus 查证后再入账，杜绝伪造回调直接写余额。
+router.post('/notify/cryptomus', async (req, res) => {
+    const data = req.body || {};
+    const orderId = data.order_id;
+    const status = data.status;
+    const pending = orderId && getPendingPayments().find(p => p.order_id === orderId && p.pay_type === 'USDT');
+    // 未知/非本站单 → 一律 200 停掉网关重试（该停的停，别让网关连环轰炸）
+    if (!pending) return res.status(200).send('OK');
+    // 失败终态 → 标记失败，交由人工/补单审视
+    if (['fail', 'cancel', 'system_fail', 'refund_fail'].includes(status)) {
+        markFailed(orderId, 'cryptomus:' + status);
+        return res.status(200).send('OK');
+    }
+    // 仅对「付款成功」态入账
+    if (status === 'paid' || status === 'paid_over') {
+        const conf = await loadCryptomusConf();
+        if (conf && cryptomusVerify(data, conf.key)) {
+            const ok = await handleSuccessPay(orderId, pending.user_id, pending.amount, 'Cryptomus回调');
+            if (ok) markCompleted(orderId);
+            return res.status(200).send('OK');
+        }
+        // 验签失败/无法验签：不信回调明文，改服务端查证。查证成功才入账；查证失败保持 pending，
+        // 交给补单引擎每2分钟重查，直到 1 小时发票超时。始终回 200 停网关重试。
+        try {
+            if (await cryptomusCheckPaid(orderId)) {
+                const ok = await handleSuccessPay(orderId, pending.user_id, pending.amount, 'Cryptomus对账');
+                if (ok) markCompleted(orderId);
+            }
+        } catch (e) {
+            console.error('💥 [Cryptomus] 回调对账失败 order=' + orderId + ' err=' + (e && e.message || e));
+        }
+    }
+    res.status(200).send('OK');
+});
 
 // 返回 true = 已成功入账/本单已处理完；返回 false = 入账失败或在途，
 // 调用方收到 false 时【不得 markCompleted】，须保持 pending 交给补单引擎重试，防资金静默丢失。
@@ -228,27 +313,43 @@ export async function reconcilePayments() {
     if (pay.status !== 'pending') continue
     const age = now - new Date(pay.created_at).getTime()
     if (age < 180000) continue
-    if (pay.retry_count >= 5) { markFailed(pay.order_id, 'over max retry'); continue }
+    const isUsdt = pay.pay_type === 'USDT'
+    // 🔒 BufPay 约 5 次重试(≈10分钟)判死重来；USDT 发票 1 小时有效，绝不能提前判死，否则用户正付款就被杀单
+    if (!isUsdt && pay.retry_count >= 5) { markFailed(pay.order_id, 'over max retry'); continue }
     markProcessing(pay.order_id)
     try {
       const exist = await Transaction.findOne({
         where: { description: { [sequelize.Sequelize.Op.like]: '%' + pay.order_id + '%' } }
       })
       if (exist) { markCompleted(pay.order_id); continue }
+      let paid = false
+      let queryErr = null
       try {
-        const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
-        if (res.data && (res.data.status === 'success' || res.data.status === 'payed')) {
-          const ok = await handleSuccessPay(pay.order_id, pay.user_id, res.data.pay_price || pay.amount, 'BufPay auto')
-          if (ok) {
-            markCompleted(pay.order_id)
-            continue
-          }
-          // 入账失败：不标完成，下一轮自动重试（retry_count 到上限才会 markFailed + TG 告警）
+        if (isUsdt) {
+          // USDT：服务端签名向 Cryptomus 查证，不信 bufpay 查询接口
+          paid = await cryptomusCheckPaid(pay.order_id)
+        } else {
+          const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
+          paid = !!(res.data && (res.data.status === 'success' || res.data.status === 'payed'))
         }
-      } catch(e) {}
-      if (age > 1800000) {
-        markFailed(pay.order_id, 'callback timeout')
-        sendTgMessage('Payment callback missing: ' + pay.order_id + ' user:' + pay.user_id + ' amount:' + pay.amount)
+      } catch (e) { queryErr = e }
+      if (paid) {
+        const ok = await handleSuccessPay(pay.order_id, pay.user_id, pay.amount, isUsdt ? 'Cryptomus补单' : 'BufPay auto')
+        if (ok) {
+          markCompleted(pay.order_id)
+          continue
+        }
+        // 入账失败：不标完成，下一轮自动重试（BufPay 到 retry 上限判死；USDT 以 1 小时发票为界）
+      }
+      const failAge = isUsdt ? 3900000 : 1800000   // USDT 65 分钟(发票60+缓冲)，BufPay 30 分钟
+      if (age > failAge) {
+        markFailed(pay.order_id, isUsdt ? 'cryptomus 1h 未支付' : 'callback timeout')
+        if (isUsdt) {
+          // 查证抛错 = 无法确认是否真付了，资金可能悬空 → TG 告警人工核对；干净未付(用户放弃)则不打扰
+          if (queryErr) sendTgMessage('⚠️ <b>USDT 支付单无法向 Cryptomus 确认，已置失败待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + (queryErr.message || queryErr))
+        } else {
+          sendTgMessage('Payment callback missing: ' + pay.order_id + ' user:' + pay.user_id + ' amount:' + pay.amount)
+        }
       }
     } catch(e) {
       console.error('reconcile error', pay.order_id, e.message)
