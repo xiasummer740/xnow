@@ -9,6 +9,7 @@ import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { createBackup, restoreBackup } from '../utils/backupEngine.js';
+import { sanitizeAnnouncement, announcementToText } from '../utils/sanitize.js';
 
 const router = express.Router();
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
@@ -57,7 +58,9 @@ router.post('/config/update', authenticate, async (req, res) => {
         const num = parseFloat(value);
         if (!isFinite(num) || num <= 0) return res.status(400).json({ status: 'error', message: (key === 'global_multiplier' ? '全局倍率' : '代理折扣') + '必须为大于 0 的数字' });
       }
-      await Config.upsert({ key, value: String(value) });
+      // 🔒 公告为 HTML 富文本：入库前白名单净化，剥掉 script/事件等危险内容，前端才能安全 v-html
+      const cleanValue = key === 'announcement' ? sanitizeAnnouncement(String(value)) : String(value);
+      await Config.upsert({ key, value: cleanValue });
     }
     await logAudit(req, 'config_update', 'config', Object.keys(req.body).join(','), { keys: Object.keys(req.body) });
     res.json({ status: 'success', message: '配置已保存' });
@@ -437,8 +440,10 @@ router.post('/announcement/push', authenticate, async (req, res) => {
   try {
     const { title, content } = req.body;
     const allUsers = await User.findAll({ attributes: ['id'], where: { is_banned: false } });
+    // 🔒 通知为纯文本展示位：公告 HTML 转纯文本存，避免前端露标签源码，也杜绝 XSS
+    const plainContent = announcementToText(content);
     const notifications = allUsers.map(u => ({
-      user_id: u.id, title: title || '系统公告', content: content || ''
+      user_id: u.id, title: title || '系统公告', content: plainContent
     }));
     // 批量插入，每次 100 条避免过大
     for (let i = 0; i < notifications.length; i += 100) {

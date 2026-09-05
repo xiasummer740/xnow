@@ -2,6 +2,7 @@ import https from 'https'
 import crypto from 'crypto'
 import { Config } from '../models/index.js'
 import { sendTgMessage } from './tgBot.js'
+import { sanitizeAnnouncement } from './sanitize.js'
 
 const fetchPage = (urlStr, options = {}) => {
   const u = new URL(urlStr)
@@ -39,7 +40,8 @@ const getCleanAnnouncement = (raw) => {
   html = html.replace(/<p[^>]*>[\s\S]*?tk7188\.top[\s\S]*?<\/p>/gi, '')
   html = html.replace(/<p[^>]*>[\s\S]*?tg频道[\s\S]*?<\/p>/gi, '')
   html = html.replace(/@tk7188\w*/g, '@客服')
-  return html
+  // 🔒 入库前白名单净化：剥掉 script/事件/javascript: 等危险内容，前端才可安全 v-html
+  return sanitizeAnnouncement(html)
 }
 
 export const autoSyncAnnouncement = async () => {

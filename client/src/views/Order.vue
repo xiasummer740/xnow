@@ -5,7 +5,8 @@
       <div class="text-pink-500 mt-1 text-xl md:text-2xl">📢</div>
       <div class="w-full overflow-hidden">
         <h3 class="font-bold text-white mb-1 text-sm md:text-base">{{ appStore.t('sys_notice') }}</h3>
-        <div class="text-slate-300 text-xs md:text-sm leading-relaxed whitespace-pre-wrap">{{ sysAnnouncement }}</div>
+        <!-- 🔒 公告已后端白名单净化后入库，此处 v-html 渲染富文本排版（脚本/事件已在服务端剥离） -->
+        <div class="announcement-body text-slate-300 text-xs md:text-sm leading-relaxed" v-html="sysAnnouncement"></div>
       </div>
     </div>
     
@@ -383,4 +384,21 @@ onMounted(() => fetchInitData());
 
 .fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 .fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-10px) scale(0.98); }
+
+/* 系统公告富文本排版：内容已由后端白名单净化，v-html 安全。给无内联样式的标签兜底可读性 */
+.announcement-body { line-height: 1.8; word-break: break-word; }
+.announcement-body h1, .announcement-body h2, .announcement-body h3,
+.announcement-body h4, .announcement-body h5, .announcement-body h6 {
+  font-weight: 700; color: #fff; margin: 0.6em 0 0.35em; line-height: 1.5;
+}
+.announcement-body h1 { font-size: 1.35em; }
+.announcement-body h2 { font-size: 1.25em; }
+.announcement-body h3 { font-size: 1.15em; }
+.announcement-body h4, .announcement-body h5, .announcement-body h6 { font-size: 1.05em; }
+.announcement-body p { margin: 0.45em 0; }
+.announcement-body ul, .announcement-body ol { margin: 0.45em 0; padding-left: 1.7em; }
+.announcement-body li { margin: 0.25em 0; }
+.announcement-body a { color: #7dd3fc; text-decoration: underline; }
+.announcement-body del, .announcement-body s { text-decoration: line-through; color: #94a3b8; }
+.announcement-body blockquote { border-left: 3px solid rgba(255,255,255,0.25); padding-left: 0.8em; margin: 0.5em 0; }
 </style>
