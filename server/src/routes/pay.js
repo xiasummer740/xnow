@@ -8,6 +8,8 @@ import { addPendingPayment, markCompleted, markFailed, getPendingPayments, markP
 
 const router = express.Router();
 const md5 = (str) => crypto.createHash('md5').update(str).digest('hex');
+// 同单并发入账锁（单进程内存），防止 /pay/status 轮询与补单引擎同刻双写入账
+const creditLock = new Set();
 
 const getDomain = (req) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -80,21 +82,27 @@ router.post('/usd', authenticate, async (req, res) => {
     }
 });
 
+// 🔒 支付状态轮询：只读 + 按【本站登记、属于当前用户】的待支付单补查。
+// 不信任前端传的 aoid/amount —— 金额一律以后端登记值为准，杜绝伪造补单入账。
 router.get('/status', authenticate, async (req, res) => {
-    const { aoid, order_id, amount } = req.query;
+    const { order_id } = req.query;
     if (!order_id) return res.json({ status: 'wait' });
     try {
-        const exist = await Transaction.findOne({ where: { description: { [sequelize.Sequelize.Op.like]: `%${order_id}%` } } });
+        // 该用户该单已入账 → 成功
+        const exist = await Transaction.findOne({ where: { user_id: req.user.id, description: { [sequelize.Sequelize.Op.like]: `%${order_id}%` } } });
         if (exist) return res.json({ status: 'success' });
-        if (aoid && aoid !== 'undefined' && aoid !== '') {
+
+        // 只允许补查本站登记过、且归属当前用户的待支付单（补单金额以后端登记额为准）
+        const pending = getPendingPayments().find(p => p.order_id === order_id && String(p.user_id) === String(req.user.id));
+        if (pending && Date.now() - new Date(pending.created_at).getTime() >= 180000) {
             try {
-                const response = await axios.get(`https://bufpay.com/api/query/${aoid}`, { timeout: 3000 });
-                if (response.data.status === 'success' || response.data.status === 'payed') {
-                    await handleSuccessPay(order_id, req.user.id, amount, 'BufPay补单');
+                const response = await axios.get(`https://bufpay.com/api/query?order_id=${encodeURIComponent(order_id)}`, { timeout: 3000 });
+                if (response.data && (response.data.status === 'success' || response.data.status === 'payed')) {
+                    await handleSuccessPay(order_id, req.user.id, pending.amount, 'BufPay补单');
                     markCompleted(order_id);
                     return res.json({ status: 'success' });
                 }
-            } catch(ignore) {}
+            } catch (ignore) {}
         }
         res.json({ status: 'wait' });
     } catch (e) { res.json({ status: 'error' }); }
@@ -128,6 +136,9 @@ router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req
 router.post('/notify/cryptomus', async (req, res) => { res.status(200).send('ok'); });
 
 async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
+    // 🔒 同单并发入账锁：轮询 /pay/status 与补单引擎同刻触发时只入账一次
+    if (creditLock.has(orderId)) return;
+    creditLock.add(orderId);
     const t = await sequelize.transaction();
     try {
         const exist = await Transaction.findOne({ where: { description: { [sequelize.Sequelize.Op.like]: `%${orderId}%` } }, transaction: t });
@@ -183,7 +194,12 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
             }
         }
         await t.commit();
-    } catch (e) { await t.rollback(); }
+    } catch (e) {
+        await t.rollback();
+        console.error('💥 [支付入账] 失败 order=' + orderId + ' err=' + (e && e.message || e));
+    } finally {
+        creditLock.delete(orderId);
+    }
 }
 export default router;
 

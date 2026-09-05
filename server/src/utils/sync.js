@@ -15,8 +15,9 @@ export const autoSyncServices = async () => {
       timeout: 30000 
     });
     
-    if (!Array.isArray(apiRes.data)) {
-      console.error('❌ [AutoSync] 上游返回数据异常。');
+    if (!Array.isArray(apiRes.data) || apiRes.data.length === 0) {
+      // 🔒 空数组也拒绝：否则全表会被标记下架后整库销毁，业务中断且难恢复
+      console.error('❌ [AutoSync] 上游返回数据异常' + (Array.isArray(apiRes.data) ? '（空数组，已跳过防清库）' : '。'));
       return;
     }
 

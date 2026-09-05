@@ -7,16 +7,24 @@ import { sendTgMessage, sendTgDocument } from './tgBot.js';
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
+// 🔒 备份/恢复统一用 bash -o pipefail：任一步骤失败（如 mysqldump 连不上库）
+// 都会让整条管道以非 0 退出，杜绝「gzip 收尾吞错 → 空备份却报成功」的静默失败。
+// 密码走 MYSQL_PWD 环境变量，避免 -p 出现在命令行/进程列表 & 特殊字符转义坑。
+const MYSQL_ENV = () => {
+    const { DB_PASS } = process.env;
+    return { ...process.env, MYSQL_PWD: DB_PASS || '' };
+};
+
 export const createBackup = () => {
     return new Promise((resolve, reject) => {
         const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[\/\s:]/g, '_');
         const filename = `xnow_backup_${timestamp}.sql.gz`;
         const filepath = path.join(BACKUP_DIR, filename);
-        const { DB_USER, DB_PASS, DB_NAME, DB_HOST } = process.env;
+        const { DB_USER, DB_NAME, DB_HOST } = process.env;
 
-        const cmd = `mysqldump -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} -p${DB_PASS} ${DB_NAME} 2>/dev/null | gzip > ${filepath}`;
-        exec(cmd, (error) => {
-            if (error) reject(error);
+        const cmd = `bash -o pipefail -c "mysqldump -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} ${DB_NAME} | gzip > '${filepath}'"`;
+        exec(cmd, { env: MYSQL_ENV() }, (error, _stdout, stderr) => {
+            if (error) reject(new Error('mysqldump 失败: ' + ((stderr || error.message || '').trim() || '请检查数据库连接/权限')));
             else resolve({ filename, filepath, size: fs.statSync(filepath).size });
         });
     });
@@ -24,10 +32,10 @@ export const createBackup = () => {
 
 export const restoreBackup = (filepath) => {
     return new Promise((resolve, reject) => {
-        const { DB_USER, DB_PASS, DB_NAME, DB_HOST } = process.env;
-        const cmd = `gunzip -c ${filepath} | mysql -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} -p${DB_PASS} ${DB_NAME} 2>/dev/null`;
-        exec(cmd, (error) => {
-            if (error) reject(error);
+        const { DB_USER, DB_NAME, DB_HOST } = process.env;
+        const cmd = `bash -o pipefail -c "gunzip -c '${filepath}' | mysql -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} ${DB_NAME}"`;
+        exec(cmd, { env: MYSQL_ENV() }, (error, _stdout, stderr) => {
+            if (error) reject(new Error('恢复失败: ' + ((stderr || error.message || '').trim() || '请检查备份文件/数据库')));
             else resolve(true);
         });
     });
@@ -61,5 +69,7 @@ export const autoBackupTask = async () => {
         }
     } catch (e) {
         console.error('Auto Backup Error:', e);
+        // 🔒 备份失败也要让祥哥知道（数据安全），不再静默吞掉
+        sendTgMessage('🚨 <b>自动备份失败</b>\n' + ((e && e.message) || String(e)));
     }
 };

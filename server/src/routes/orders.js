@@ -50,6 +50,11 @@ router.post('/add', authenticate, async (req, res) => {
     const charge = ((parseInt(quantity) / 1000) * sellRate).toFixed(4);
     const upstream_charge = ((parseInt(quantity) / 1000) * parseFloat(service.rate)).toFixed(4);
 
+    // 🔒 价格护栏：倍率被写成负数/0/NaN 时 charge 非法，拒绝下单（防负扣款刷余额）
+    if (!isFinite(parseFloat(charge)) || parseFloat(charge) <= 0) {
+      await t.rollback(); return res.json({ status: 'error', message: '价格异常，请联系管理员' });
+    }
+
     if (user && parseFloat(user.balance) < parseFloat(charge)) {
       await t.rollback(); return res.json({ status: 'error', message: `余额不足，该订单需要 ¥${charge}` });
     }
@@ -150,6 +155,7 @@ router.post('/batch', authenticate, async (req, res) => {
 
   const results = [];
   let totalCharge = 0;
+  let reportUser = null; // 循环外捕获真实下单用户（供末尾 TG 播报），修复块级作用域 bug
 
   for (const item of batchOrders) {
     const { serviceId, link, quantity } = item;
@@ -172,6 +178,7 @@ router.post('/batch', authenticate, async (req, res) => {
 
       let user = await User.findByPk(req.user.id, { transaction: t });
       if (!user && req.user.role !== 'super_admin') { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '账户异常' }); continue; }
+      if (user) reportUser = user;
 
       const actualRole = user ? user.role : req.user.role;
       let finalMultiplier = baseMultiplier;
@@ -189,6 +196,13 @@ router.post('/batch', authenticate, async (req, res) => {
       const sellRate = baseRate * finalMultiplier;
       const charge = parseFloat(((qty / 1000) * sellRate).toFixed(4));
       const upstream_charge = parseFloat(((qty / 1000) * parseFloat(service.rate)).toFixed(4));
+
+      // 🔒 价格护栏：charge 非正/非法直接拒该条（防负数倍率刷余额）
+      if (!isFinite(charge) || charge <= 0) {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: '价格异常，请联系管理员' });
+        continue;
+      }
 
       if (user && parseFloat(user.balance) - totalCharge < parseFloat(charge)) {
         await t.rollback();
@@ -237,9 +251,9 @@ router.post('/batch', authenticate, async (req, res) => {
   const failCount = results.filter(r => r.status === 'error').length;
 
   // TG 播报
-  if (user) {
-    const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
-    sendTgMessage(`📦 <b>批量下单完成</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n🔰 <b>等级:</b> ${roleName}\n✅ <b>成功:</b> ${successCount} 单\n❌ <b>失败:</b> ${failCount} 单\n💸 <b>总扣费:</b> ￥${totalCharge.toFixed(2)}`);
+  if (reportUser) {
+    const roleName = reportUser.role === 'super_admin' ? '至尊管理员' : reportUser.role === 'admin' ? '管理员' : reportUser.role === 'agent' ? '👑 至尊代理' : '黄金用户';
+    sendTgMessage(`📦 <b>批量下单完成</b>\n🆔 <b>UID:</b> <code>${reportUser.id}</code>\n📱 <b>账号:</b> <code>${reportUser.phone}</code>\n🔰 <b>等级:</b> ${roleName}\n✅ <b>成功:</b> ${successCount} 单\n❌ <b>失败:</b> ${failCount} 单\n💸 <b>总扣费:</b> ￥${totalCharge.toFixed(2)}`);
   }
 
   res.json({ status: 'success', data: { total: batchOrders.length, success: successCount, fail: failCount, total_charge: totalCharge.toFixed(4), results } });

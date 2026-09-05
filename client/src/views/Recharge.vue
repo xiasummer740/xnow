@@ -47,6 +47,8 @@ const fetchTransactions = async () => {
 };
 
 const handleIframeMessage = async (event) => {
+    // 🔒 来源校验：只信本站自己的支付 iframe，防任意网页伪造 pay_success 刷成功提示
+    if (event.origin !== window.location.origin) return;
     if (event.data && event.data.type === 'pay_success') {
         closeModal();
         const userRes = await fetch('/api/user/status', { headers: { 'Authorization': `Bearer ${userStore.token}` } });

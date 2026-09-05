@@ -4,7 +4,7 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Config, User, Order, Transaction, Service, AuditLog, Notification } from '../models/index.js';
+import { Config, User, Order, Transaction, Service, AuditLog, Notification, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -51,7 +51,13 @@ router.post('/config/update', authenticate, async (req, res) => {
   try {
     for (const [key, value] of Object.entries(req.body)) {
       if (!ALLOWED_KEYS.includes(key)) continue;
-      if (value !== undefined && value !== null) await Config.upsert({ key, value: String(value) });
+      if (value === undefined || value === null) continue;
+      // 🔒 倍率类配置必须为正有限数，防写坏全局定价
+      if (key === 'global_multiplier' || key === 'agent_discount') {
+        const num = parseFloat(value);
+        if (!isFinite(num) || num <= 0) return res.status(400).json({ status: 'error', message: (key === 'global_multiplier' ? '全局倍率' : '代理折扣') + '必须为大于 0 的数字' });
+      }
+      await Config.upsert({ key, value: String(value) });
     }
     await logAudit(req, 'config_update', 'config', Object.keys(req.body).join(','), { keys: Object.keys(req.body) });
     res.json({ status: 'success', message: '配置已保存' });
@@ -203,7 +209,10 @@ router.post("/user/role", authenticate, async (req, res) => {
   try {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ status: "error", message: "用户不存在" });
-    if (user.role === "super_admin" && req.user.role !== "super_admin") return res.json({ status: "error", message: "无法越权修改至尊管理员" });
+    // 🔒 提权防线：只有 super_admin 能授予/降级 admin/super_admin 身份；普通管理员只能调度 用户/黄金/代理
+    const PRIV = ['admin', 'super_admin'];
+    const touchesPriv = PRIV.includes(user.role) || PRIV.includes(role);
+    if (touchesPriv && req.user.role !== 'super_admin') return res.json({ status: "error", message: "仅至尊管理员可管理管理员身份" });
 
     const oldRole = user.role; user.role = role;
     if (role === "agent" && addDays > 0) {
@@ -231,7 +240,14 @@ router.post('/user/update', authenticate, async (req, res) => {
       await Transaction.create({ user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance, type: '后台调账', description: '管理员手动调账: ' + (amount > 0 ? '+' : '') + amount });
       await logAudit(req, 'user_fund', 'user', userId, { amount, newBalance: user.balance });
     } else if (type === 'multiplier') {
-      user.custom_multiplier = (multiplier === 'default' || !multiplier) ? null : parseFloat(multiplier).toFixed(2);
+      // 🔒 倍率只允许正有限数（'default'/空=重置），负数/0/NaN 直接拒，防下单价格被写坏
+      if (multiplier !== 'default' && multiplier !== '' && multiplier !== null && multiplier !== undefined) {
+        const m = parseFloat(multiplier);
+        if (!isFinite(m) || m <= 0) return res.status(400).json({ status: 'error', message: '倍率必须为大于 0 的数字' });
+        user.custom_multiplier = m.toFixed(2);
+      } else {
+        user.custom_multiplier = null;
+      }
       await user.save();
     }
     res.json({ status: 'success' });
@@ -735,13 +751,15 @@ router.get('/transactions', authenticate, async (req, res) => {
 router.post('/orders/refund', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const { orderId } = req.body;
+  const t = await sequelize.transaction();
   try {
-    const order = await Order.findByPk(orderId);
-    if (!order) return res.status(404).json({ status: 'error', message: '订单不存在' });
-    if (order.is_refunded) return res.json({ status: 'error', message: '该订单已退款，禁止重复操作' });
+    // 🔒 事务 + 行锁：中途出错(500)或并发双击也不会「钱退了标记没写」导致重复退款
+    const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!order) { await t.rollback(); return res.status(404).json({ status: 'error', message: '订单不存在' }); }
+    if (order.is_refunded) { await t.rollback(); return res.json({ status: 'error', message: '该订单已退款，禁止重复操作' }); }
 
-    const user = await User.findByPk(order.user_id);
-    if (!user) return res.status(404).json({ status: 'error', message: '用户不存在' });
+    const user = await User.findByPk(order.user_id, { transaction: t });
+    if (!user) { await t.rollback(); return res.status(404).json({ status: 'error', message: '用户不存在' }); }
 
     // 计算退款金额（按剩余比例或全额）
     const qty = parseInt(order.quantity) || 1;
@@ -751,21 +769,22 @@ router.post('/orders/refund', authenticate, async (req, res) => {
 
     // 执行退款
     user.balance = (parseFloat(user.balance) + refundAmount).toFixed(6);
-    await user.save();
+    await user.save({ transaction: t });
 
     await Transaction.create({
       user_id: user.id, phone: user.phone, amount: refundAmount, balance: user.balance,
       type: '退款入账', description: `管理员退款: 订单 ${order.order_no} 退还 ¥${refundAmount}`
-    });
+    }, { transaction: t });
 
     order.is_refunded = true;
-    await order.save();
+    await order.save({ transaction: t });
+    await t.commit();
 
     await logAudit(req, 'order_refund', 'order', orderId, { order_no: order.order_no, amount: refundAmount });
     sendTgMessage('💳 [管理员退款]\n📦 订单: <code>' + order.order_no + '</code>\n👤 UID: <code>' + user.id + '</code>\n💵 金额: ¥' + refundAmount);
 
     res.json({ status: 'success', message: '退款成功', data: { amount: refundAmount } });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { await t.rollback().catch(() => {}); res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // 手动检查单笔订单状态

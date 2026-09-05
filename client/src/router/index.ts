@@ -41,10 +41,19 @@ router.beforeEach((to, from, next) => {
   // 💡 2. 核心加法：路由级 Token 过期/缺失拦截
   const token = localStorage.getItem('xnow_token');
   const publicPaths = ['/', '/login']; // 允许免登录访问的白名单路径
-  
+
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');
+  } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin')) {
+      // 🔒 3. 角色守卫：后台页只许 管理员/至尊管理员（防普通用户手输 URL 直捣后台）
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (!['admin', 'super_admin'].includes(payload.role)) return next('/');
+        next();
+      } catch {
+        return next('/login');
+      }
   } else {
       // 正常放行
       next();

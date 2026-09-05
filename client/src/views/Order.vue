@@ -5,7 +5,7 @@
       <div class="text-pink-500 mt-1 text-xl md:text-2xl">📢</div>
       <div class="w-full overflow-hidden">
         <h3 class="font-bold text-white mb-1 text-sm md:text-base">{{ appStore.t('sys_notice') }}</h3>
-        <div class="text-slate-300 text-xs md:text-sm leading-relaxed" v-html="sysAnnouncement"></div>
+        <div class="text-slate-300 text-xs md:text-sm leading-relaxed whitespace-pre-wrap">{{ sysAnnouncement }}</div>
       </div>
     </div>
     
@@ -72,7 +72,7 @@
               <p>✔️ {{ appStore.lang === 'zh' ? '示例链接' : 'Example Link' }} : <span class="text-white bg-blue-900/50 px-1.5 py-0.5 rounded">{{ dynamicGuideLink }}</span></p>
               <div class="h-px bg-blue-500/30 my-2 w-full"></div>
               
-              <div v-if="activeService && activeService.description" class="text-slate-300 font-sans whitespace-pre-wrap leading-tight" v-html="activeService.description"></div>
+              <div v-if="activeService && activeService.description" class="text-slate-300 font-sans whitespace-pre-wrap leading-tight">{{ activeService.description }}</div>
               <div v-else class="space-y-1">
                 <p class="text-red-300">{{ appStore.t('guide_1') }}</p>
                 <p class="text-red-300">{{ appStore.t('guide_2') }}</p>
