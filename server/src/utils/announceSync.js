@@ -95,6 +95,12 @@ export const autoSyncAnnouncement = async () => {
       headers: { Cookie: allCookies.join('; '), Referer: baseUrl + '/' },
     })
 
+    // 🛡️ 防御：抓取失败/非 200/空响应时直接退出，避免 dash.body 为 undefined 崩溃
+    if (dash.error || dash.status !== 200 || typeof dash.body !== 'string') {
+      console.log('⚠️ [AutoAnnounce] 公告页抓取失败: ' + (dash.error || ('HTTP ' + dash.status)))
+      return
+    }
+
     // 提取公告 — 从公告区块向上查找定位
     const annStart = dash.body.indexOf('刷粉风控期建议')
     if (annStart < 0) {

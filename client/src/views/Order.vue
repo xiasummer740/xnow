@@ -23,13 +23,19 @@
         <div class="relative">
           <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">{{ appStore.t('category') }}</label>
           <div @click="catOpen = !catOpen; srvOpen = false" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white cursor-pointer flex justify-between items-center hover:border-amber-400 transition min-h-[46px]">
-            <span class="text-xs md:text-base whitespace-normal break-words pr-2 line-clamp-2">{{ activeCategory || '此平台下暂无可用分类' }}</span>
+            <span class="text-xs md:text-base whitespace-normal break-words pr-2 line-clamp-2">{{ servicesError ? '⚠️ 服务加载失败' : (activeCategory || '此平台下暂无可用分类') }}</span>
             <svg class="w-5 h-5 flex-shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
           <div v-if="catOpen" @click="catOpen = false" class="fixed inset-0 z-40"></div>
           <div v-if="catOpen && availableCategories.length > 0" class="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] max-h-72 overflow-y-auto custom-scrollbar">
             <div v-for="cat in availableCategories" :key="cat" @click="selectCategory(cat)" class="px-4 py-2.5 border-b border-slate-700/50 hover:bg-slate-700 cursor-pointer text-xs md:text-sm text-slate-300 transition">{{ cat }}</div>
           </div>
+        </div>
+
+        <!-- 服务加载失败/登录失效引导 -->
+        <div v-if="servicesError" class="flex items-center justify-between gap-2 bg-red-500/10 border border-red-500/40 rounded-lg px-3 py-2 text-xs md:text-sm text-red-300">
+          <span>⚠️ {{ servicesErrorText }}</span>
+          <button @click="fetchInitData" class="shrink-0 bg-amber-400 hover:bg-amber-500 text-slate-900 font-bold px-3 py-1.5 rounded-md text-xs md:text-sm transition">重新加载</button>
         </div>
 
         <div class="relative">
@@ -163,6 +169,13 @@ const platformGuideLinks = {
 };
 
 const rawServices = ref([]);
+// 服务加载状态：'' 正常 | expired 登录失效 | failed 加载失败 | network 网络异常
+const servicesError = ref('');
+const servicesErrorText = computed(() => {
+  if (servicesError.value === 'expired') return '登录状态已失效，服务无法加载，请重新登录';
+  if (servicesError.value === 'network') return '网络异常，服务加载失败，请点击重试';
+  return '服务加载失败，请点击重试或刷新页面';
+});
 const sysAnnouncement = ref(''); const activePlatform = ref('TikTok');
 const activeCategory = ref(''); const activeServiceId = ref('');
 const form = ref({ link: '', quantity: 1000, comments: '' });
@@ -226,11 +239,21 @@ const fetchInitData = async () => {
   
   try {
     const res = await fetch('/api/services', { headers: { 'Authorization': `Bearer ${userStore.token}` } });
-    const data = await res.json();
-    if (data.status === 'success' && Array.isArray(data.data)) {
-      rawServices.value = data.data; 
+    if (res.status === 401) {
+      // 登录失效：全局拦截器会登出跳登录，这里先给页面标记，避免误显示"暂无分类"
+      servicesError.value = 'expired';
+    } else {
+      const data = await res.json();
+      if (data.status === 'success' && Array.isArray(data.data)) {
+        rawServices.value = data.data;
+        servicesError.value = '';
+      } else {
+        servicesError.value = 'failed';
+      }
     }
-  } catch (error) {} finally { selectPlatform('TikTok'); }
+  } catch (error) {
+    servicesError.value = 'network';
+  } finally { selectPlatform('TikTok'); }
 };
 
 const availableCategories = computed(() => {
