@@ -22,6 +22,7 @@ import ordersRoutes from './routes/orders.js';
 import transactionsRoutes from './routes/transactions.js';
 import sitesRoutes from './routes/sites.js';
 import vpnRoutes from './routes/vpn.js';
+import analyticsRoutes from './routes/analytics.js';
 import { reconcilePayments } from './routes/pay.js';
 
 dotenv.config();
@@ -90,6 +91,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/sites', sitesRoutes);
 app.use('/api/vpn', vpnRoutes);
+app.use('/api/track', analyticsRoutes);
 
 const initDatabase = async () => {
   try {

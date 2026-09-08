@@ -1,5 +1,15 @@
 User-agent: *
 Allow: /
+# 公开营销页以外均为登录/功能页：禁止爬取，减少无效抓取
 Disallow: /admin
+Disallow: /vpn/admin
+Disallow: /vpn/clients
+Disallow: /api-doc
+Disallow: /order
+Disallow: /mass-order
+Disallow: /history
+Disallow: /recharge
+Disallow: /vip
+Disallow: /affiliate
 Disallow: /api
 Sitemap: https://xnow.taikon.top/sitemap.xml

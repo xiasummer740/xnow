@@ -4,7 +4,9 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 import './assets/vpn-theme.css'
-import { useUserStore } from './stores/user' 
+import { useUserStore } from './stores/user'
+import { applySeo } from './utils/seo'
+import { trackVisit } from './utils/analytics'
 
 const app = createApp(App)
 const pinia = createPinia() 
@@ -34,5 +36,11 @@ window.fetch = async (input, init) => {
 
   return response;
 };
+
+// 💡 SEO + 埋点：每次路由跳转后更新该页独立 title/description/canonical，并上报访问
+router.afterEach((to) => {
+  applySeo(to.path);
+  trackVisit(to.fullPath);
+});
 
 app.mount('#app')

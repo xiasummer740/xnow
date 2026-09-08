@@ -4,9 +4,10 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Config, User, Order, Transaction, Service, AuditLog, Notification, sequelize } from '../models/index.js';
+import { Config, User, Order, Transaction, Service, AuditLog, Notification, PageView, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
+import { resolveGeoMap } from '../utils/geo.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { createBackup, restoreBackup } from '../utils/backupEngine.js';
 import { sanitizeAnnouncement, announcementToText } from '../utils/sanitize.js';
@@ -985,6 +986,68 @@ router.get('/finance', authenticate, async (req, res) => {
         }
       }
     });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// ====== 流量统计看板（SEO/访问埋点聚合）====== 访客=visitor_id(uuid)；pv=页面浏览量；国家按 top IP 批量 geo 解析
+router.get('/stats/traffic', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  const fmtDate = (ms) => { const d = new Date(ms); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
+    const from = Date.now() - days * 86400000;
+    const rows = await PageView.findAll({
+      attributes: ['visitor_id', 'ip', 'path', 'referrer', 'ts'],
+      where: { ts: { [Op.gte]: from } },
+      raw: true,
+      limit: 20000,
+      order: [['id', 'DESC']],
+    });
+
+    const total_pv = rows.length;
+    const total_uv = new Set(rows.map((r) => r.visitor_id || r.ip).filter(Boolean)).size;
+
+    // 按天趋势
+    const trendMap = new Map();
+    const daySeen = new Map();
+    for (const r of rows) {
+      const d = fmtDate(Number(r.ts) || from);
+      if (!trendMap.has(d)) trendMap.set(d, { pv: 0, uv: 0 });
+      trendMap.get(d).pv++;
+      if (!daySeen.has(d)) daySeen.set(d, new Set());
+      daySeen.get(d).add(r.visitor_id || r.ip);
+    }
+    for (const [d, set] of daySeen) trendMap.get(d).uv = set.size;
+    const trend = [...trendMap.entries()].map(([date, v]) => ({ date: date.slice(5), pv: v.pv, uv: v.uv }));
+
+    // 热门页面
+    const pageMap = new Map();
+    for (const r of rows) pageMap.set(r.path, (pageMap.get(r.path) || 0) + 1);
+    const pages = [...pageMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([path, pv]) => ({ path, pv }));
+
+    // 来源域名（外链效果追踪）
+    const srcMap = new Map();
+    for (const r of rows) {
+      const host = (r.referrer || '').match(/^https?:\/\/([^/]+)/i)?.[1] || '直接/无来源';
+      srcMap.set(host, (srcMap.get(host) || 0) + 1);
+    }
+    const sources = [...srcMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([source, pv]) => ({ source, pv }));
+
+    // 国家：取频次 top50 IP 批量 geo(内存缓存，防限流)，按 pv 归国
+    const ipCount = new Map();
+    for (const r of rows) if (r.ip) ipCount.set(r.ip, (ipCount.get(r.ip) || 0) + 1);
+    const topIps = [...ipCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 50).map(([ip]) => ip);
+    const geoMap = await resolveGeoMap(topIps);
+    const ctryMap = new Map();
+    for (const ip of topIps) {
+      const c = (geoMap[ip] && geoMap[ip].country) || '未知';
+      ctryMap.set(c, (ctryMap.get(c) || 0) + ipCount.get(ip));
+    }
+    const countries = [...ctryMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([country, pv]) => ({ country, pv }));
+
+    res.json({ status: 'success', data: { total_pv, total_uv, days, trend, pages, sources, countries } });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }

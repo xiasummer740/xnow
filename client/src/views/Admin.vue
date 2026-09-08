@@ -20,6 +20,7 @@ const tabs = [
   { key: 'transactions', label: '💰 流水' },
   { key: 'finance', label: '📈 财务' },
   { key: 'config', label: '⚙️ 配置' },
+  { key: 'traffic', label: '🌐 流量' },
   { key: 'logs', label: '📋 日志' },
 ];
 const activeTab = ref('overview');
@@ -389,7 +390,43 @@ const fetchFinance = async () => {
   } catch (e) { ui.showToast('网络异常', 'error'); }
   finally { financeLoading.value = false; }
 };
-watch(activeTab, (v) => { if (v === 'finance' && !financeData.value) fetchFinance(); if (v === 'logs' && !auditLogs.value.length) fetchAuditLogs(); });
+watch(activeTab, (v) => { if (v === 'finance' && !financeData.value) fetchFinance(); if (v === 'logs' && !auditLogs.value.length) fetchAuditLogs(); if (v === 'traffic' && !traffic.value) fetchTraffic(); });
+
+// ====== 访问流量统计看板（SEO 埋点数据）======
+const trafficDays = ref(7); const traffic = ref(null); const trafficLoading = ref(false);
+const fetchTraffic = async () => {
+  trafficLoading.value = true;
+  try {
+    const res = await fetch(`/api/admin/stats/traffic?days=${trafficDays.value}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const j = await res.json();
+    if (j.status === 'success') traffic.value = j.data;
+    else ui.showToast('流量统计拉取失败', 'error');
+  } catch (e) { ui.showToast('网络异常', 'error'); }
+  finally { trafficLoading.value = false; }
+};
+const trafficTrendOption = computed(() => {
+  if (!traffic.value?.trend?.length) return {};
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['访问量', '访客'], textStyle: { color: '#94a3b8' } },
+    grid: { left: 50, right: 20, top: 40, bottom: 30 },
+    xAxis: { type: 'category', data: traffic.value.trend.map((d) => d.date), axisLabel: { color: '#64748b' } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
+    series: [
+      { name: '访问量', type: 'bar', data: traffic.value.trend.map((d) => d.pv), itemStyle: { color: '#38bdf8' }, barMaxWidth: 20 },
+      { name: '访客', type: 'line', smooth: true, data: traffic.value.trend.map((d) => d.uv), lineStyle: { color: '#fbbf24' }, itemStyle: { color: '#fbbf24' } },
+    ],
+  };
+});
+const trafficCountryOption = computed(() => {
+  if (!traffic.value?.countries?.length) return {};
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} PV ({d}%)' },
+    legend: { show: false },
+    color: ['#38bdf8', '#fbbf24', '#34d399', '#a78bfa', '#f472b6', '#fb7185', '#22d3ee', '#a3e635', '#f97316', '#e879f9'],
+    series: [{ type: 'pie', radius: ['38%', '68%'], center: ['50%', '55%'], data: traffic.value.countries.map((c) => ({ name: c.country, value: c.pv })), label: { color: '#94a3b8', fontSize: 11 }, itemStyle: { borderColor: '#0f172a', borderWidth: 2 } }],
+  };
+});
 
 const exportCSV = (endpoint, params) => {
   const p = new URLSearchParams(params); p.set('token', userStore.token);
@@ -513,6 +550,37 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
         </div>
 
         </div> <!-- end overview -->
+
+        <!-- 🌐 访问流量 -->
+        <div v-if="activeTab === 'traffic'" class="space-y-6">
+          <div class="flex flex-wrap justify-between items-center gap-2">
+            <h3 class="text-lg font-bold text-white flex items-center"><span class="text-sky-400 mr-2">🌐</span> 访问流量统计<span class="ml-3 text-[11px] text-slate-500 font-normal">SEO 埋点 · 访客≈浏览器唯一标识 · 仅供管理员查看</span></h3>
+            <div class="flex items-center space-x-1 text-xs bg-slate-800/60 p-1 rounded-xl border border-slate-700">
+              <button v-for="d in [7,30]" :key="d" @click="trafficDays=d; fetchTraffic()" :class="['px-3 py-1.5 rounded-lg font-bold transition', trafficDays===d ? 'bg-sky-500 text-white shadow' : 'text-slate-300 hover:bg-slate-700']">{{ d }}天</button>
+            </div>
+          </div>
+
+          <div v-if="trafficLoading" class="p-12 text-center text-slate-500 animate-pulse">⏳ 统计加载中...</div>
+          <div v-else-if="traffic">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">总访问量 (PV)</div><div class="text-2xl font-black text-sky-400 font-mono">{{ traffic.total_pv }}</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">独立访客 (UV)</div><div class="text-2xl font-black text-amber-400 font-mono">{{ traffic.total_uv }}</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">统计区间</div><div class="text-2xl font-black text-white font-mono">{{ traffic.days }} 天</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">人均浏览</div><div class="text-2xl font-black text-emerald-400 font-mono">{{ traffic.total_uv ? (traffic.total_pv / traffic.total_uv).toFixed(1) : '0' }}<span class="text-xs text-slate-500 font-normal"> 页/人</span></div></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-2">📈 访问趋势</div><v-chart v-if="traffic.trend?.length" :option="trafficTrendOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无趋势数据</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-2">🌍 访客国家分布</div><v-chart v-if="traffic.countries?.length" :option="trafficCountryOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无国家数据</div></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-3">📄 热门落地页</div><div v-if="traffic.pages?.length" class="space-y-2"><div v-for="p in traffic.pages" :key="p.path" class="flex items-center justify-between text-sm"><span class="text-slate-300 font-mono text-xs truncate mr-3">{{ p.path }}</span><span class="text-sky-400 font-mono font-bold whitespace-nowrap">{{ p.pv }} PV</span></div></div><div v-else class="text-slate-500 text-xs py-8 text-center">暂无页面数据</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-3">🔗 来源分布 (外链效果)</div><div v-if="traffic.sources?.length" class="space-y-2"><div v-for="s in traffic.sources" :key="s.source" class="flex items-center justify-between text-sm"><span class="text-slate-300 text-xs truncate mr-3">{{ s.source }}</span><span class="text-emerald-400 font-mono font-bold whitespace-nowrap">{{ s.pv }}</span></div></div><div v-else class="text-slate-500 text-xs py-8 text-center">暂无来源数据</div></div>
+            </div>
+          </div>
+          <div v-else class="p-12 text-center text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-2xl">还没有访问数据 — 等真实访客进来后，这里会自动出现趋势曲线。</div>
+        </div>
 
         <!-- ⚙️ 配置 -->
         <div v-if="activeTab === 'config'" class="space-y-6">

@@ -10,5 +10,6 @@ import VpnClient from './VpnClient.js';
 import AuditLog from './AuditLog.js';
 import Notification from './Notification.js';
 import Coupon from './Coupon.js';
+import PageView from './PageView.js';
 
-export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon };
+export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon, PageView };
