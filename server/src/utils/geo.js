@@ -8,7 +8,7 @@ const cacheTime = new Map(); // ip -> 时间戳
 const TTL = 30 * 60 * 1000;  // 缓存 30 分钟
 const BATCH = 100;
 
-const isLocalIp = (ip) => !ip || ip === '127.0.0.1' || ip === '::1' || ip === 'localhost' || ip === '::ffff:127.0.0.1';
+export const isLocalIp = (ip) => !ip || ip === '127.0.0.1' || ip === '::1' || ip === 'localhost' || ip === '::ffff:127.0.0.1';
 
 async function queryBatch(ips) {
   const { data } = await axios.post('http://ip-api.com/batch?lang=zh-CN', ips, { timeout: 6000 });
