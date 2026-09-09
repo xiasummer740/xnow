@@ -8,6 +8,7 @@ import Recharge from '../views/Recharge.vue'
 
 const routes = [
   { path: '/', component: Home },
+  { path: '/en', component: Home }, // 英文镜像：复用 Home，按路径强制英文
   { path: '/login', component: Login },
   { path: '/', component: DashboardLayout, children: [
       { path: 'order', component: Order },
@@ -40,7 +41,7 @@ router.beforeEach((to, from, next) => {
 
   // 💡 2. 核心加法：路由级 Token 过期/缺失拦截
   const token = localStorage.getItem('xnow_token');
-  const publicPaths = ['/', '/login']; // 允许免登录访问的白名单路径
+  const publicPaths = ['/', '/en', '/login']; // 允许免登录访问的白名单路径（/en 为英文营销镜像）
 
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录

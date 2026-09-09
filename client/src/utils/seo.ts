@@ -1,17 +1,26 @@
 // ====== 前端 SEO 引擎：每路由独立 title/description/canonical，功能页一律 noindex ======
 // 白名单 = 允许被搜索引擎收录的公开营销页；其余(登录/下单/充值/后台等)全部 noindex，防私密页入索引。
+// 双语结构：`/` = 中文主版，`/en` = 英文镜像（同组件强制英文），互相 hreflang alternate；x-default 指回中文。
 export const SITE_URL = 'https://xnow.taikon.top';
 
-interface SeoConf { title: string; description: string; }
+interface SeoConf { lang: string; title: string; description: string; }
 
 const BRAND_TITLE = 'XNOW PRO';
-// 可收录的营销页及其独立 SEO 元信息
+
+// 可收录的营销页及其独立 SEO 元信息（`/` 与 `/en` 为同一内容的中英镜像）
 const INDEXABLE: Record<string, SeoConf> = {
   '/': {
-    title: 'XNOW PRO | 全球社交媒体增长引擎 - TikTok/IG/YT 涨粉与流量变现',
-    description: 'XNOW PRO 专为出海企业、个人 IP 与独立站提供 TikTok / Instagram / YouTube 等主流社媒的粉丝、播放与点赞增长服务与流量变现方案，注册即用，全自动交付。',
+    lang: 'zh-CN',
+    title: 'XNOW PRO - TikTok涨粉/IG涨粉/YouTube订阅 全网底价社媒增长平台',
+    description: 'XNOW PRO 社媒增长面板：TikTok 买粉涨粉、Instagram 粉丝、YouTube 订阅、Telegram 群成员、Facebook 粉丝与播放量增长，全平台覆盖、秒级自动交付、无需密码，注册即用。',
+  },
+  '/en': {
+    lang: 'en',
+    title: 'Buy TikTok Followers & Social Media Growth - XNOW PRO SMM Panel',
+    description: 'Cheapest SMM panel to buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook followers & more across all platforms. Instant auto-delivery, no password needed.',
   },
   '/vpn': {
+    lang: 'zh-CN',
     title: 'XNOW 全球安全节点 - 高速稳定线路 · 多协议多端接入',
     description: 'XNOW 提供覆盖全球的高速安全代理节点，多协议、多设备一键接入，稳定高速不掉线，为海外访问与出海业务保驾护航。',
   },
@@ -31,17 +40,37 @@ function setCanonical(path: string) {
   document.head.appendChild(link);
 }
 
+// `/`(中文) 与 `/en`(英文) 互相声明 hreflang；其余页无 alternate
+function applyHreflang(path: string) {
+  document.head.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
+  if (path !== '/' && path !== '/en') return;
+  const zhHref = SITE_URL;          // 中文主版恒在 `/`
+  const enHref = SITE_URL + '/en';  // 英文镜像恒在 `/en`
+  const mk = (hreflang: string, href: string) => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'alternate'); link.setAttribute('hreflang', hreflang); link.setAttribute('href', href);
+    document.head.appendChild(link);
+  };
+  mk('zh-CN', zhHref);
+  mk('en', enHref);
+  mk('x-default', SITE_URL); // 无语言信号时默认中文主版
+}
+
 // 路由变化时调用：营销页写入完整 SEO 元信息，功能页标 noindex 且回退品牌标题
 export function applySeo(path: string) {
   const conf = INDEXABLE[path];
   if (conf) {
+    document.documentElement.lang = conf.lang;
     document.title = conf.title;
     setMeta('name', 'description', conf.description);
     setMeta('name', 'robots', 'index, follow, max-image-preview:large');
     setCanonical(path);
+    applyHreflang(path);
   } else {
+    document.documentElement.lang = 'zh-CN';
     document.title = BRAND_TITLE;
     setMeta('name', 'robots', 'noindex, nofollow');
     document.head.querySelectorAll('link[rel="canonical"]').forEach((el) => el.remove());
+    applyHreflang(path); // 清除残留 alternate
   }
 }

@@ -6,7 +6,7 @@
         <span class="text-2xl md:text-3xl font-black italic tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-600 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">{{ appStore.siteName || 'XNOW' }}</span>
       </div>
       <div class="flex items-center space-x-4 md:space-x-6">
-        <button @click="appStore.toggleLang" class="text-slate-300 hover:text-white font-bold transition text-sm md:text-base select-none">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
+        <button @click="toggleLangRoute" class="text-slate-300 hover:text-white font-bold transition text-sm md:text-base select-none">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
         <router-link v-if="userStore.token" to="/order" class="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.t('console') || '控制台' }}</router-link>
         <router-link v-else to="/login" class="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '登录 / 注册' : 'Login / Register' }}</router-link>
       </div>
@@ -18,8 +18,10 @@
         {{ appStore.lang === 'zh' ? '让你的社交媒体' : 'Make Your' }}<br/>
         <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ appStore.lang === 'zh' ? '🔥 火速出圈' : 'Social Media Explode' }}</span>
       </h1>
-      <p class="text-slate-300 text-base md:text-lg max-w-xl mx-auto mb-4 leading-relaxed">
-        {{ appStore.lang === 'zh' ? '粉丝、点赞、播放量、评论、转发 —— TikTok/IG/YT/TG/FB/X 全平台覆盖' : 'Followers, Likes, Views, Comments, Shares across TikTok/IG/YT/TG/FB/X' }}
+      <p class="text-slate-300 text-base md:text-lg max-w-2xl mx-auto mb-4 leading-relaxed">
+        {{ appStore.lang === 'zh'
+          ? 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 全平台社媒增长一次搞定'
+          : 'Buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook & X followers, website traffic — all platforms in one SMM panel' }}
       </p>
       <p class="text-slate-500 text-sm max-w-lg mx-auto mb-10 leading-relaxed">
         {{ appStore.lang === 'zh' ? '极速自动交付 · 全网底价 · 无需账号密码 · 注册即用' : 'Instant delivery · Wholesale prices · No password needed · Sign up and go' }}
@@ -29,7 +31,7 @@
       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3 mb-10 max-w-2xl">
         <div v-for="p in platforms" :key="p.name" class="flex flex-col items-center gap-1.5 bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3 hover:border-amber-500/30 transition cursor-default">
           <span class="text-2xl">{{ p.icon }}</span>
-          <span class="text-[11px] text-slate-400 font-bold">{{ p.name }}</span>
+          <span class="text-[11px] text-slate-400 font-bold">{{ p.name[appStore.lang] || p.name }}</span>
         </div>
       </div>
 
@@ -45,7 +47,7 @@
 
     <!-- Use cases -->
     <section class="relative z-20 max-w-5xl mx-auto px-6 py-16">
-      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 他们都在用安全节点' : '🎯 Who Uses Secure Nodes' }}</h2>
+      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 谁在用 XNOW' : '🎯 Who It’s For' }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">🎬</div>
@@ -116,8 +118,9 @@
       <div v-else class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div v-for="s in previewServices" :key="s.service"
           class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-amber-500/20 transition text-center">
-          <div class="text-xs text-amber-400 font-bold mb-1">{{ s._label }}</div>
-          <div class="text-[11px] text-slate-400 leading-snug mb-3 line-clamp-2" :title="s.name">{{ s.name?.substring(0, 30) }}</div>
+          <div class="text-xs text-amber-400 font-bold mb-1">{{ appStore.lang === 'zh' ? s._label : s._labelEn }}</div>
+          <div v-if="appStore.lang === 'zh'" class="text-[11px] text-slate-400 leading-snug mb-3 line-clamp-2" :title="s.name">{{ s.name?.substring(0, 30) }}</div>
+          <div v-else class="text-[11px] text-slate-500 mb-3">Auto delivery · No password · Refill</div>
           <div class="text-lg font-black text-amber-400">¥{{ s.sell_price?.toFixed(2) }}<span class="text-[10px] text-slate-600 font-normal"> /千</span></div>
         </div>
       </div>
@@ -132,10 +135,10 @@
       <div class="space-y-3">
         <div v-for="(faq, i) in faqs" :key="i" class="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <button @click="faq.open = !faq.open" class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition">
-            <span class="text-white font-bold text-sm">{{ faq.q }}</span>
+            <span class="text-white font-bold text-sm">{{ faq[appStore.lang].q }}</span>
             <span :class="['text-amber-400 transition-transform', faq.open ? 'rotate-45' : '']">+</span>
           </button>
-          <div v-show="faq.open" class="px-5 pb-4 text-slate-400 text-sm leading-relaxed">{{ faq.a }}</div>
+          <div v-show="faq.open" class="px-5 pb-4 text-slate-400 text-sm leading-relaxed">{{ faq[appStore.lang].a }}</div>
         </div>
       </div>
     </section>
@@ -150,15 +153,24 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
 
 const appStore = useAppStore();
 const userStore = useUserStore();
+const route = useRoute();
+const router = useRouter();
 const vpnShopEnabled = ref(true);
 const previewServices = ref([]);
 const previewLoading = ref(true);
+
+// 语言随路径：`/`=中文主版，`/en`=英文镜像。首帧即设，避免英文页先闪中文。
+appStore.lang = route.path === '/en' ? 'en' : 'zh';
+watch(() => route.path, p => { appStore.lang = p === '/en' ? 'en' : 'zh'; });
+// 顶栏语言按钮 = 在中文页与英文镜像间跳转（复用组件会触发 watch 切语言）
+const toggleLangRoute = () => router.push(route.path === '/en' ? '/' : '/en');
 
 // 加载公开服务预览
 const loadPreview = async () => {
@@ -168,14 +180,14 @@ const loadPreview = async () => {
     if (d.status === 'success' && Array.isArray(d.data)) {
       // 筛选热门平台 + 低价服务（过滤天价指南类）
       const targets = [
-        { kw: 'tiktok - 刷粉', label: 'TikTok 涨粉' },
-        { kw: 'instagram - 粉丝', label: 'Instagram 涨粉' },
-        { kw: 'youtube 订阅', label: 'YouTube 订阅' },
-        { kw: 'telegram - 群组', label: 'Telegram 群成员' },
-        { kw: 'facebook粉丝', label: 'Facebook 涨粉' },
-        { kw: 'tiktok - 视频播放', label: 'TikTok 播放' },
-        { kw: 'website traffic', label: '网站流量' },
-        { kw: 'tiktok - 视频点赞', label: 'TikTok 点赞' },
+        { kw: 'tiktok - 刷粉', label: 'TikTok 涨粉', labelEn: 'TikTok Followers' },
+        { kw: 'instagram - 粉丝', label: 'Instagram 涨粉', labelEn: 'Instagram Followers' },
+        { kw: 'youtube 订阅', label: 'YouTube 订阅', labelEn: 'YouTube Subscribers' },
+        { kw: 'telegram - 群组', label: 'Telegram 群成员', labelEn: 'Telegram Members' },
+        { kw: 'facebook粉丝', label: 'Facebook 涨粉', labelEn: 'Facebook Followers' },
+        { kw: 'tiktok - 视频播放', label: 'TikTok 播放', labelEn: 'TikTok Views' },
+        { kw: 'website traffic', label: '网站流量', labelEn: 'Website Traffic' },
+        { kw: 'tiktok - 视频点赞', label: 'TikTok 点赞', labelEn: 'TikTok Likes' },
       ];
       previewServices.value = [];
       for (const t of targets) {
@@ -185,7 +197,7 @@ const loadPreview = async () => {
         });
         if (candidates.length > 0) {
           candidates.sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
-          previewServices.value.push({ ...candidates[0], _label: t.label });
+          previewServices.value.push({ ...candidates[0], _label: t.label, _labelEn: t.labelEn });
         }
         if (previewServices.value.length >= 8) break;
       }
@@ -195,22 +207,22 @@ const loadPreview = async () => {
 };
 
 const platforms = [
-  { name: 'TikTok', icon: '🎵' },
-  { name: 'Instagram', icon: '📸' },
-  { name: 'YouTube', icon: '▶️' },
-  { name: '电报', icon: '✈️' },
-  { name: 'Facebook', icon: '📘' },
-  { name: 'X/Twitter', icon: '🐦' },
-  { name: 'Shopee', icon: '🛍️' },
+  { name: { zh: 'TikTok', en: 'TikTok' }, icon: '🎵' },
+  { name: { zh: 'Instagram', en: 'Instagram' }, icon: '📸' },
+  { name: { zh: 'YouTube', en: 'YouTube' }, icon: '▶️' },
+  { name: { zh: 'Telegram', en: 'Telegram' }, icon: '✈️' },
+  { name: { zh: 'Facebook', en: 'Facebook' }, icon: '📘' },
+  { name: { zh: 'X/Twitter', en: 'X/Twitter' }, icon: '🐦' },
+  { name: { zh: 'Shopee', en: 'Shopee' }, icon: '🛍️' },
 ];
 
 const faqs = reactive([
-  { q: '注册需要提供什么？', a: '只需要手机号和邮箱。不需要实名，不需要绑卡。30 秒完成注册。', open: false },
-  { q: '下单需要提供账号密码吗？', a: '完全不需要！你只需要提供目标链接（如 TikTok 主页链接），系统会自动处理。我们不会、也不能访问你的社交账号。', open: false },
-  { q: '多久能看到效果？', a: '大部分服务下单后几秒到几分钟内启动。TikTok 千粉最快 10 分钟完成，具体速度取决于所选服务。', open: false },
-  { q: '会掉粉吗？会被封号吗？', a: '部分服务标注了"30天可补"，掉粉可自动补充。关于封号——我们运营多年，从未有客户因此被封。平台无法判断是谁购买了服务。', open: false },
-  { q: '怎么付款？', a: '支持微信支付、支付宝、USDT(TRC20) 三种方式。单次充值 500 元以上免手续费。', open: false },
-  { q: '可以自己定价转卖吗？', a: '可以！升级至尊代理(¥99/月)后享受底价，同时开放 API 接口，你可以搭建自己的站点，自己定价转卖。', open: false },
+  { zh: { q: '注册需要提供什么？', a: '只需要手机号和邮箱。不需要实名，不需要绑卡。30 秒完成注册。' }, en: { q: 'What do I need to sign up?', a: 'Just a phone number and email. No real-name ID, no card binding. Registration takes 30 seconds.' }, open: false },
+  { zh: { q: '下单需要提供账号密码吗？', a: '完全不需要！你只需要提供目标链接（如 TikTok 主页链接），系统会自动处理。我们不会、也不能访问你的社交账号。' }, en: { q: 'Do you need my account password?', a: 'No. You only provide a public link (e.g. your TikTok profile). The system handles delivery automatically — we never see or access your account.' }, open: false },
+  { zh: { q: '多久能看到效果？', a: '大部分服务下单后几秒到几分钟内启动。TikTok 千粉最快 10 分钟完成，具体速度取决于所选服务。' }, en: { q: 'How fast will I see results?', a: 'Most orders start within seconds to a few minutes. A TikTok 1K followers order can complete in ~10 minutes; speed depends on the service.' }, open: false },
+  { zh: { q: '会掉粉吗？会被封号吗？', a: '部分服务标注了"30天可补"，掉粉可自动补充。关于封号——我们运营多年，从未有客户因此被封。平台无法判断是谁购买了服务。' }, en: { q: 'Will followers drop? Is it safe from bans?', a: 'Services marked "30-day refill" auto-refill any drops. On safety — we have operated for years without a customer being banned for using us.' }, open: false },
+  { zh: { q: '怎么付款？', a: '支持微信支付、支付宝、USDT(TRC20) 三种方式。单次充值 500 元以上免手续费。' }, en: { q: 'What payment methods do you accept?', a: 'We accept WeChat Pay, Alipay and USDT (TRC20). Top-ups over ¥500 are fee-free.' }, open: false },
+  { zh: { q: '可以自己定价转卖吗？', a: '可以！升级至尊代理(¥99/月)后享受底价，同时开放 API 接口，你可以搭建自己的站点，自己定价转卖。' }, en: { q: 'Can I resell at my own price?', a: 'Yes! Become an agent (from ¥99/month) for wholesale rates plus API access to build and price your own SMM site.' }, open: false },
 ]);
 
 onMounted(async () => {
