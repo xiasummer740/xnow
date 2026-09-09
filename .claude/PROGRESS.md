@@ -413,3 +413,17 @@
 
 ### 三方同步状态
 - 本地: `7ca6d4d` ✅　GitHub: `7ca6d4d` ✅　VPS: 前端 dist 已更新至 `7ca6d4d`（后端未动，无需重启）
+
+### 补充批：og 分享卡 + FAQ 结构化 + index 静态 meta 收敛（同日）
+1. **og:image 分享图** — 截线上首页 1200×630 → `client/public/og-image.png`（143KB 真图，vite 自动入 dist）
+2. **og/twitter 随语言走** — seo.ts 对可收录页写入 og:locale(zh_CN/en_US)/title/desc/url/image + twitter:card，`/en` 分享出英文卡
+3. **FAQPage JSON-LD** — Home.vue 从 faqs 单一数据源生成 6 问 FAQPage schema，语言切换自动重建
+4. **index.html 静态 meta 对齐** — 标题/描述对齐 seo.ts `/` 首页词，去陈旧 spam keywords 标签
+
+### 补充批验证
+- 本地 build 过；dev 实测 `/`(zh)与 `/en` 两版 og:locale/title/FAQ 正确
+- 生产 VPS scp 部署：`/en` 线上 og en_US + FAQPage×6，og-image.png `/` `/en` 全 200，Google 验证文件完好
+- 遗留：FAQ 富摘要现仅对权威站展示，schema 属低成本无害加分项
+
+### 三方同步状态（补充批）
+- VPS 前端 dist 已更新（`index-BqS-zoTp.js`）；代码待本批提交推送

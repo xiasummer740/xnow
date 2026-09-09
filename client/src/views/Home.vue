@@ -225,7 +225,29 @@ const faqs = reactive([
   { zh: { q: '可以自己定价转卖吗？', a: '可以！升级至尊代理(¥99/月)后享受底价，同时开放 API 接口，你可以搭建自己的站点，自己定价转卖。' }, en: { q: 'Can I resell at my own price?', a: 'Yes! Become an agent (from ¥99/month) for wholesale rates plus API access to build and price your own SMM site.' }, open: false },
 ]);
 
+// FAQPage 结构化数据：与 faqs 同一数据源，随语言切换重建（/ 中文、/en 英文）
+function updateFaqSchema() {
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f[appStore.lang].q,
+      acceptedAnswer: { '@type': 'Answer', text: f[appStore.lang].a },
+    })),
+  };
+  const el = document.getElementById('xn-faq-schema');
+  if (el) { el.textContent = JSON.stringify(schema); return; }
+  const s = document.createElement('script');
+  s.id = 'xn-faq-schema';
+  s.type = 'application/ld+json';
+  s.textContent = JSON.stringify(schema);
+  document.head.appendChild(s);
+}
+watch(() => appStore.lang, updateFaqSchema);
+
 onMounted(async () => {
+  updateFaqSchema();
   appStore.fetchConfig();
   loadPreview();
   try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {}

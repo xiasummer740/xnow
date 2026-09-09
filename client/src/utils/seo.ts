@@ -40,6 +40,25 @@ function setCanonical(path: string) {
   document.head.appendChild(link);
 }
 
+const OG_IMAGE = SITE_URL + '/og-image.png';
+
+// OpenGraph / Twitter 卡片随页面语言走：英文镜像分享出去是英文卡
+function setSocialMeta(conf: SeoConf, path: string) {
+  const ogLocale = conf.lang === 'en' ? 'en_US' : 'zh_CN';
+  const url = path === '/' ? SITE_URL : SITE_URL + path;
+  const props: [string, string][] = [
+    ['og:locale', ogLocale], ['og:type', 'website'], ['og:site_name', 'XNOW PRO'],
+    ['og:title', conf.title], ['og:description', conf.description], ['og:url', url],
+    ['og:image', OG_IMAGE], ['og:image:width', '1200'], ['og:image:height', '630'],
+    ['og:image:alt', conf.lang === 'en' ? 'XNOW PRO social media growth panel' : 'XNOW PRO 社交媒体增长面板'],
+  ];
+  props.forEach(([k, v]) => setMeta('property', k, v));
+  setMeta('name', 'twitter:card', 'summary_large_image');
+  setMeta('name', 'twitter:title', conf.title);
+  setMeta('name', 'twitter:description', conf.description);
+  setMeta('name', 'twitter:image', OG_IMAGE);
+}
+
 // `/`(中文) 与 `/en`(英文) 互相声明 hreflang；其余页无 alternate
 function applyHreflang(path: string) {
   document.head.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
@@ -65,6 +84,7 @@ export function applySeo(path: string) {
     setMeta('name', 'description', conf.description);
     setMeta('name', 'robots', 'index, follow, max-image-preview:large');
     setCanonical(path);
+    setSocialMeta(conf, path);
     applyHreflang(path);
   } else {
     document.documentElement.lang = 'zh-CN';
