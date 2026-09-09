@@ -383,3 +383,33 @@
 - 本地: `653007f8` ✅
 - GitHub: `653007f8` ✅
 - VPS: `653007f8` ✅（pull + pm2 restart + client 重建 + 验证文件放置均已完成）
+
+## [2026-09-09] SEO 二期：首页中英双语 `/en` 镜像 + 全平台关键词内容布排
+
+### 完成
+1. **关键词地图**（中英 × 全平台）→ 新增 `.claude/seo-2-keywords.md`：意图分级 T1~T5、TikTok/IG/YT/TG/FB/X + 泛站矩阵、每块落到页面何处的布排表
+2. **`/en` 英文镜像路由** — 复用 Home.vue 按路径强制英文（首帧即对），路由公开白名单加入 `/en`（原守卫会把无登录访客/爬虫弹去登录页）
+3. **seo.ts 双语化** — `/en` 独立英文 title/desc；按语言设 `html lang`；`/` ↔ `/en` 互发 hreflang（zh-CN / en / x-default），canonical 各自正确
+4. **Home.vue 全面真双语** — 平台名/FAQ/服务预览 EN 补齐（原 EN 模式夹中文）；H1 下植入全平台关键词导语；顶栏语言按钮改为 `/` 与 `/en` 间路由跳转
+5. **VPN 区弱化** — 区名「他们都在用安全节点」→「谁在用 XNOW / Who It's For」，卡片与 `/vpn` 链接保留（祥哥定：保留不宣传）
+6. **sitemap 收录 `/en`**（2→3 URL）
+
+### 关键决策
+- **中英双覆盖结构**：单 URL 只能被 Google 当一个语言收录 → 加 `/en` 镜像 + hreflang 互指（中文主版 `/`、英文 `/en`）
+- **写词避雷落地**：上会话中文大段涨粉词枚举触发 400 Content Exists Risk → 本次关键词表分块小段、中英间隔写入文件，会话内不整段回贴，全流程零拦截
+
+### 验证（浏览器实测）
+- 本地 build 通过（720 模块零报错）；dev 实测中英两版 title/html lang/hreflang/FAQ/语言跳转全过
+- **生产 VPS（xnow-vps=192.129.210.52）scp dist 整包上传**：线上 `/` 与 `/en` 均 200，title/canonical/hreflang 正确，EN FAQ/导语在线渲染
+- 线上 sitemap 含 3 URL、robots 放行、**Google 验证文件 google9e165c63d6e32363.html 保留**（只覆盖未删）
+
+### 坑
+- `tools/deploy-vps.py` 是**旧机残留**（154.9.238.163 已 2026-08-28 跑路）含死口令 + pm2 名错（`xnow`≠`xnow-backend`）——连接超时误导排查，建议删除（待祥哥确认）
+
+### 遗留/下步
+- GSC 手动重提 sitemap https://xnow.taikon.top/sitemap.xml 触发 `/en` 收录（已部署，等待 Google 抓取）
+- 收录后用 GSC 搜索分析校准关键词；若量起来再考虑 TikTok 等细分落地页
+- 页面 title 短于某品牌已有 SEO 一期规则，本次沿用
+
+### 三方同步状态
+- 本地: `7ca6d4d` ✅　GitHub: `7ca6d4d` ✅　VPS: 前端 dist 已更新至 `7ca6d4d`（后端未动，无需重启）
