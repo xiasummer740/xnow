@@ -97,3 +97,10 @@ client/dist/
 *.sql
 client/dist.tar.gz
 nul
+
+# Claude/Playwright 工具运行时产物（会话自动生成，勿提交）
+.playwright-mcp/
+.claude/merged-checks.md
+.claude/project-checks.md
+.claude/todo.md
+client/.claude/startup-status.json
