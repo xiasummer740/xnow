@@ -358,3 +358,28 @@
 - 本地: `da939a6d` ✅
 - GitHub: `da939a6d` ✅
 - VPS: `da939a6d` ✅（pull + pm2 restart + client 重建均已执行）
+
+## [2026-09-09] SEO 地基一期 + Google Search Console 验证（暴露率提升）
+
+### 完成
+1. **SEO 全面诊断** — 结论：面向海外（域名未备案+美服，放弃国内百度），S2/SaaS 页只有 2 个公开页（`/`、`/vpn`）值得被收录，其余功能页全部 noindex
+2. **每路由独立 SEO tags**（`client/src/utils/seo.ts`）— 公开页独立 title/description/canonical；功能页统一 title + noindex + 移除 canonical（`aa595df1`）
+3. **自建访问统计 + Admin 流量看板** — 不依赖第三方：localStorage uuid UV + sendBeacon 埋点 → 后端 `page_views` 表 30s 节流 + ip-api.com 批量 geo（30min 缓存）→ Admin「🌐 流量」Tab 展示 7/30/90 天 PV/UV 趋势 + TOP 页面 + 来源 + 国家饼图（`aa595df1`）
+4. **sitemap.xml / robots.txt 瘦身** — 只留 2 个公开 URL；robots 拦掉全部功能/登录/API 路径防无效抓取（`aa595df1`）
+5. **修复 geo.js 漏 export 致生产崩溃** — `isLocalIp` 未导出致 analytics ESM 加载即崩服（health 000），真实 `import` 实测拦截（`653007f8`）
+6. **Google Search Console 域名所有权验证（最终走通）** — 路径：Cloudflare `xnow.taikon.top` 子域加 TXT → Google 提示"找不到令牌"（令牌不匹配）→ 改**网址前缀 + HTML 文件验证**一次通过：服务器放 `google9e165c63d6e32363.html`（`server /var/www/xnow/client/dist/`），公网 HTTP 200 → GSC「已完成所有权验证」
+7. **GSC 提交 sitemap.xml** — 状态成功，发现 2 个网页（`/` + `/vpn`）
+
+### 关键决策与坑
+- **验证令牌不匹配坑**：GSC「网域」方式每个资源有专属 DNS 令牌，从 Cloudflare 根域抄的 `-yVziX...` 对不上 xnow.taikon.top 子域资源的令牌 → 验证失败多次。换 HTML 文件验证（不依赖 DNS 令牌）一次通过
+- **浏览器自动化 daemon 坑**：browser-use CLI 在 Windows 上 daemon 端口动态分配，残留 state.json 骗 CLI 连死 daemon 致 60-90s 超时——手动拉干净 daemon + close 清状态即可恢复，工具本身没坏
+- **服务器验证文件必须保留**（Google 要求，删了掉验证状态）；文件未入库 dist 属运行时产物
+
+### 遗留
+- 之前用「网域」方式添加失败的 `xnow.taikon.top` 资源是失败残留，可忽略/删除，不影响新的网址前缀资源
+- 预渲染/内容建设（阶段二）未做，等量起来再说
+
+### 三方同步状态
+- 本地: `653007f8` ✅
+- GitHub: `653007f8` ✅
+- VPS: `653007f8` ✅（pull + pm2 restart + client 重建 + 验证文件放置均已完成）
