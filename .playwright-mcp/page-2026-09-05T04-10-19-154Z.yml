@@ -1,0 +1,57 @@
+- generic [ref=f1e3]:
+  - generic:
+    - generic: ∇×E=-∂B/∂t
+    - generic: F=ma
+    - generic: F=ma
+    - generic: E=mc²
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ∇×E=-∂B/∂t
+    - generic: E=mc²
+    - generic: ΔxΔp≥ℏ/2
+    - generic: E=mc²
+    - generic: E=mc²
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: E=mc²
+    - generic: ΔxΔp≥ℏ/2
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: S=k·logW
+    - generic: ∇×E=-∂B/∂t
+    - generic: E=mc²
+    - generic: E=mc²
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: F=ma
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ∇×E=-∂B/∂t
+    - generic: e^(iπ)+1=0
+    - generic: E=mc²
+    - generic: E=mc²
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ΔxΔp≥ℏ/2
+    - generic: S=k·logW
+    - generic: e^(iπ)+1=0
+  - generic [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - button "登录" [ref=f1e7] [cursor=pointer]
+        - button "注册" [ref=f1e8] [cursor=pointer]
+      - generic [ref=f1e9]:
+        - generic [ref=f1e10]:
+          - heading "XNOW PRO" [level=2] [ref=f1e12]
+          - paragraph [ref=f1e13]: Welcome Back
+        - generic [ref=f1e14]:
+          - generic [ref=f1e15]:
+            - generic [ref=f1e16]: 账号 (手机号)
+            - textbox "请输入手机号" [ref=f1e17]
+          - generic [ref=f1e18]:
+            - generic [ref=f1e19]:
+              - generic [ref=f1e20]: 密码
+              - link "忘记密码?" [ref=f1e21] [cursor=pointer]:
+                - /url: "#"
+            - textbox "••••••••" [ref=f1e22]
+          - button "安全登录" [ref=f1e23] [cursor=pointer]
+    - button "EN" [ref=f1e24] [cursor=pointer]
+  - generic:
+    - generic "戳我互动呀~" [ref=f1e25] [cursor=pointer]
+    - link "LIVE" [ref=f1e31] [cursor=pointer]:
+      - /url: https://t.me/Xnow001Bot

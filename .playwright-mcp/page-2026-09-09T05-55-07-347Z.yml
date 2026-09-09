@@ -1,0 +1,154 @@
+- generic [ref=f7e3]:
+  - generic:
+    - generic: S=k·logW
+    - generic: ∇×E=-∂B/∂t
+    - generic: ∇×E=-∂B/∂t
+    - generic: e^(iπ)+1=0
+    - generic: ∇×E=-∂B/∂t
+    - generic: S=k·logW
+    - generic: F=ma
+    - generic: E=mc²
+    - generic: S=k·logW
+    - generic: E=mc²
+    - generic: F=ma
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: E=mc²
+    - generic: ∇×E=-∂B/∂t
+    - generic: F=ma
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: ∇×E=-∂B/∂t
+    - generic: E=mc²
+    - generic: S=k·logW
+    - generic: S=k·logW
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: S=k·logW
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ∇×E=-∂B/∂t
+    - generic: E=mc²
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: ΔxΔp≥ℏ/2
+    - generic: iℏ∂ψ/∂t=Hψ
+  - generic [ref=f7e4]:
+    - banner [ref=f7e5]:
+      - generic [ref=f7e6]:
+        - img "Logo" [ref=f7e7]
+        - generic [ref=f7e8]: XNOW
+      - generic [ref=f7e9]:
+        - button "中" [ref=f7e10] [cursor=pointer]
+        - link "Login / Register" [ref=f7e11] [cursor=pointer]:
+          - /url: /login
+    - main [ref=f7e12]:
+      - generic [ref=f7e13]: 🚀 SMM Panel for TikTok / IG / YT / TG
+      - heading "Make Your Social Media Explode" [level=1] [ref=f7e14]: Make YourSocial Media Explode
+      - paragraph [ref=f7e15]: Buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook & X followers, website traffic — all platforms in one SMM panel
+      - paragraph [ref=f7e16]: Instant delivery · Wholesale prices · No password needed · Sign up and go
+      - generic [ref=f7e17]:
+        - generic [ref=f7e18]:
+          - generic [ref=f7e19]: 🎵
+          - generic [ref=f7e20]: TikTok
+        - generic [ref=f7e21]:
+          - generic [ref=f7e22]: 📸
+          - generic [ref=f7e23]: Instagram
+        - generic [ref=f7e24]:
+          - generic [ref=f7e25]: ▶️
+          - generic [ref=f7e26]: YouTube
+        - generic [ref=f7e27]:
+          - generic [ref=f7e28]: ✈️
+          - generic [ref=f7e29]: Telegram
+        - generic [ref=f7e30]:
+          - generic [ref=f7e31]: 📘
+          - generic [ref=f7e32]: Facebook
+        - generic [ref=f7e33]:
+          - generic [ref=f7e34]: 🐦
+          - generic [ref=f7e35]: X/Twitter
+        - generic [ref=f7e36]:
+          - generic [ref=f7e37]: 🛍️
+          - generic [ref=f7e38]: Shopee
+      - generic [ref=f7e39]:
+        - link "⚡ Get Started Now" [ref=f7e40] [cursor=pointer]:
+          - /url: /login
+        - link "🛡️ VPN" [ref=f7e41] [cursor=pointer]:
+          - /url: /vpn
+    - generic [ref=f7e42]:
+      - heading "🎯 Who It’s For" [level=2] [ref=f7e43]
+      - generic [ref=f7e44]:
+        - link "🎬 TikTok Creators Zero views? Shadow ban? Dedicated residential IPs make the algorithm see you as local." [ref=f7e45] [cursor=pointer]:
+          - /url: /vpn
+          - generic [ref=f7e46]: 🎬
+          - heading "TikTok Creators" [level=3] [ref=f7e47]
+          - paragraph [ref=f7e48]: Zero views? Shadow ban? Dedicated residential IPs make the algorithm see you as local.
+        - link "📺 Live Streamers Laggy streams losing sales? Premium routes for stable 60fps cross-border streaming." [ref=f7e49] [cursor=pointer]:
+          - /url: /vpn
+          - generic [ref=f7e50]: 📺
+          - heading "Live Streamers" [level=3] [ref=f7e51]
+          - paragraph [ref=f7e52]: Laggy streams losing sales? Premium routes for stable 60fps cross-border streaming.
+        - link "👥 Multi-Account Same IP for multiple accounts = mass ban. Dedicated IP per account." [ref=f7e53] [cursor=pointer]:
+          - /url: /vpn
+          - generic [ref=f7e54]: 👥
+          - heading "Multi-Account" [level=3] [ref=f7e55]
+          - paragraph [ref=f7e56]: Same IP for multiple accounts = mass ban. Dedicated IP per account.
+    - generic [ref=f7e57]:
+      - heading "📋 How It Works" [level=2] [ref=f7e58]
+      - generic [ref=f7e59]:
+        - generic [ref=f7e60]:
+          - generic [ref=f7e61]: "1"
+          - heading "Sign Up" [level=3] [ref=f7e62]
+          - paragraph [ref=f7e63]: Sign up with phone number in 30 seconds. Instant access to wholesale pricing.
+        - generic [ref=f7e64]:
+          - generic [ref=f7e65]: "2"
+          - heading "Top Up & Order" [level=3] [ref=f7e66]
+          - paragraph [ref=f7e67]: Top up via WeChat/Alipay/USDT. Pick a service, paste your link, submit. Fully automated.
+        - generic [ref=f7e68]:
+          - generic [ref=f7e69]: "3"
+          - heading "Watch It Grow" [level=3] [ref=f7e70]
+          - paragraph [ref=f7e71]: Starts in seconds. Track progress anytime. Auto-refill on drops.
+    - generic [ref=f7e73]:
+      - generic [ref=f7e74]:
+        - generic [ref=f7e75]: ⚡
+        - heading "Instant Auto-Delivery" [level=3] [ref=f7e76]
+        - paragraph [ref=f7e77]: Fully automated API. Orders processed in milliseconds.
+      - generic [ref=f7e78]:
+        - generic [ref=f7e79]: 💎
+        - heading "Wholesale Pricing" [level=3] [ref=f7e80]
+        - paragraph [ref=f7e81]: Direct to source. TikTok followers from ¥6.5/1K.
+      - generic [ref=f7e82]:
+        - generic [ref=f7e83]: 🔒
+        - heading "No Password Needed" [level=3] [ref=f7e84]
+        - paragraph [ref=f7e85]: Only need the target link. No account password required. 100% privacy.
+    - generic [ref=f7e86]:
+      - heading "📊 Popular Services" [level=2] [ref=f7e87]
+      - paragraph [ref=f7e88]: Login to browse all services
+      - link "🔓 Login to see all services" [ref=f7e92] [cursor=pointer]:
+        - /url: /login
+    - generic [ref=f7e93]:
+      - heading "❓ FAQ" [level=2] [ref=f7e94]
+      - generic [ref=f7e95]:
+        - button "What do I need to sign up? +" [ref=f7e97] [cursor=pointer]:
+          - generic [ref=f7e98]: What do I need to sign up?
+          - generic [ref=f7e99]: +
+        - button "Do you need my account password? +" [ref=f7e101] [cursor=pointer]:
+          - generic [ref=f7e102]: Do you need my account password?
+          - generic [ref=f7e103]: +
+        - button "How fast will I see results? +" [ref=f7e105] [cursor=pointer]:
+          - generic [ref=f7e106]: How fast will I see results?
+          - generic [ref=f7e107]: +
+        - button "Will followers drop? Is it safe from bans? +" [ref=f7e109] [cursor=pointer]:
+          - generic [ref=f7e110]: Will followers drop? Is it safe from bans?
+          - generic [ref=f7e111]: +
+        - button "What payment methods do you accept? +" [ref=f7e113] [cursor=pointer]:
+          - generic [ref=f7e114]: What payment methods do you accept?
+          - generic [ref=f7e115]: +
+        - button "Can I resell at my own price? +" [ref=f7e117] [cursor=pointer]:
+          - generic [ref=f7e118]: Can I resell at my own price?
+          - generic [ref=f7e119]: +
+    - generic [ref=f7e120]:
+      - heading "Ready to explode your social media?" [level=2] [ref=f7e121]
+      - paragraph [ref=f7e122]: Sign up in 30 seconds. Instant access to wholesale SMM services.
+      - link "🚀 Sign Up Free" [ref=f7e123] [cursor=pointer]:
+        - /url: /login
+  - generic:
+    - generic "戳我互动呀~" [ref=f7e124] [cursor=pointer]
+    - link "LIVE" [ref=f7e130] [cursor=pointer]:
+      - /url: https://t.me/Xnow001Bot

@@ -1,0 +1,62 @@
+- generic [ref=f1e3]:
+  - generic:
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: F=ma
+    - generic: E=mc²
+    - generic: F=ma
+    - generic: ∇×E=-∂B/∂t
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: e^(iπ)+1=0
+    - generic: E=mc²
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: e^(iπ)+1=0
+    - generic: ∇×E=-∂B/∂t
+    - generic: e^(iπ)+1=0
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: F=ma
+    - generic: S=k·logW
+    - generic: ΔxΔp≥ℏ/2
+    - generic: ∇×E=-∂B/∂t
+    - generic: F=ma
+    - generic: ∇×E=-∂B/∂t
+    - generic: G_μν+Λg_μν=(8πG/c^4)T_μν
+    - generic: iℏ∂ψ/∂t=Hψ
+    - generic: F=ma
+    - generic: E=mc²
+    - generic: ΔxΔp≥ℏ/2
+    - generic: F=ma
+    - generic: F=ma
+    - generic: iℏ∂ψ/∂t=Hψ
+  - generic [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - button "登录" [ref=f1e7] [cursor=pointer]
+        - button "注册" [active] [ref=f1e8] [cursor=pointer]
+      - generic [ref=f1e9]:
+        - generic [ref=f1e10]:
+          - heading "XNOW PRO" [level=2] [ref=f1e12]
+          - paragraph [ref=f1e13]: Create Account
+        - generic [ref=f1e14]:
+          - generic [ref=f1e15]:
+            - generic [ref=f1e16]: 账号 (手机号)
+            - textbox "请输入手机号" [ref=f1e17]
+          - generic [ref=f1e37]:
+            - generic [ref=f1e38]: 安全邮箱
+            - textbox "用于接收验证码" [ref=f1e39]
+          - generic [ref=f1e40]:
+            - generic [ref=f1e41]: 验证码
+            - generic [ref=f1e42]:
+              - textbox "6-digit code" [ref=f1e43]
+              - button "获取" [ref=f1e44] [cursor=pointer]
+          - generic [ref=f1e18]:
+            - generic [ref=f1e19]: 密码
+            - textbox "••••••••" [ref=f1e22]
+          - button "创建账号" [ref=f1e45] [cursor=pointer]
+    - button "EN" [ref=f1e24] [cursor=pointer]
+  - generic:
+    - generic "戳我互动呀~" [ref=f1e25] [cursor=pointer]
+    - link "LIVE" [ref=f1e31] [cursor=pointer]:
+      - /url: https://t.me/xnowfans

@@ -1,0 +1,19 @@
+{
+  "说明": "复制此文件到项目根目录的 .mcp.json 来启用 MCP 服务器",
+  "注意": "Claude Code 的 MCP 服务器配置在 .mcp.json 中，settings.json 中的 mcpServers 会被忽略（见 Issue #24477）",
+
+  "mcpServers": {
+    "thread-mcp": {
+      "command": "npx",
+      "args": ["-y", "thread-mcp"],
+      "env": {
+        "THREAD_MCP_STORAGE_DIR": "./.claude/threads",
+        "THREAD_MCP_FORMAT": "markdown"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
