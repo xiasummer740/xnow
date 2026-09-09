@@ -407,9 +407,10 @@
 - `tools/deploy-vps.py` 是**旧机残留**（154.9.238.163 已 2026-08-28 跑路）含死口令 + pm2 名错（`xnow`≠`xnow-backend`）——连接超时误导排查，建议删除（待祥哥确认）
 
 ### 遗留/下步
-- GSC 手动重提 sitemap https://xnow.taikon.top/sitemap.xml 触发 `/en` 收录（已部署，等待 Google 抓取）
+- ✅ GSC 手动重提 sitemap 完成（祥哥 2026-09-09 在浏览器操作）：线上 `/sitemap.xml` 状态「成功」，**已发现网页 2→3**，`/en` 已被 Google 读取，待其自然收录
 - 收录后用 GSC 搜索分析校准关键词；若量起来再考虑 TikTok 等细分落地页
 - 页面 title 短于某品牌已有 SEO 一期规则，本次沿用
+- GSC 界面左侧菜单中英重叠为 Google 官方显示毛病（非本站问题），不影响功能，用「直达链接 + 主区域操作」绕过即可
 
 ### 三方同步状态
 - 本地: `7ca6d4d` ✅　GitHub: `7ca6d4d` ✅　VPS: 前端 dist 已更新至 `7ca6d4d`（后端未动，无需重启）
