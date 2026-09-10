@@ -464,3 +464,31 @@
 
 ### 三方同步状态
 - 本地: `ae24a242` ✅　GitHub: `ae24a242` ✅　VPS: 前端 dist 已部署（后端未动，无需重启）
+
+## [2026-09-10] /vpn 转公开页（A方案）+ 顺带挖出两个安全隐患
+
+祥哥拍板 A：`/vpn` 是 sitemap 里的公开营销页，就该让访客和爬虫看得到。
+
+### 完成
+1. **`/vpn` 加入免登录白名单**（`router/index.ts`）— 原先白名单只有 `['/','/en','/login']`，访客/爬虫访问 `/vpn` 被踢去 `/login`，与 sitemap 意图冲突。`/vpn/clients`、`/vpn/admin` 是精确匹配不受影响，仍需登录
+2. 🔴 **公开商品接口泄露面板密钥**（`vpn.js`）— `GET /api/vpn/products` 是公开接口，却 `res.json({nodes: products})` 把 Sequelize 对象整个吐出，含 **`xxui_url`（上游面板地址）+ `xxui_api_key`（面板 API 密钥）**。改为只回展示字段（id/name/description/vps_location/flag_emoji/max_traffic_gb/price_per_gb/protocols）。**属"上架即引爆"的定时炸弹**：当前节点数 0 所以没实际泄露，但上架第一个节点就会把 VPS 面板控制权公开发出去
+3. 🔴 **回流服务器上的未提交加固**（`app.js`）— VPS 工作区是 `app.listen(PORT,"127.0.0.1")`，仓库里却是 `app.listen(PORT)`（监听 0.0.0.0）。仓库缺这份加固 = 下次谁从仓库部署就把 3000 端口暴露回公网。已补回仓库
+4. **未登录 UI 修正**（`VpnLayout.vue`）— 放行后暴露：header 无条件渲染余额/手机号/退出按钮，访客看到「余额 ¥0.00」和"退出"。改为按 `userStore.token` 分支：登录显示余额/退出，未登录显示「登录 / 注册」
+
+### 验证（线上浏览器实测）
+- **未登录**访问 `/vpn`：URL 稳在 `/vpn` 不跳转，header = `安全节点控制台 EN 登录 / 注册`，无余额无退出
+- **注入假 token 模拟登录**：header = `…余额 ¥88.50 13800000000 EN 退出`，两分支均正确
+- `canonical` = `/vpn`，营销文案完整渲染（TikTok限流/原生住宅IP/防封标记），**console 零报错**
+- 后端 `3000` 端口实测只绑 `127.0.0.1`；`/api/vpn/products` 返回正常
+- VPS 拉取时 `app.js` 报冲突（服务器有本地修改），因该修改已回流到仓库、内容一致，`git checkout` 后拉取安全
+
+### 新发现（未处理，待祥哥定）
+- ⚠️ **数据库节点数为 0**（`VpnProduct` 一条记录都没有）→ `/vpn` 商品区是空的，页面靠营销文案撑着。要让 `/vpn` 真正有收录价值，**得先上架节点**
+- ⚠️ `POST /api/vpn/coupon/validate` 无鉴权也无频率限制，可被枚举猜优惠码（低危，优惠码本身通常也会公开）
+
+### 遗留清理项（仍未动）
+- `client/public/.mcp.json` + `client/public/.claude/` 混进 web 根（会被 vite 拷进 dist，线上未泄露）
+- 工作产物：`logo-preview*.png`、`favicon-compare.png`、`.claude/_tmp_services.json`(803KB)、`.claude/logo-src/`
+
+### 三方同步状态
+- 本地: `070cd49b` ✅　GitHub: `070cd49b` ✅　VPS: 后端已 pull + pm2 restart，前端 dist 已更新
