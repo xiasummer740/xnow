@@ -33,10 +33,14 @@
           <span class="font-bold hidden sm:block text-slate-100 tracking-widest text-sm">{{ appStore.t('vpn_console_title') || '安全节点控制台' }}</span>
         </div>
         <div class="flex items-center space-x-2 md:space-x-5 text-sm">
-          <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1">{{ appStore.t('balance') }}</span><span class="text-emerald-400 font-mono font-black text-sm">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
-          <span class="text-slate-400 text-xs hidden sm:inline">{{ userStore.userInfo?.phone || '' }}</span>
+          <!-- 未登录访客也能进 /vpn（公开营销页）：此时不显示余额/退出，改给登录入口 -->
+          <template v-if="userStore.token">
+            <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1">{{ appStore.t('balance') }}</span><span class="text-emerald-400 font-mono font-black text-sm">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
+            <span class="text-slate-400 text-xs hidden sm:inline">{{ userStore.userInfo?.phone || '' }}</span>
+          </template>
           <button @click="appStore.toggleLang" class="text-slate-400 hover:text-white font-bold text-xs select-none w-6">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
-          <button @click="handleLogout" class="text-slate-400 hover:text-red-400 transition text-xs font-bold">退出</button>
+          <button v-if="userStore.token" @click="handleLogout" class="text-slate-400 hover:text-red-400 transition text-xs font-bold">退出</button>
+          <router-link v-else to="/login" class="text-emerald-400 hover:text-emerald-300 transition text-xs font-bold">登录 / 注册</router-link>
         </div>
       </header>
 
