@@ -56,8 +56,19 @@ router.get('/products', async (req, res) => {
       return res.json({ status: 'success', data: productsCache.data });
     }
     const products = await VpnProduct.findAll({ where: { active: true }, order: [['sort', 'ASC']] });
+    // 这是公开接口（/vpn 商城未登录可见），必须只回展示字段：
+    // xxui_url / xxui_api_key 是上游面板地址与密钥，整对象返回等于把 VPS 面板控制权公开发出去
     productsCache.data = {
-      nodes: products,
+      nodes: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        vps_location: p.vps_location,
+        flag_emoji: p.flag_emoji,
+        max_traffic_gb: p.max_traffic_gb,
+        price_per_gb: p.price_per_gb,
+        protocols: p.protocols,
+      })),
       trafficOptions: TRAFFIC_OPTIONS,
       durationOptions: DURATION_OPTIONS,
     };

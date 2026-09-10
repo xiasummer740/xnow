@@ -41,7 +41,7 @@ router.beforeEach((to, from, next) => {
 
   // 💡 2. 核心加法：路由级 Token 过期/缺失拦截
   const token = localStorage.getItem('xnow_token');
-  const publicPaths = ['/', '/en', '/login']; // 允许免登录访问的白名单路径（/en 为英文营销镜像）
+  const publicPaths = ['/', '/en', '/vpn', '/login']; // 允许免登录访问的白名单路径（/en 为英文营销镜像，/vpn 为节点商城公开页）
 
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
