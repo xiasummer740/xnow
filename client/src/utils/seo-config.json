@@ -1,0 +1,25 @@
+{
+  "siteUrl": "https://xnow.taikon.top",
+  "ogImage": "/og-image.png",
+  "brand": "XNOW PRO",
+  "pages": {
+    "/": {
+      "lang": "zh-CN",
+      "title": "XNOW PRO - TikTok涨粉/IG涨粉/YouTube订阅 全网底价社媒增长平台",
+      "description": "XNOW PRO 社媒增长面板：TikTok 买粉涨粉、Instagram 粉丝、YouTube 订阅、Telegram 群成员、Facebook 粉丝与播放量增长，全平台覆盖、秒级自动交付、无需密码，注册即用。",
+      "ogImageAlt": "XNOW PRO 社交媒体增长面板"
+    },
+    "/en": {
+      "lang": "en",
+      "title": "Buy TikTok Followers & Social Media Growth - XNOW PRO SMM Panel",
+      "description": "Cheapest SMM panel to buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook followers & more across all platforms. Instant auto-delivery, no password needed.",
+      "ogImageAlt": "XNOW PRO social media growth panel"
+    },
+    "/vpn": {
+      "lang": "zh-CN",
+      "title": "XNOW 全球安全节点 - 高速稳定线路 · 多协议多端接入",
+      "description": "XNOW 提供覆盖全球的高速安全代理节点，多协议、多设备一键接入，稳定高速不掉线，为海外访问与出海业务保驾护航。",
+      "ogImageAlt": "XNOW 全球安全节点"
+    }
+  }
+}
