@@ -428,3 +428,39 @@
 
 ### 三方同步状态（补充批）
 - VPS 前端 dist 已更新（`index-BqS-zoTp.js`）；代码待本批提交推送
+
+## [2026-09-10] SEO 三期：构建期静态预渲染 + 新 logo/favicon 上线
+
+### 问题
+二期做的「随语言 og」依赖客户端 JS 改 head——但 Facebook / Twitter / Discord / Telegram 的爬虫**不执行 JS**，分享任何页面出去的卡片都是同一张中文卡；Google 也要跑完 JS 才看到正确 meta，收录更慢。实测部署前三 URL（`/` `/en` `/vpn`）返回**完全相同的 2939 字节 SPA 壳**，静态 HTML 里连 canonical / hreflang 都没有。
+
+### 完成
+1. **`client/scripts/prerender.mjs`** — 构建后按路由把 SEO 元信息**静态写进独立 HTML**：`/` → `dist/index.html`、`/en` → `dist/en.html`、`/vpn` → `dist/vpn.html`；找不到 `<!--seo:start/end-->` 标记即报错退出（避免产出无 SEO 页面）
+2. **`client/src/utils/seo-config.json`** — 抽出元信息唯一数据源，前端 `seo.ts` 与构建脚本共用，防两处漂移
+3. `seo.ts` 改为 import 该配置；`index.html` 加注入标记 + canonical + hreflang ×3；`package.json` build 挂 prerender
+4. **新 logo/favicon** — `logo.png` 由 **68 字节占位图**换成真图 256×256；新增 `favicon.ico` / `favicon-32.png` / `apple-touch-icon.png`，`index.html` 去掉 `vite.svg` 引用
+5. `finance.html` 加 noindex + robots 拦 `/finance.html`
+
+### 部署（VPS 192.129.210.52）
+- **nginx `try_files` 加 `$uri.html` 解析**（`xnow-spa-https` + `xnow-spa` 两处，保持一致防回源路径不确定）——备份 `/root/xnow-spa*.bak-20260910-151656`，`nginx -t` 通过后 reload
+- dist 用 `tar` 管道上传（**不用 `--delete`**），Google 验证文件 `google9e165c63d6e32363.html` 完好保留
+
+### 验证（实测证据）
+- 线上三 URL 现返回**三份独立静态 HTML**（3441 / 3328 / 2955 字节），不再是同一壳
+- `/en`：`<title>Buy TikTok Followers…` + `lang=en` + `canonical /en` + `og:locale en_US` + hreflang ×3；`/vpn` 独立 canonical 且无 hreflang（符合设计）
+- 浏览器实测 `/`(zh) `/en`(en) 渲染正常、logo 256×256 加载成功、FAQPage schema 就位、**console 零报错**
+- favicon 套件 / logo / og-image / sitemap / 验证文件全部 200
+
+### 关键决策
+- **`/en.html` 与 `/en` 并存不重复**：静态壳内 canonical 指向 `/en`，Google 自动合并
+- **只改对外那个 nginx（`xnow-spa-https`）不够**：`xnow-spa`(127.0.0.1:8080) 同源同根，回源路径不确定，两处一起改才保证生效
+
+### 新发现（待祥哥拍板）
+- 🔴 **sitemap 里的 `/vpn` 是坏 URL**：`router/index.ts:44` 白名单只有 `['/', '/en', '/login']`，`/vpn` 不在其中 → 未登录访客与爬虫访问会被踢去 `/login`。Google 跑 JS 后看到登录页，语义与静态壳冲突。**这是既存问题，非本次引入**。两条路：① 把 `/vpn` 加进白名单（承认它是公开营销页，与 sitemap 意图一致）② 从 sitemap 移除并 robots 拦掉（承认它是功能页）
+
+### 遗留清理项（未动，等祥哥定）
+- `client/public/.mcp.json` + `client/public/.claude/` 混进 web 根，会被 vite 拷进 dist（实测线上返回 SPA 首页、**未泄露真文件**，但属构建垃圾）
+- 工作产物：根目录 `logo-preview*.png`、`favicon-compare.png`、`.claude/_tmp_services.json`(803KB)、`.claude/logo-src/`
+
+### 三方同步状态
+- 本地: `ae24a242` ✅　GitHub: `ae24a242` ✅　VPS: 前端 dist 已部署（后端未动，无需重启）
