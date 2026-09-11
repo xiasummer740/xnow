@@ -507,5 +507,9 @@
 ### 待祥哥拍板（既存矛盾，本次未扩大改动）
 - ⚠️ `client/dist/` 整个在 .gitignore 里，但 `index.html` / `logo.png` / `usdt_guide.jpg` 这 3 个文件是 **gitignore 生效前就被跟踪**的（gitignore 对已跟踪文件无效）→ 每次本地 build 后 `dist/index.html` 必脏（assets hash 引用变化）。本次按惯例提交了，但长期是噪音。两条路：① `git rm --cached` 这 3 个文件让 dist 完全脱离版本控制（源都在 `client/public/`，不丢东西）② 保持现状，每次 build 后跟着提交
 
+### 清理时新发现（未处理）
+- 🔴 **GSC 验证文件是 VPS 孤本** — `google9e165c63d6e32363.html` 本地磁盘没有、git 从未跟踪、历史提交里也没有，**只存在于 VPS 的 dist 目录**里（靠部署流程不用 `--delete` 才活到今天）。风险：VPS 重装 / 谁改用 `--delete` 全量部署 / dist 清空重建，**Google 所有权验证就失效**。建议从 VPS 抓回该文件放进 `client/public/`，随构建自动带上，不再依赖线上孤本
+  > 已确认非本次清理误删：`git show --stat HEAD` 只动 4 个文件，未触碰它
+
 ### 三方同步状态
 - 本地: 本次提交　GitHub: 本次推送　VPS: 无改动（纯本地清理，未触碰部署）
