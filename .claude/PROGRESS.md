@@ -492,3 +492,20 @@
 
 ### 三方同步状态
 - 本地: `070cd49b` ✅　GitHub: `070cd49b` ✅　VPS: 后端已 pull + pm2 restart，前端 dist 已更新
+
+## [2026-09-11] 工作区清理（上面两批的收尾卫生）
+
+祥哥拍板「清理工作区」——把三期/vpn 留下的工作产物一次性归位。
+
+### 完成
+1. **构建垃圾出 web 根** — 删 `client/public/.mcp.json`（MCP **模板**文件误落 public，会被 vite 拷进 dist 公开发布；根目录已有真配置）+ `client/public/.claude/`（启动脚本快照）
+2. **临时文件** — 删 `.claude/_tmp_services.json`(788K)
+3. **logo 工作产物归档** — 源图 3.2M（`xnow-logo*.png`/`square`/`disc`/`favicon-solid*`）+ 预览 6 件（`logo-preview*.png`/`favicon-compare.png`/`logo-preview.html`）收进 `.claude/logo-src/`，整目录 gitignore。**选归档不选删除**：源文件未进版本控制，删了不可恢复，以后改 logo 还得重找素材
+4. **修 .gitignore 路径 bug** — 原规则写的是 `client/.claude/startup-status.json`，而实际垃圾落在 `client/public/.claude/`，路径对不上 → **一直没拦住**。已补正并覆盖两个路径
+5. **`.claude/startup-status.json` 停止跟踪**（`git rm --cached`，本地文件保留）— 启动脚本每次重写它，导致每次启动工作区都是脏的
+
+### 待祥哥拍板（既存矛盾，本次未扩大改动）
+- ⚠️ `client/dist/` 整个在 .gitignore 里，但 `index.html` / `logo.png` / `usdt_guide.jpg` 这 3 个文件是 **gitignore 生效前就被跟踪**的（gitignore 对已跟踪文件无效）→ 每次本地 build 后 `dist/index.html` 必脏（assets hash 引用变化）。本次按惯例提交了，但长期是噪音。两条路：① `git rm --cached` 这 3 个文件让 dist 完全脱离版本控制（源都在 `client/public/`，不丢东西）② 保持现状，每次 build 后跟着提交
+
+### 三方同步状态
+- 本地: 本次提交　GitHub: 本次推送　VPS: 无改动（纯本地清理，未触碰部署）

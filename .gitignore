@@ -103,4 +103,10 @@ nul
 .claude/merged-checks.md
 .claude/project-checks.md
 .claude/todo.md
+.claude/startup-status.json
+.claude/_tmp_services.json
 client/.claude/startup-status.json
+client/public/.claude/
+
+# logo 设计工作区（源文件+预览图，本地归档不入库）
+.claude/logo-src/
