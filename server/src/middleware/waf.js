@@ -16,9 +16,10 @@ export const wafMiddleware = async (req, res, next) => {
             lastUpdate = Date.now();
         }
 
-        let clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || req.connection.remoteAddress;
-        if (clientIp && clientIp.includes(',')) clientIp = clientIp.split(',')[0].trim();
-        if (clientIp && clientIp.startsWith('::ffff:')) clientIp = clientIp.replace('::ffff:', '');
+        // 🔒 只认 req.ip：trust proxy=1 时它取 X-Forwarded-For 最右一段，也就是 nginx 追加的真实客户端 IP。
+        // 不能用 XFF 的第一段 —— 那是客户端自填的，已拉黑的 IP 每次换个头即可永久绕过封禁。
+        let clientIp = req.ip || req.socket?.remoteAddress || '';
+        if (clientIp.startsWith('::ffff:')) clientIp = clientIp.replace('::ffff:', '');
 
         if (cachedBlacklist.includes(clientIp)) {
             return res.status(403).send(`

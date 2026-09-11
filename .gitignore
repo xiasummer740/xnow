@@ -110,3 +110,7 @@ client/public/.claude/
 
 # logo 设计工作区（源文件+预览图，本地归档不入库）
 .claude/logo-src/
+
+# 问题清单：含可执行的攻击路径，本仓库是 PUBLIC，修复部署前不公开
+# 门禁 xnow release 读本地文件即可，不受影响
+ISSUES.md

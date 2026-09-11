@@ -6,7 +6,11 @@ const CACHE_TTL = 60 * 1000; // 1分钟缓存
 
 export const siteMiddleware = async (req, res, next) => {
   try {
-    const host = req.headers['x-forwarded-host'] || req.get('host') || '';
+    // 🔒 只认 nginx 透传的 Host（install.sh 里 `proxy_set_header Host $host`）。
+    // 绝不能用 x-forwarded-host：nginx 未覆盖该头，任何客户端都能自填，
+    // 而 req.site 直接决定 orders.js 的成交倍率 —— 等于让用户自己定价。
+    // 注：也不能用 req.hostname，trust proxy 开启时它同样会读 X-Forwarded-Host。
+    const host = req.get('host') || '';
     const cleanHost = host.split(':')[0].toLowerCase();
 
     if (!cleanHost) {

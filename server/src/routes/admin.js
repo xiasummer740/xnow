@@ -43,6 +43,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// 🔒 密钥类配置不回传明文（见 /dashboard）。前端会把整个表单原样提交回来，
+// 所以 update 必须识别这个掩码并跳过，否则一次保存就把所有密钥覆盖成星号。
+// 注：xxui_api_key 属 /vpn 板块，不在本次审计范围内，但它同样存在 Config 表里，
+// 且 dashboard 是「全表回传」，不列进来就会明文回吐 VPS 面板密钥 —— 一并掩码。
+// （Admin.vue 的表单不含该键，掩掉不影响任何界面；/vpn 面板走 vpn.js 自己的 apikey 端点。）
+const SENSITIVE_CONFIG_KEYS = ['upstream_key', 'upstream_login_pass', 'tg_bot_token', 'cryptomus_key', 'bufpay_key', 'smtp_pass', 'xxui_api_key'];
+const CONFIG_MASK = '********';
+
 router.post('/config/update', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
   const ALLOWED_KEYS = ['global_multiplier', 'agent_discount', 'announcement', 'site_name', 'site_logo',
@@ -54,6 +62,8 @@ router.post('/config/update', authenticate, async (req, res) => {
     for (const [key, value] of Object.entries(req.body)) {
       if (!ALLOWED_KEYS.includes(key)) continue;
       if (value === undefined || value === null) continue;
+      // 前端回显的就是掩码 → 说明这一项管理员没动过，保持原值
+      if (value === CONFIG_MASK) continue;
       // 🔒 倍率类配置必须为正有限数，防写坏全局定价
       if (key === 'global_multiplier' || key === 'agent_discount') {
         const num = parseFloat(value);
@@ -83,12 +93,16 @@ router.get('/dashboard', authenticate, async (req, res) => {
       } catch(e) {}
     }
 
-    const users = await User.findAll({ limit: 50, order: [['created_at', 'DESC']] });
+    // 🔒 密钥类配置对外只回掩码。上方查上游余额用的是 configMap 里的真值，不受影响。
+    const safeConfigMap = { ...configMap };
+    SENSITIVE_CONFIG_KEYS.forEach(k => { if (safeConfigMap[k]) safeConfigMap[k] = CONFIG_MASK; });
+
+    const users = await User.findAll({ limit: 50, order: [['created_at', 'DESC']], attributes: { exclude: ['password_hash', 'api_key'] } });
     const orders = await Order.findAll({ limit: 50, order: [['created_at', 'DESC']] });
     const txs = await Transaction.findAll({ limit: 50, order: [['created_at', 'DESC']] });
     const totalOrders = await Order.count();
 
-    res.json({ status: 'success', upstreamBalance: { balance: upBalance }, users, orders, transactions: txs, config: configMap, totalOrders });
+    res.json({ status: 'success', upstreamBalance: { balance: upBalance }, users, orders, transactions: txs, config: safeConfigMap, totalOrders });
   } catch (err) { res.status(500).json({ status: 'error' }); }
 });
 
@@ -702,7 +716,11 @@ router.get('/users', authenticate, async (req, res) => {
     if (role && ['user', 'gold', 'agent', 'admin', 'super_admin'].includes(role)) where.role = role;
     if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
     if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
-    const { count, rows } = await User.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
+    // 🔒 用户列表不需要密码哈希与 API 密钥，回传等于把全站撞库弹药送出去
+    const { count, rows } = await User.findAndCountAll({
+      where, order: [['created_at', 'DESC']], limit, offset,
+      attributes: { exclude: ['password_hash', 'api_key'] }
+    });
     res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });

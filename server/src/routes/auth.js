@@ -9,9 +9,10 @@ import { Op } from 'sequelize';
 const router = express.Router();
 
 const getRealIp = (req) => {
-    let ip = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || req.connection.remoteAddress;
-    if (ip && ip.includes(',')) ip = ip.split(',')[0].trim();
-    if (ip && ip.startsWith('::ffff:')) ip = ip.replace('::ffff:', '');
+    // 🔒 只认 req.ip：trust proxy=1 时它取 X-Forwarded-For 最右一段，即 nginx 追加的真实客户端 IP。
+    // 不能取 XFF 的第一段 —— 那是客户端自填的，注册/登录 IP 可被随意伪造，封号溯源会失效。
+    let ip = req.ip || req.socket?.remoteAddress || '';
+    if (ip.startsWith('::ffff:')) ip = ip.replace('::ffff:', '');
     return ip === '::1' ? '127.0.0.1' : (ip || '未知IP');
 };
 
