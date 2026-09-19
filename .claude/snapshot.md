@@ -1,13 +1,11 @@
-# 代码库快照 — 2026-09-19 20:45
+# 代码库快照 — 2026-09-19 20:51
 
-提交: docs: PROGRESS 记录 401 修复上线（含构建脚本差点漏预渲染的坑 + VPS git 落后 6 提交未 pull）
-改动文件: 6
+提交: fix: 401 拦截器补条件——未携带凭证的 401 不算登录失效（退出后轮询窗口期不再误弹）
+改动文件: 4
 
 ### 改动的文件
 - .claude/PROGRESS.md
-- .claude/smoke.md
 - .claude/snapshot.md
-- .claude/verification-report.md
 - client/dist/index.html
 - client/src/main.ts
 

@@ -36,9 +36,11 @@ window.fetch = async (input, init) => {
     const sharedToken = localStorage.getItem('xnow_token');
     if (sharedToken && sharedToken !== userStore.token) {
       userStore.setToken(sharedToken);
-    } else if (userStore.token === tokenAtRequest && !authExpiredHandled) {
-      // 凭证仍是发起请求时那一个，才说明是当前凭证真失效（上面两种「旧凭证」都不算）。
-      // authExpiredHandled 兜住登出/跳转完成前新发出的请求，避免连环弹窗。
+    } else if (tokenAtRequest && userStore.token === tokenAtRequest && !authExpiredHandled) {
+      // 三个条件缺一不可：① 这次请求**确实带了**凭证（没带凭证收到 401 只说明该接口要登录，
+      // 不是「你的登录失效了」——例如退出登录后页面还没跳走时，后台轮询会带空凭证打接口）；
+      // ② 凭证仍是发起请求时那一个（上面两种「旧凭证」都不算）；
+      // ③ 本次登录态还没处理过（authExpiredHandled 兜住跳转完成前新发出的请求，避免连环弹窗）。
       authExpiredHandled = true;
       userStore.logout();
       alert('登录状态已失效，请重新登录！\nLogin expired, please login again.');
