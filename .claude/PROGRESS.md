@@ -696,3 +696,74 @@ S2 是**反向断言**，证明①⑤⑥ 没把「真过期要弹一次」一起
 
 ### 三方同步状态
 - 本地: 本次提交　GitHub: 本次推送（`ISSUES.md` 被 gitignore 不推送）　VPS: **前端产物已部署（含第二轮补丁，bundle=`index-CGH9YTTQ.js`）+ 线上 A/B 复测与真实链路探针全过**；服务端 0 改动、git 未 pull
+---
+
+## [2026-09-19 续] 401 修复**没生效**的真正原因：旧标签页会删掉新令牌
+
+祥哥反馈「重新登录后还弹、不动也一直弹」。第二轮补丁部署后仍未解决 → **说明根因没找对，继续查**。
+
+### 根因（放大器）：`logout()` 会删掉别的标签页刚写入的新令牌
+
+`client/src/stores/user.ts` 的 `logout()` 执行 `localStorage.removeItem('xnow_token')`，
+而 **localStorage 是全浏览器所有标签页共享的**，Pinia store 却是每个标签页各自的内存副本。
+
+死循环链条：
+1. 旧标签页内存里是**已过期令牌**（开了一周没刷新，store 只在页面加载时读一次 localStorage，之后永不重读）
+2. 祥哥在另一个标签页**重新登录成功** → 新令牌写入 localStorage
+3. 旧标签页下一次轮询（`Admin.vue:528` 每 10 秒 / `DashboardLayout.vue:273` 每 30 秒）带着**它内存里的过期令牌**打接口 → 401
+4. 旧包（祥哥浏览器实际在跑的）收到 401 → `logout()` → **把 localStorage 里祥哥刚写的新令牌 `removeItem` 删掉**
+5. ⇒ 祥哥等于刚登录就被踢；他再登录 → 再被删 → **无限循环 + 每轮一个弹窗**
+
+**这解释了「重新登录后还弹」的字面意思**——不是弹窗没修好，是登录本身被旧标签页持续摧毁。
+也解释了 nginx 日志里同一 4 秒窗口内 `/order` 用新令牌 200、`/admin` 用过期令牌 401 的现象（两个标签页两把令牌）。
+
+### 修复（`client/src/main.ts`，共 2 处）
+
+**① 登出时只清「与本次失败相同」的那把令牌** —— `logout()` 换成守卫式删除：
+```ts
+if (localStorage.getItem('xnow_token') === userStore.token) {
+  localStorage.removeItem('xnow_token');
+  localStorage.removeItem('xnow_user');
+}
+```
+令牌不一样 = 别的标签页刚写的，绝不能碰。
+
+**② 补上跨标签页同步：`storage` 事件** —— 浏览器原生广播，任一标签页写 localStorage，其余标签页立刻收到：
+```ts
+window.addEventListener('storage', (e) => {
+  if (e.key === 'xnow_token' && e.newValue && e.newValue !== useUserStore(pinia).token) {
+    authExpiredHandled = false;          // 新凭证到手，重置「已处理」标志
+    useUserStore(pinia).setToken(e.newValue);
+  }
+});
+```
+**这是从源头消除过期标签页**：不必等它先撞一次 401，另一页一登录它就跟上。
+`authExpiredHandled = false` 是必需的——否则一次误判后该标签页永远静默，真过期也不提示。
+
+### 验证：多标签页时序 A/B（线上真站点 + 真后端）
+
+**测试设计（关键）**：用同一个浏览器上下文开两个标签页（共享 localStorage、真实 `storage` 事件）。
+用 `page.route` 把标签页1 的 API 响应**卡住 3 秒**，让「标签页2 登录成功」发生在「标签页1 收到 401」**之前** —— 这正是祥哥的处境。
+唯一变量 = HTML 里引用的 bundle 名。计数写 `sessionStorage`（新包会整页跳转，只存 window 变量会被洗掉 → 假绿）。
+
+| 指标 | 修复前（旧包 DQ45yU1y） | 修复后（新包 DMI9f2Xw） |
+|---|---|---|
+| 过期标签页弹窗次数 | 1 | **0** |
+| 过期标签页最终位置 | 被踢到 `/login` | **留在 `/admin`** |
+| 祥哥新登录的令牌 | **✗ 被删光** | **✅ 完好幸存** |
+| 鉴权请求 | 200 = 0，401 = 6 | **200 = 6**，401 = 6 |
+
+**可视化复跑**（`headless:false`，真实窗口 + 弹窗停 2.5 秒 + 页面大字结论板）：逐项与无头一致。
+
+**冒烟**：8 个侧边栏页面（`/order /admin /profile /wallet /recharge /vpn /services /dashboard`）带真实 7 天令牌访问 —— **0 弹窗、0 个 401、令牌完好**；撤回服务端诊断后 API 直连复测 200。
+
+### 部署与清理
+- 前端：`client/dist` → VPS `/var/www/xnow/client/dist`，bundle = **`index-DMI9f2Xw.js`**（旧包文件保留在服务器上供 A/B 对照，**未删**——祥哥开着的标签页还在按哈希名加载旧 chunk，删了会白屏）
+- 服务端：临时 401 诊断**已撤回**（`auth.js.bak-diag` 恢复后删除该备份，`grep -c 401诊断` = 0），pm2 `xnow-backend` 已重启
+- 临时令牌文件（`G:/Temp/xnow-tok-*.txt`）+ 服务端 `/tmp/tk_*` 副本**已全部删除**
+
+### 遗留（仍待办）
+- ⚠️ **祥哥已经开着的那些旧标签页，必须各自整页刷新一次才能拿到新代码。** 这是浏览器机制：已经跑在标签页里的 JS，服务端改什么都换不掉它。新包自带自愈（首个 401 整页跳转 `location.replace`），所以**任何一页刷新过之后就不会再复发**。
+- **403 分支仍未处理**：封禁用户的 `账号已被封禁：原因` 送不到前端（ISSUES.md 第 28 行）。
+- **VPS git 仍落后 `origin/main` 6 个提交**，第一批服务端安全修复未上线（未授权，等祥哥拍板）。
+- **独立复审仍未做成**（`adversarial-reviewer` 两次 `API Error: 400 Content Exists Risk`）；本轮结论全部来自实测。
