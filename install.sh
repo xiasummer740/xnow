@@ -303,7 +303,16 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
+    # 构建产物带内容哈希：内容一变文件名就变，可以放心长缓存
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
     location / {
+        # HTML 必须每次校验：否则发版后浏览器拿缓存里的旧页面，
+        # 而旧页面指向旧代码包 —— 表现为「服务器上是新包，用户端毫无变化」。
+        # no-cache 不是不缓存，是「用之前先问服务器有没有变」，没变回 304，变了回 200。
+        add_header Cache-Control "no-cache";
         try_files \$uri \$uri/ /index.html;
     }
 }
