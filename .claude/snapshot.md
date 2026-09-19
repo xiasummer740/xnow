@@ -1,12 +1,13 @@
-# 代码库快照 — 2026-09-19 20:44
+# 代码库快照 — 2026-09-19 20:45
 
-提交: fix: 401 登录失效连环弹窗 + 多标签互清凭证（同环境对照实测）
-改动文件: 5
+提交: docs: PROGRESS 记录 401 修复上线（含构建脚本差点漏预渲染的坑 + VPS git 落后 6 提交未 pull）
+改动文件: 6
 
 ### 改动的文件
 - .claude/PROGRESS.md
-- .claude/handover/2026-09-11-security-audit-batch1.md
-- .claude/handover/INDEX.md
+- .claude/smoke.md
+- .claude/snapshot.md
+- .claude/verification-report.md
 - client/dist/index.html
 - client/src/main.ts
 
