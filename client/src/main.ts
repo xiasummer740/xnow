@@ -21,6 +21,30 @@ const originalFetch = window.fetch;
 // 逐个弹窗+跳转会造成「连环弹窗」，且后一次导航会打断前一次 → 停在原页反复弹。
 let authExpiredHandled = false;
 
+// 读出令牌自带的过期时间（不校验签名，仅用于比较新旧）
+const tokenExp = (t: string): number => {
+  try {
+    const b64 = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
+    return typeof payload.exp === 'number' ? payload.exp : 0
+  } catch {
+    return 0
+  }
+}
+
+// 只接受「过期时间更晚」的凭证，旧的一律不采信。
+// 原因：接口响应会被浏览器缓存，缓存里的响应头连带几个月前签发的 x-new-token
+// 一起被重新交回前端（例如 304）。若直接采信，它就会覆盖掉刚登录的新凭证，
+// 下一秒全部接口 401 → 又弹「登录已失效」，表现为「重新登录了还是反复弹」。
+// 按 exp 比大小可从根上堵死这条路，不依赖它具体从哪进来。
+const adoptToken = (t: string | null): boolean => {
+  if (!t) return false
+  const userStore = useUserStore(pinia)
+  if (tokenExp(t) <= tokenExp(userStore.token)) return false
+  userStore.setToken(t)
+  return true
+}
+
 window.fetch = async (input, init) => {
   const userStore = useUserStore(pinia);
   // 记下本次请求实际携带的凭证：并发请求是同时飞出去的，只要其中任一个先把凭证刷新了，
@@ -34,8 +58,8 @@ window.fetch = async (input, init) => {
     // 两者不一致 = 另一个标签页刚重新登录过 —— 此时绝不能 logout()，
     // 否则会把它的新凭证一并删掉，表现为「重新登录后又被踢下线」。
     const sharedToken = localStorage.getItem('xnow_token');
-    if (sharedToken && sharedToken !== userStore.token) {
-      userStore.setToken(sharedToken);
+    if (adoptToken(sharedToken)) {
+      // 另一个标签页刚登录过，跟上它即可（adoptToken 已保证只接受更新的那把）
     } else if (tokenAtRequest && userStore.token === tokenAtRequest && !authExpiredHandled) {
       // 三个条件缺一不可：① 这次请求**确实带了**凭证（没带凭证收到 401 只说明该接口要登录，
       // 不是「你的登录失效了」——例如退出登录后页面还没跳走时，后台轮询会带空凭证打接口）；
@@ -59,11 +83,8 @@ window.fetch = async (input, init) => {
   }
 
   // 💡 2. 核心监听：捕获后端偷偷发来的续命 Token (滑动窗口机制)
-  const newToken = response.headers.get('x-new-token');
-  if (newToken) {
-    userStore.setToken(newToken);
-    // 可选：你可以在这里加一句 console.log('Token续期成功') 用于后续调试
-  }
+  // 必须经 adoptToken 过滤：缓存响应（如 304）会把旧响应头里的旧令牌一并交回来。
+  adoptToken(response.headers.get('x-new-token'));
 
   return response;
 };
@@ -75,10 +96,10 @@ window.fetch = async (input, init) => {
 // storage 事件是浏览器原生的跨标签页广播：任一标签页写入 localStorage，其余标签页立刻收到。
 // 用它把「谁登录了就全员跟上」补齐，从源头消除过期标签页，不必等它先撞一次 401。
 window.addEventListener('storage', (e) => {
-  if (e.key === 'xnow_token' && e.newValue && e.newValue !== useUserStore(pinia).token) {
-    authExpiredHandled = false;
-    useUserStore(pinia).setToken(e.newValue);
-  }
+  if (e.key !== 'xnow_token' || !e.newValue) return;
+  // 只有真的换上新凭证才解除「已处理」标记；若这次广播的是更旧的令牌（被 adoptToken 拒绝），
+  // 保持标记不动，避免重新武装后多弹一次窗。
+  if (adoptToken(e.newValue)) authExpiredHandled = false;
 });
 
 // 💡 SEO + 埋点：每次路由跳转后更新该页独立 title/description/canonical，并上报访问
