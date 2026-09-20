@@ -289,6 +289,39 @@ server {
 
     client_max_body_size 100M;
 
+    # ══ Cloudflare 真实客户端 IP 还原 ══════════════════════════════════
+    # 站点挂在 Cloudflare 后面时必配。少了这段，$remote_addr 拿到的是 CF 边缘 IP：
+    # 按 IP 拉黑会误封整片用户、注册/登录 IP 全是机房地址、限流配额被整条边缘共享。
+    # set_real_ip_from 是白名单：只有【从 CF 机房来的连接】才采信它给的客户端 IP，
+    # 其他人直连源站伪造 CF-Connecting-IP 头不生效（已实测验证）。
+    # 来源 https://www.cloudflare.com/ips-v4 与 /ips-v6，取于 2026-09-20。
+    # CF 网段极稳定；万一漏了新段，后果只是那部分用户退回成 CF 机房 IP，站点不会挂。
+    # 不用 Cloudflare 的部署可以整段删掉，不影响功能。
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    set_real_ip_from 2400:cb00::/32;
+    set_real_ip_from 2606:4700::/32;
+    set_real_ip_from 2803:f800::/32;
+    set_real_ip_from 2405:b500::/32;
+    set_real_ip_from 2405:8100::/32;
+    set_real_ip_from 2a06:98c0::/29;
+    set_real_ip_from 2c0f:f248::/32;
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+
     root /var/www/xnow/client/dist;
     index index.html;
 
