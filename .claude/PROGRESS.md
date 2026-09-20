@@ -767,3 +767,101 @@ window.addEventListener('storage', (e) => {
 - **403 分支仍未处理**：封禁用户的 `账号已被封禁：原因` 送不到前端（ISSUES.md 第 28 行）。
 - **VPS git 仍落后 `origin/main` 6 个提交**，第一批服务端安全修复未上线（未授权，等祥哥拍板）。
 - **独立复审仍未做成**（`adversarial-reviewer` 两次 `API Error: 400 Content Exists Risk`）；本轮结论全部来自实测。
+
+---
+
+## [2026-09-19 续二] 401 根因**复现成功** + 修复上线（令牌只升不降）
+
+### 祥哥的报障原话
+> 「关掉后重开还是弹」
+
+这句推翻了我上一轮「刷新一下就好」的交付说法，只能推倒从头再查。
+
+### 第一步：先搞清楚他到底在跑哪个包
+
+从 VPS nginx 日志按 UA 捞（`Chrome/153` = 祥哥浏览器；`HeadlessChrome` = 我的探针）：
+
+| 时间（服务器时区） | 他加载的入口包 |
+|---|---|
+| 13:13:27 ~ 13:14:22 | `index-DQ45yU1y.js` |
+| 13:44:54、13:45:50 | `index-CQNmdSEQ.js` |
+| **13:45 之后至今** | **无** |
+
+我的两个修复包落盘时间：`index-DMI9f2Xw.js` 14:32、`index-tUWPgOd3.js` 15:30 —— **全在他最后一次加载之后**。
+他 15:20:39 还有一次 `/api/track/visit`，但那是 SPA 内部跳转（`router.afterEach` 埋点），**不触发页面重载**。
+
+⇒ **祥哥一次都没跑到过修复版。** 他 13:44「关掉重开」时拿到的 `CQNmdSEQ` 是**当时最新的包**，那个包里还没有修复。
+所以「重开也弹」和「修复没生效」是两件事，前者**不构成对后者的否证**。
+
+### 第二步：根因（这次真复现了）
+
+**机制**：接口响应会被浏览器缓存，缓存里的响应头会连带**数天前签发的那把 `x-new-token`** 一起被交回页面。
+旧代码对续签令牌是**无条件** `setToken()`：
+
+```ts
+const newToken = response.headers.get('x-new-token');
+if (newToken) userStore.setToken(newToken);   // ← 旧包：不做任何检查
+```
+
+于是刚登录的新令牌当场被这把旧令牌覆盖 → 下一个接口 401 → 又弹一次。
+表现就是「登录了还是弹、**关掉重开还是弹**」。
+
+**修复**：采纳任何令牌之前先比 `exp`，只接受「过期时间更晚」的那把。
+
+```ts
+const adoptToken = (t: string | null): boolean => {
+  if (!t) return false
+  const userStore = useUserStore(pinia)
+  if (tokenExp(t) <= tokenExp(userStore.token)) return false   // ← 只升不降
+  userStore.setToken(t)
+  return true
+}
+```
+
+**为什么按 exp 比、而不是去堵某一条路径**：旧令牌具体从哪进来（浏览器缓存重放 / 304 响应头合并 / 别的标签页广播）不好穷举，
+但「服务端签发的令牌 exp 一定随时间递增」是恒定的 —— 拿这条不变量做闸门，不需要知道它从哪来。
+
+三个采纳点全部换用 `adoptToken`：① 401 分支读 `localStorage` ② 续签响应头 ③ `storage` 跨标签页事件。
+
+### 第三步：A/B 对照（唯一变量 = bundle 名，其余全同）
+
+**测试方法**（`G:/Temp/xnow-fix-proof.cjs`）：向**每一个** `/api` 响应注入一把**已过期 2 小时**的 `x-new-token`，
+冒充「缓存里翻出来的旧响应头」。
+
+前两版测试都栽在时序上，这里踩了两个坑，记下来：
+- **坑1**：注入必须等页面用新令牌**正常跑起来之后**再开。第一次没等，`/login` 页当场被毒 → 两个包都被污染 → 假绿。
+- **坑2**：开了注入还必须让页面**真的发一次接口请求**，否则注入根本没被碰到，两个包都"干净" → 又是假绿。
+
+| 指标 | 旧包 `DQ45yU1y`（祥哥在跑的） | 新包 `tUWPgOd3`（本次修复） |
+|---|---|---|
+| 注入后令牌 | **★ 被过期令牌覆盖** | 守住了 ✅ |
+| 新登录令牌是否幸存 | **✗ 丢了** | ✅ 幸存 |
+| 最终位置 | **`/login`（被踢出）** | `/order` |
+| 弹窗次数 | **1** | **0** |
+| 弹窗文案 | **「登录状态已失效，您已超过 7 天未活跃，请重新登录！」** | —— |
+
+**旧包那句弹窗文案，和祥哥报的一字不差。** 这是整条因果链第一次闭合。
+
+服务端 401 探针同步留痕（`/tmp/xnow-401.log`），8 条全部来自本次实验：
+```
+{"sha":"15b4c61d","err":"TokenExpiredError: jwt expired","left":-7979,"path":"/api/user/status","ua":"其他"}
+```
+`ua:"其他"` = **祥哥本人一条都没有**。
+
+### 部署
+- 本地构建 → `client/dist`，入口包 = **`index-tUWPgOd3.js`**，已同步到 VPS `/var/www/xnow/client/dist`
+- 线上 HTML 已确认指向新包：`curl -s https://xnow.taikon.top/login | grep -o 'index-[A-Za-z0-9_-]*\.js'` → `index-tUWPgOd3.js`
+- **VPS 孤本文件 `google9e165c63d6e32363.html`（GSC 验证）部署前后 md5 均为 `abb21a02`，未动**
+- 旧包文件**保留在服务器上未删**——祥哥开着的标签页还在按哈希名加载它们，删了会白屏
+- 提交推送：`d249f65b`
+
+### ⚠️ 遗留（必须处理）
+- **生产 `auth.js` 里还留着我加的临时 401 诊断**（备份 `auth.js.bak-1789828066`）。
+  留着是为了抓祥哥的**下一次** 401 做最终确认；**确认后必须立刻还原备份并重启 pm2**。
+  这是未提交的生产漂移，别忘。
+- **祥哥仍必须整页刷新一次**（或关掉重开）才能拿到新包——13:45 之后他没重载过。
+- **403 分支仍未处理**：封禁用户的 `账号已被封禁：原因` 送不到前端（ISSUES.md 第 28 行）。
+- **VPS git 仍落后 `origin/main`**（含第一批服务端安全修复 `8a39af62`，未授权，等祥哥拍板）。
+- **独立复审仍未做成**（`adversarial-reviewer` 两次 `API Error: 400 Content Exists Risk`）。
+- 服务器上 6 个远古入口包（`9NJ2g4Nx`/`BOzrcmmC`/`BqS-zoTp`/`BtjeExlk`/`DQ45yU1y`/`wbFE5h_x`）
+  仍被 Cloudflare 以 `immutable, max-age=31536000` 缓存着 200 返回，**服务器上没有 CF API 凭证，无法清边缘缓存**。
