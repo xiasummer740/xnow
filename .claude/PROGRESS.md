@@ -893,12 +893,20 @@ const adoptToken = (t: string | null): boolean => {
 - ✅ **续签滑动窗口未受影响**：剩 5 天令牌 → 返回 `x-new-token`；剩 7 天 → 不返回（符合设计）
 - ✅ 祥哥在 `/tmp/xnow-401.log` 的 5 条记录全部早于修复生效
 
-### 由此沉淀的规则（⚠️ 待写进 CLAUDE.md 反借口清单 —— 尚未落盘，别忘了）
+### 由此沉淀的规则（✅ 已落盘 —— 09-20 归位）
 
-> 说明：这条目前**只写在这里**，还没进 `xiangge-env/CLAUDE.md`。之前已有两条反借口行积压未推送，一起补。
+> 原计划写进 `xiangge-env/CLAUDE.md` 的全局反借口清单；**09-20 祥哥定调：只在本项目内解决 XNOW 的问题**，故落到项目自己的活页
+> **`.claude/project-checks.md`**（该文件此前是没填过的脚手架，占位符还留着，这次一并填实），并由 `merged-checks.md` 镜像。
+> 项目 CLAUDE.md 的定位是「只含项目特有信息」，这些恰恰都是 XNOW 特有（SPA+CF+无 migration+强制跟踪的 dist），归位正确。
 
-> **「关掉重开还是弹」不等于「修复没生效」。** 判断修复有没有生效之前，先用 nginx 日志证明对方**跑的是哪个包**——他 13:44 重开时拿到的 `CQNmdSEQ` 是**当时最新的包**，只是那个包还不含修复。
-> 另注意 SPA 的 `/api/track/visit` 是 `router.afterEach` 埋点，**不触发页面重载**，不能当成"他刚访问过"的证据。
+落进去的条目（每条都是真栽过的坑）：
+
+- **判断「修复有没有生效」前，先用 nginx 日志证明对方跑的是哪个包，别猜** —— 他 13:44 重开拿到的 `CQNmdSEQ` 是**当时最新的包**，只是那个包还不含修复
+- 注意 SPA 的 `/api/track/visit` 是 `router.afterEach` 埋点，**不触发页面重载**，不能当成"他刚访问过"的证据
+- 动 VPS 前先比对 `client/dist/index.html` 的 md5（dist 被 gitignore 但 3 个文件强制跟踪，pull 会把线上前端打回旧包）
+- `git checkout --` 恢复的是 HEAD 不是远端分支
+- 改模型字段前先查线上库真有那列（本项目无 migration）
+- CF 后面的 IP 逻辑依赖 nginx real_ip 段；后端只认 `req.ip`，绝不取 XFF 第一段
 
 ---
 
