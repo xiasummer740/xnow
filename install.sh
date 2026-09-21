@@ -359,6 +359,13 @@ if [ -L /etc/nginx/sites-enabled/default ]; then
   [ "$DEFAULT_TARGET" = "/etc/nginx/sites-available/default" ] && rm -f /etc/nginx/sites-enabled/default
 fi
 
+# nginx 临时缓冲目录必须归 worker 用户所有，否则大响应会被腰斩：
+# 属主不对时 nginx 落盘缓冲失败 → 读上游半途放弃 → 只发出已缓冲的一小截，
+# 而 Content-Length 仍是完整值（前端拿到残缺 JSON，报"网络异常"）。
+# 2026-09-20 全站下单页服务加载失败 27 小时即此因（用不带 user 指令的 main 配置启动过 nginx）。
+chown -R www-data:www-data /var/lib/nginx/proxy /var/lib/nginx/body \
+  /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi 2>/dev/null || true
+
 systemctl enable nginx 2>/dev/null || true
 nginx -t && (systemctl reload nginx 2>/dev/null || systemctl start nginx 2>/dev/null)
 ok "Nginx 已启动"

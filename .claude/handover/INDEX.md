@@ -4,5 +4,6 @@
 
 | 日期 | 文件 | 一句话 |
 |------|------|--------|
+| 2026-09-21 | [nginx-truncated-response.md](2026-09-21-nginx-truncated-response.md) | 下单页「服务加载失败/网络异常」真凶是 **nginx 临时目录属主错位**（`nobody` vs `www-data`）→ 大响应被腰斩成半截 200。**已修复 + 同环境实测验证**（断裂 5/5 → 完整 3/3）。连锁影响同机另一个站。**待祥哥刷新真机确认** |
 | 2026-09-19 | [login-401-flapping.md](2026-09-19-login-401-flapping.md) | 登录态反复弹窗：根因**已复现**（缓存里的旧令牌覆盖刚登录的新令牌）+ 修复 `index-tUWPgOd3.js` 已上线，祥哥真机确认 + 连续 3 小时零复发。**已结案** |
 | 2026-09-11 | [security-audit-batch1.md](2026-09-11-security-audit-batch1.md) | 全站安全审计 + 第一批 6 项后端修复。**已于 09-20 全部上线**（曾被「生产走 CF 未配 real_ip」卡住，real_ip 已补） |
