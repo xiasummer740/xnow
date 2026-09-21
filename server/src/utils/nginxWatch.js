@@ -23,6 +23,12 @@ import { sendTgMessage } from './tgBot.js';
 // 配置里没写 `user` 指令时 nginx 按编译默认取 `nobody` ——
 // 于是目录变成 nobody:root 0700，而 worker 跑 www-data，落盘缓冲必失败 → 大响应被腰斩。
 //
+// ⚠️ 前提是那份配置**能解析通过**：解析失败根本走不到建目录这一步
+// （实测：拿站点的 server 块当 main 配置喂 `-c`，第 1 行就报
+// `"server" directive is not allowed here`，属主纹丝不动）。
+// 所以真正的触发条件是「一份合法、但没写 `user` 的 **main** 配置」，
+// 而不是随便什么配置文件。
+//
 // ⚠️ 所以判据**只看 uid、不看 gid**：组本来就允许不一样（nginx 传的是 chown(..., -1)），
 // 拿 gid 一起比会天天误报。
 //
@@ -61,7 +67,7 @@ export const checkNginxTempDirs = async () => {
     return;
   }
   // 报警带「谁把它弄坏的」时间点：这是唯一能把误操作逮现行的信号
-  await sendTgMessage(`⚠️ <b>nginx 临时目录属主被改坏，已自动抢修</b>\n<pre>${bad.join('\n')}</pre>\n多为「用不带 user 指令的配置起过 nginx」所致，请回看当时的操作。`);
+  await sendTgMessage(`⚠️ <b>nginx 临时目录属主被改坏，已自动抢修</b>\n<pre>${bad.join('\n')}</pre>\n多为「以 root 解析过一份没写 user 指令的 nginx 主配置」所致（nginx -t / -T 也算），请回看当时的操作。`);
 };
 
 // ============================================================
