@@ -362,7 +362,8 @@ fi
 # nginx 临时缓冲目录必须归 worker 用户所有，否则大响应会被腰斩：
 # 属主不对时 nginx 落盘缓冲失败 → 读上游半途放弃 → 只发出已缓冲的一小截，
 # 而 Content-Length 仍是完整值（前端拿到残缺 JSON，报"网络异常"）。
-# 2026-09-20 全站下单页服务加载失败 27 小时即此因（用不带 user 指令的 main 配置启动过 nginx）。
+# 2026-09-20 全站下单页服务加载失败 27 小时即此因（以 root 解析过一份不带 user 指令的
+# main 配置 —— 实测连 `nginx -t` 这种"只是测一下配置"的解析都会改属主，不必启动、不必 reload）。
 chown -R www-data:www-data /var/lib/nginx/proxy /var/lib/nginx/body \
   /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi 2>/dev/null || true
 
@@ -371,8 +372,10 @@ chown -R www-data:www-data /var/lib/nginx/proxy /var/lib/nginx/body \
 # 而 Content-Length 仍是完整值 —— 客户端拿到残缺数据、HTTP 却还是 200，
 # 前端只能猜成"网络异常"（2026-09-21 全站下单页坏了 27 小时就是这形态）。
 # 设 0 = 整个响应同步透传：客户端读得慢，nginx 就少读上游（背压），
-# **结构上不可能再腰斩**。代价是大响应遇上慢客户端会多占用一会儿上游连接，
-# 本项目被代理的最大也就 1.5MB，可接受。
+# **"nginx 因临时文件落盘失败而腰斩"这条路径彻底消失**（属主再错也腰斩不了）。
+# 注意别读成"任何形式的响应截断都不可能了"—— 上游自己发到一半死掉同样能得到
+# 200 + Content-Length 完整 + body 残缺这组签名，那是另一码事（见 ISSUES.md）。
+# 代价是大响应遇上慢客户端会多占用一会儿上游连接，本项目被代理的最大也就 1.5MB，可接受。
 cat > /etc/nginx/conf.d/00-proxy-buffer.conf << 'EOF'
 # 由 xnow install.sh 生成：禁止 nginx 为大响应创建临时文件，防止响应被静默腰斩
 proxy_max_temp_file_size 0;
