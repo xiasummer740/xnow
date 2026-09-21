@@ -13,12 +13,21 @@ import { sendTgMessage } from './tgBot.js';
 // 这里做两件事：① 属主被改坏就当场抢修（根因自愈）② error.log 出严重错误就告警（兜底）。
 
 // ============================================================
-// ① 属主自愈：nginx 启动时会把这些目录重建为「启动时那个用户」所有
+// ① 属主自愈：把被改坏的临时目录属主掰回来
 // ============================================================
-// 一旦有人用不带 `user` 指令的 main 配置起过 nginx（典型是 `nginx -c <站点配置>`——
-// 站点配置是 site 级，`-c` 换掉的却是 main 级配置，里面没有 user www-data），
-// nginx 编译默认用户 nobody 就会把这些目录重建成 nobody:root 0700。
-// 此后 worker(www-data) 建临时文件必失败 → 大响应被腰斩。
+// 机制（2026-09-21 在生产机上实测坐实，两个方向都验过）：
+// **root 身份执行任何一次 nginx 配置解析**（`nginx -t` / `nginx -T` 即可，
+// 不必启动、不必 reload）都会走到 ngx_create_paths，把这些目录的**用户**
+// 改成该配置里 `user` 指令指定的那个，**组原样不动**
+// （实测 www-data:www-data → nobody:www-data，只有第一段变）。
+// 配置里没写 `user` 指令时 nginx 按编译默认取 `nobody` ——
+// 于是目录变成 nobody:root 0700，而 worker 跑 www-data，落盘缓冲必失败 → 大响应被腰斩。
+//
+// ⚠️ 所以判据**只看 uid、不看 gid**：组本来就允许不一样（nginx 传的是 chown(..., -1)），
+// 拿 gid 一起比会天天误报。
+//
+// 反过来说，用**正常的** main 配置跑一次 `nginx -t` 也会把它顺手改回 www-data ——
+// 属主这东西会被人无声地改来改去，这正是它需要被巡检的原因。
 const TEMP_DIRS = [
   '/var/lib/nginx/proxy', '/var/lib/nginx/body', '/var/lib/nginx/fastcgi',
   '/var/lib/nginx/uwsgi', '/var/lib/nginx/scgi',
