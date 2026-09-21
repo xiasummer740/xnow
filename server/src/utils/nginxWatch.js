@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { execFileSync } from 'child_process';
 import { sendTgMessage } from './tgBot.js';
 
@@ -48,13 +49,28 @@ const ownerUid = () => {
   } catch (e) { return null; }
 };
 
+// 递归查：**只看顶层是漏的** —— 顶层完全可能被别人的一次正常 `nginx -t` 顺手修回 www-data，
+// 而底下被改坏的编号子目录（`0/`、`1/55/`…）原地留着，照样写不进去。
+// 返回第一个出问题的路径即可，定位用；修的时候是 `chown -R`，上层坏了下层一并带走。
+const findBadDir = (dir, uid) => {
+  let st;
+  try { st = fs.statSync(dir); } catch (e) { return null; } // 目录不存在 = 不归我们管
+  if (st.uid !== uid) return dir;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return null; }
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const hit = findBadDir(path.join(dir, ent.name), uid);
+    if (hit) return hit;
+  }
+  return null;
+};
+
 export const checkNginxTempDirs = async () => {
   const uid = ownerUid();
   if (uid === null) return; // 不是 Linux / 没有 www-data（本地开发机）→ 静默
 
-  const bad = TEMP_DIRS.filter((d) => {
-    try { return fs.statSync(d).uid !== uid; } catch (e) { return false; } // 目录不存在 = 不归我们管
-  });
+  const bad = TEMP_DIRS.map((d) => findBadDir(d, uid)).filter(Boolean);
   if (!bad.length) return;
 
   console.error(`🚨 [NginxWatch] nginx 临时目录属主被改坏，自动抢修: ${bad.join(' ')}`);
@@ -83,8 +99,15 @@ const LEVELS = /\[(emerg|alert|crit)\]/;
 //  · conflicting server name 是历史遗留的重复站点配置（见 .claude/TODO.md）
 const NOISE = /SSL_do_handshake\(\) failed|conflicting server name/;
 
-// 游标存「上次报到最后一行」的内容而不是行号：日志轮转后行号会整体错位，内容比对天然抗轮转
-let lastAlerted = '';
+// 游标存「上次报到最后一行」的内容而不是行号：日志轮转后行号会整体错位，内容比对天然抗轮转。
+//
+// ⚠️ `null` 和 `''` 必须分开：
+//   null = 还没建过基线（进程刚起，第一 tick）
+//   ''   = 基线已建，但当时文件里一条严重错误都没有（logrotate 之后 / 一直很安静）
+// 混为一谈的代价（2026-09-21 复审查实、已实测复现）：日志每天轮转 → 新文件里没有 crit
+// → 每 tick 都把游标清成 '' → 当天**第一批**严重错误到达时被当成"首次运行"存成基线，
+// **一条都不报** —— 恰好在最需要它的那一刻是聋的。
+let lastAlerted = null;
 
 const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -96,10 +119,15 @@ export const checkNginxErrors = async () => {
     return; // 文件不存在 / 没权限（本地开发机就是这种）—— 静默退出，不刷屏
   }
 
-  if (!lines.length) { lastAlerted = ''; return; }
+  // 首次运行只建基线：不把日志里的历史故障当成「刚刚发生」推一遍。
+  // 此刻若日志干净，基线记 ''，下一批报到的严重错误照报不误。
+  if (lastAlerted === null) {
+    lastAlerted = lines.length ? lines[lines.length - 1] : '';
+    return;
+  }
 
-  // 首次运行只建基线：否则会把日志里的历史故障当成「刚刚发生」推一遍
-  if (!lastAlerted) { lastAlerted = lines[lines.length - 1]; return; }
+  // 安静窗口：游标**保持不动**。清空它 = 把接下来的第一批严重错误当基线吞掉。
+  if (!lines.length) return;
 
   const idx = lines.lastIndexOf(lastAlerted);
   // 基线找不到 = 日志已轮转，当前文件里的全部是新的 → 全部上报
