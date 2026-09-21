@@ -11,6 +11,7 @@ import { autoSyncServices } from './utils/sync.js';
 import { autoSyncOrders } from './utils/orderSync.js';
 import { autoSyncAnnouncement } from './utils/announceSync.js';
 import { autoTrafficWarning } from './routes/vpn.js';
+import { checkNginxErrors, checkNginxTempDirs } from './utils/nginxWatch.js';
 
 import payRoutes from './routes/pay.js';
 import adminRoutes from './routes/admin.js';
@@ -131,4 +132,6 @@ app.listen(PORT, "127.0.0.1", async () => {
   setInterval(autoSyncAnnouncement, 1000 * 60 * 30);
   setInterval(reconcilePayments, 1000 * 60 * 2);
   setInterval(autoTrafficWarning, 1000 * 60 * 60); // 每小时检查流量预警
+  setInterval(checkNginxTempDirs, 1000 * 60 * 5);  // nginx 临时目录属主自愈（防大响应被腰斩）
+  setInterval(checkNginxErrors, 1000 * 60 * 5);    // nginx 严重错误告警（防静默故障）
 });

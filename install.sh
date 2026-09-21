@@ -366,6 +366,18 @@ fi
 chown -R www-data:www-data /var/lib/nginx/proxy /var/lib/nginx/body \
   /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi 2>/dev/null || true
 
+# 光靠上面的 chown 只能治一次；真正 杜绝 的是这条：让 nginx 压根不用临时文件。
+# 缓冲落盘失败时 nginx 会「读到一半放弃上游」，只把已发出的一小截当成功返回，
+# 而 Content-Length 仍是完整值 —— 客户端拿到残缺数据、HTTP 却还是 200，
+# 前端只能猜成"网络异常"（2026-09-21 全站下单页坏了 27 小时就是这形态）。
+# 设 0 = 整个响应同步透传：客户端读得慢，nginx 就少读上游（背压），
+# **结构上不可能再腰斩**。代价是大响应遇上慢客户端会多占用一会儿上游连接，
+# 本项目被代理的最大也就 1.5MB，可接受。
+cat > /etc/nginx/conf.d/00-proxy-buffer.conf << 'EOF'
+# 由 xnow install.sh 生成：禁止 nginx 为大响应创建临时文件，防止响应被静默腰斩
+proxy_max_temp_file_size 0;
+EOF
+
 systemctl enable nginx 2>/dev/null || true
 nginx -t && (systemctl reload nginx 2>/dev/null || systemctl start nginx 2>/dev/null)
 ok "Nginx 已启动"
