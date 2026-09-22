@@ -233,12 +233,17 @@ nginx 只有在响应超过内存缓冲（约 32KB）时才需要落盘临时文
 
 ## 遗留 / 下一步
 
-1. **`xnow-spa-https.bak-cache` 仍在 `sites-enabled/` 里** —— 它是生产配置的旧版本（缺 real_ip、
-   缺缓存头），被 nginx 当站点配置加载着，也是 `nginx -t` 那句
-   `conflicting server name "xnow.taikon.top" ... ignored` 的来源。
-   它真正的风险**不是**"诱人去 `-c`"（那条已被实测推翻，见上），而是：
-   **同一份 `server_name` 出现两次，谁生效取决于 include 顺序** —— 万一哪天顺序变了，
-   由这份旧块接管，**real_ip 和缓存头会无声消失**，回到"按 CF 边缘 IP 拉黑、
-   误封整片用户"的老坑里。生产块是它的严格超集，移走零功能损失（非删除，可回滚）。
-   已建议祥哥处理，未擅自动。
-2. `ISSUES.md` 本条状态：已验证（若祥哥真机确认过，可补标真机已验）。
+1. ✅ **`xnow-spa-https.bak-cache` 已移走（2026-09-21 祥哥点头「修」）** ——
+   `mv /etc/nginx/sites-enabled/xnow-spa-https.bak-cache /root/nginx-stray-20260921/`
+   （**移走不是删除**，可回滚；与 `/root/nginx-backup-20260920-021106` 放在一起）。
+   **移前先逐行比对证明生产块是它的严格超集**：`listen`/`server_name`/证书/TLS/
+   `client_max_body_size` 相同，`location /api/` 六行逐字一致，生产块另有 real_ip 23 条、
+   `/assets/` 长缓存、`/` 的 `no-cache`。
+   **移后实测**：`nginx -t` **不再报 `conflicting server name`**；reload 后
+   `set_real_ip_from` 仍 23 条、`real_ip_header` 1 条、`proxy_max_temp_file_size 0` 1 条；
+   声明 `xnow.taikon.top` 的 server 从 2 个降到 1 个；站点 200（首页 3441 / 接口 797760 完整）；
+   缓存头照旧（HTML `no-cache`、assets `immutable`）。
+   **决定性一条**：经 CF 发请求后访问日志第一列 = 我的真实 IP `64.186.242.99`（不是 CF 边缘 IP）
+   —— 证明移走旧块**没有**破坏 real_ip 还原。
+2. ✅ **感知层最后一跳验证通过** —— 祥哥确认 **06:11 那条「已自动抢修」TG 告警收到了**
+   （2026-09-21）。此前这一步只能证明"环境可达 + 未报错"，现在有真人确认送达。
