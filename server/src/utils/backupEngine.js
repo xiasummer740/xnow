@@ -44,7 +44,8 @@ export const createBackup = () => {
         // 先在临时目录里把要装的东西摆好，再一口气打成一个包。
         // 用系统临时目录、不用 BACKUP_DIR：打包的中间产物不该进保留策略的扫描范围。
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xnow-bk-'));
-        const cleanup = () => fs.rmSync(tmp, { recursive: true, force: true });
+        // 清理自己**绝不能抛**：它是在错误路径上被调用的，再抛一次会盖掉真正的失败原因
+        const cleanup = () => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* 尽力而为 */ } };
 
         // 📎 这一步**故意不用管道**：mysqldump 直接重定向进文件，退出码就是它自己的，
         // 不会被身后的 gzip 盖住。老写法必须靠 `bash -o pipefail` 才挡得住
@@ -52,33 +53,47 @@ export const createBackup = () => {
         // 664 字节的空备份就是这么来的。现在这条路径从根上不存在了。
         const sqlFile = path.join(tmp, 'xnow_db.sql');
         exec(`mysqldump -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} ${DB_NAME} > '${sqlFile}'`, { env: MYSQL_ENV() }, (error, _stdout, stderr) => {
-            if (error) {
-                cleanup();
-                reject(new Error('mysqldump 失败: ' + ((stderr || error.message || '').trim() || '请检查数据库连接/权限')));
-                return;
-            }
-            // 兜底：退出码 0 但导出来是空的，仍然算失败 —— 空壳不能当备份送出去
-            if (!fs.existsSync(sqlFile) || fs.statSync(sqlFile).size === 0) {
-                cleanup();
-                reject(new Error('mysqldump 没导出任何数据（文件为空）'));
-                return;
-            }
-
-            // 数据库之外的那一份（支付补单队列）。**存在才带** —— 全新装的机器上还没这个文件，
-            // 那种情况下不该因为"少一个文件"把整次备份判成失败。
-            const hasPending = fs.existsSync(PENDING_FILE);
-            if (hasPending) fs.copyFileSync(PENDING_FILE, path.join(tmp, 'pending_payments.json'));
-
-            const members = ['xnow_db.sql', ...(hasPending ? ['pending_payments.json'] : [])]
-                .map(m => `'${m}'`).join(' ');
-            exec(`tar czf '${filepath}' -C '${tmp}' ${members}`, (err2, _o2, se2) => {
-                cleanup();
-                if (err2) {
-                    reject(new Error('打包失败: ' + ((se2 || err2.message || '').trim() || '未知错误')));
+            // ⚠️ 回调体**必须整个包在 try 里**：exec 的回调是**异步**执行的，里面的 throw
+            // 不会被 Promise 构造函数接住 —— 它会变成 uncaughtException，而这个 Promise
+            // **永不 settle**，调用方的 `await createBackup()` 就此永久挂住 = 备份静默停摆。
+            // （2026-10-14 对抗审查反例④：同一形状的坑在还原路径上已实测复现。）
+            try {
+                if (error) {
+                    cleanup();
+                    reject(new Error('mysqldump 失败: ' + ((stderr || error.message || '').trim() || '请检查数据库连接/权限')));
                     return;
                 }
-                resolve({ filename, filepath, size: fs.statSync(filepath).size, hasPending });
-            });
+                // 兜底：退出码 0 但导出来是空的，仍然算失败 —— 空壳不能当备份送出去
+                if (!fs.existsSync(sqlFile) || fs.statSync(sqlFile).size === 0) {
+                    cleanup();
+                    reject(new Error('mysqldump 没导出任何数据（文件为空）'));
+                    return;
+                }
+
+                // 数据库之外的那一份（支付补单队列）。**存在才带** —— 全新装的机器上还没这个文件，
+                // 那种情况下不该因为"少一个文件"把整次备份判成失败。
+                // ⚠️ 但这同时是一条**无声的降级通道**：文件被误删时归档会安静地退化成"只有数据库"，
+                // 两个通道都不报错。所以这里至少留一行本地日志，别让它一点痕迹没有。
+                const hasPending = fs.existsSync(PENDING_FILE);
+                if (hasPending) fs.copyFileSync(PENDING_FILE, path.join(tmp, 'pending_payments.json'));
+                else console.warn('[Backup] 补单记录文件不存在，本次归档只含数据库:', PENDING_FILE);
+
+                const members = ['xnow_db.sql', ...(hasPending ? ['pending_payments.json'] : [])]
+                    .map(m => `'${m}'`).join(' ');
+                exec(`tar czf '${filepath}' -C '${tmp}' ${members}`, (err2, _o2, se2) => {
+                    try {
+                        cleanup();
+                        if (err2) {
+                            reject(new Error('打包失败: ' + ((se2 || err2.message || '').trim() || '未知错误')));
+                            return;
+                        }
+                        resolve({ filename, filepath, size: fs.statSync(filepath).size, hasPending });
+                    } catch (e) { reject(e); }
+                });
+            } catch (e) {
+                cleanup();
+                reject(e);
+            }
         });
     });
 };
@@ -99,34 +114,55 @@ export const restoreBackup = (filepath) => {
 
         // 归档包：先解到临时目录，再把里面的数据库喂给 mysql。
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xnow-rs-'));
-        const cleanup = () => fs.rmSync(tmp, { recursive: true, force: true });
+        const cleanup = () => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* 尽力而为 */ } };
 
         exec(`tar xzf '${filepath}' -C '${tmp}'`, (err, _o, se) => {
-            if (err) {
-                cleanup();
-                reject(new Error('解包失败（文件可能已损坏）: ' + ((se || err.message || '').trim() || '未知错误')));
-                return;
-            }
-            // 解出来没有库文件 = 这包不是本系统产出的，不能拿它去覆盖线上数据
-            const sqlFile = path.join(tmp, 'xnow_db.sql');
-            if (!fs.existsSync(sqlFile)) {
-                cleanup();
-                reject(new Error('归档包里没有数据库导出文件 xnow_db.sql'));
-                return;
-            }
-            exec(`mysql -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} ${DB_NAME} < '${sqlFile}'`, { env: MYSQL_ENV() }, (e2, _o2, se2) => {
-                if (e2) {
+            // 同 createBackup：回调是异步的，throw 不被 Promise 接住 = 请求永久挂死
+            try {
+                if (err) {
                     cleanup();
-                    reject(new Error('恢复失败: ' + ((se2 || e2.message || '').trim() || '请检查备份文件/数据库')));
+                    reject(new Error('解包失败（文件可能已损坏）: ' + ((se || err.message || '').trim() || '未知错误')));
                     return;
                 }
-                // 数据库之外的那份（补单记录）：它在任何一张表里都没有，上一步的 mysql 带不回来，
-                // 得从包里单独放回原位。包里没有就说明这份备份是在"还没这个文件"的机器上生成的，跳过。
-                const pendingInArchive = path.join(tmp, 'pending_payments.json');
-                if (fs.existsSync(pendingInArchive)) fs.copyFileSync(pendingInArchive, PENDING_FILE);
+                // 解出来没有库文件 = 这包不是本系统产出的，不能拿它去覆盖线上数据
+                const sqlFile = path.join(tmp, 'xnow_db.sql');
+                if (!fs.existsSync(sqlFile)) {
+                    cleanup();
+                    reject(new Error('归档包里没有数据库导出文件 xnow_db.sql'));
+                    return;
+                }
+                exec(`mysql -h ${DB_HOST || '127.0.0.1'} -u${DB_USER} ${DB_NAME} < '${sqlFile}'`, { env: MYSQL_ENV() }, (e2, _o2, se2) => {
+                    try {
+                        if (e2) {
+                            cleanup();
+                            reject(new Error('恢复失败: ' + ((se2 || e2.message || '').trim() || '请检查备份文件/数据库')));
+                            return;
+                        }
+                        // 数据库之外的那份（补单记录）：它在任何一张表里都没有，上一步的 mysql 带不回来，
+                        // 得从包里单独放回原位。包里没有就说明这份备份是在"还没这个文件"的机器上生成的，跳过。
+                        const pendingInArchive = path.join(tmp, 'pending_payments.json');
+                        if (fs.existsSync(pendingInArchive)) {
+                            try {
+                                // ⚠️ 必须自己建目录：全新机器上 `server/data/` 要等后端首次落盘才存在，
+                                // 直接 copyFileSync 会抛 ENOENT —— 那时**库已经灌完了**，却报失败、请求还挂住。
+                                fs.mkdirSync(path.dirname(PENDING_FILE), { recursive: true });
+                                fs.copyFileSync(pendingInArchive, PENDING_FILE);
+                            } catch (e) {
+                                // 走到这里 = 库已经还原成功、只有补单记录没回来。必须**如实说**，
+                                // 不能让调用方以为整次还原都失败了（那样他会重试，而重试是有代价的）。
+                                cleanup();
+                                reject(new Error('数据库已还原成功，但补单记录回写失败: ' + e.message));
+                                return;
+                            }
+                        }
+                        cleanup();
+                        resolve(true);
+                    } catch (e) { reject(e); }
+                });
+            } catch (e) {
                 cleanup();
-                resolve(true);
-            });
+                reject(e);
+            }
         });
     });
 };
