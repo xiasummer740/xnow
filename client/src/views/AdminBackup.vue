@@ -49,7 +49,7 @@ const downloadFile = (filename) => {
 };
 
 const restoreFromHistory = async (filename) => {
-    if (!await ui.showConfirm(`警告：此操作将使用历史快照 [${filename}] 彻底覆盖当前所有数据！您确定吗？`)) return;
+    if (!await ui.showConfirm(`即将把快照 [${filename}] 恢复回系统：当前所有数据会被它整个替换掉，且无法撤销。确定还原吗？`)) return;
     loading.value = true;
     try {
         const res = await fetch('/api/admin/backup/restore', { 
@@ -79,7 +79,8 @@ const deleteBackupFile = async (filename) => {
 
 const handleFileUpload = async (event) => {
     const file = event.target.files[0];
-    if (!file || !file.name.endsWith('.sql.gz')) return ui.showToast('只能上传 .sql.gz 格式的备份包！', 'error');
+    // 新格式是 .tar.gz 归档包（数据库 + 补单记录），老的 .sql.gz 也留着能传
+    if (!file || !(file.name.endsWith('.tar.gz') || file.name.endsWith('.sql.gz'))) return ui.showToast('只能上传 .tar.gz 或 .sql.gz 格式的备份包！', 'error');
     if (!await ui.showConfirm(`危险操作：系统即将读取您上传的 [${file.name}] 并强制清空当前数据库重新注水！确定执行？`)) return;
     
     loading.value = true;
@@ -136,7 +137,7 @@ onMounted(() => { fetchBackups(); });
                       <td class="px-6 py-4 font-mono text-slate-400 text-xs">{{ (b.size / 1024).toFixed(2) }} KB</td>
                       <td class="px-6 py-4 text-right space-x-2">
                           <button @click="downloadFile(b.name)" class="text-xs bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded transition font-bold">⬇️ 下载</button>
-                          <button @click="restoreFromHistory(b.name)" class="text-xs bg-amber-500/10 hover:bg-amber-500/30 text-amber-500 border border-amber-500/30 px-3 py-1.5 rounded transition font-bold">☠️ 覆盖</button>
+                          <button @click="restoreFromHistory(b.name)" class="text-xs bg-amber-500/10 hover:bg-amber-500/30 text-amber-500 border border-amber-500/30 px-3 py-1.5 rounded transition font-bold">♻️ 还原</button>
                           <button @click="deleteBackupFile(b.name)" class="text-xs bg-red-500/10 hover:bg-red-500/30 text-red-500 border border-red-500/30 px-3 py-1.5 rounded transition font-bold">🗑️ 删除</button>
                       </td>
                   </tr>

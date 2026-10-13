@@ -9,7 +9,7 @@ import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { resolveGeoMap } from '../utils/geo.js';
 import { sendTgMessage } from '../utils/tgBot.js';
-import { createBackup, restoreBackup } from '../utils/backupEngine.js';
+import { createBackup, restoreBackup, isBackupFile } from '../utils/backupEngine.js';
 import { sanitizeAnnouncement, announcementToText } from '../utils/sanitize.js';
 
 const router = express.Router();
@@ -475,7 +475,7 @@ router.get('/backups', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '仅管理员有权访问灾备中心' });
   try {
     if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.sql.gz')).map(f => {
+    const files = fs.readdirSync(BACKUP_DIR).filter(isBackupFile).map(f => {
       const stats = fs.statSync(path.join(BACKUP_DIR, f));
       return { name: f, size: stats.size, time: stats.mtimeMs };
     }).sort((a, b) => b.time - a.time);
