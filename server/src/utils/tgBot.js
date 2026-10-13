@@ -44,7 +44,10 @@ export const sendTgDocument = async (filepath, caption = '') => {
     form.append('chat_id', conf.tg_chat_id);
     // 文件不存在 / 没权限 → readFileSync 直接抛，不吞（这正是那次事故的现场）
     form.append('document', new Blob([fs.readFileSync(filepath)], { type: 'application/gzip' }), path.basename(filepath));
+    // ⚠️ caption 里带 `<b>` `<code>` 这类标签，**不声明 parse_mode 就会原样显示出来**
+    // （2026-10-13 祥哥截图里看到的是字面量 `<b>端到端验证</b>`，就是漏了这行）
     form.append('caption', caption);
+    form.append('parse_mode', 'HTML');
 
     const res = await axios.post(url, form, { timeout: 30000 });
     // ⚠️ Telegram 拒收时 HTTP 仍是 200，成败只在 body 的 ok 字段里 —— 不判它 = 静默失败

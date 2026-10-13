@@ -15,6 +15,9 @@ const MYSQL_ENV = () => {
     return { ...process.env, MYSQL_PWD: DB_PASS || '' };
 };
 
+// 错误信息要塞进 Telegram 的 HTML 消息里，含 < & > 会把告警本身弄成 400（发不出去还没人知道）
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 export const createBackup = () => {
     return new Promise((resolve, reject) => {
         const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[\/\s:]/g, '_');
@@ -65,22 +68,19 @@ export const autoBackupTask = async () => {
             if (files.length > 24) {
                 for (let i = 24; i < files.length; i++) fs.unlinkSync(path.join(BACKUP_DIR, files[i]));
             }
-            sendTgMessage(`💾 <b>[系统自检] 自动化容灾备份完成</b>\n📦 文件名: <code>${backup.filename}</code>\n📊 文件大小: ${(backup.size/1024).toFixed(2)} KB\n⏳ 频率策略: 每 ${intervalHours} 小时一次`);
-
-            // TG 每日只发一份异地存档（日期标记文件，pm2 重启也不重发；本地仍每12h滚动24份）
-            // ⚠️ **盖戳必须放在发送成功之后**。原写法无条件盖戳：一发送失败，当天就再也不
-            // 重试，而人只看到"备份完成"的文字 —— 失败被彻底藏起来（13 天没人发现）。
-            const shanghaiDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-            const sentFlag = path.join(BACKUP_DIR, `.tg_sent_${shanghaiDate}`);
-            if (!fs.existsSync(sentFlag)) {
-                try {
-                    await sendTgDocument(backup.filepath, `💾 <b>异地容灾备份</b>\n📦 ${backup.filename}\n📊 ${(backup.size/1024).toFixed(2)} KB`);
-                    fs.writeFileSync(sentFlag, backup.filename);
-                } catch (e) {
-                    // 说清是哪一半坏了：本地这份是好的，坏的是云端那份（且不盖戳 → 下次重试）
-                    console.error('[Backup] 异地存档发送失败:', e.message);
-                    sendTgMessage(`🚨 <b>异地容灾备份发送失败</b>\n本地备份正常（${backup.filename}），但<b>云端那份没送到</b>：\n<code>${e.message}</code>\n12 小时后的下一次会自动重试。`);
-                }
+            // 📎 **文字和文件必须一起走**（2026-10-13 复审反例①，祥哥截图坐实）：
+            // 原来文字**每次无条件发**、文件按 `.tg_sent_<日期>` **每天只发一次** —— 同一天
+            // 第二次跑就只发文字、不发文件，而那个观感与「坏了 13 天」**一模一样**（他在
+            // 截图的 5:06 / 17:06 两条正是如此）。用户没法从 TG 上分辨"设计上今天不发"和
+            // "又坏了"。现在合并成**一条**：看见消息就一定看见文件。
+            const caption = `💾 <b>[系统自检] 自动化容灾备份完成</b>\n📦 <code>${backup.filename}</code>\n📊 ${(backup.size/1024).toFixed(2)} KB\n⏳ 频率策略: 每 ${intervalHours} 小时一次`;
+            try {
+                await sendTgDocument(backup.filepath, caption);
+            } catch (e) {
+                // 说清是哪一半坏了：本地这份是好的，坏的是云端那份。下次跑（12h 后）自动重试。
+                // e.message 是任意文本，塞进 HTML 消息前必须转义，否则含 < & 时告警本身会被 400 拒掉。
+                console.error('[Backup] 异地存档发送失败:', e.message);
+                sendTgMessage(`🚨 <b>异地容灾备份发送失败</b>\n本地备份正常（${backup.filename}），但<b>云端那份没送到</b>：\n<code>${esc(e.message)}</code>\n12 小时后的下一次会自动重试。`);
             }
         }
     } catch (e) {
