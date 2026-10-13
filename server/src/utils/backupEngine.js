@@ -53,18 +53,34 @@ export const autoBackupTask = async () => {
             const backup = await createBackup();
             lastBackupTime = Date.now();
 
-            const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.sql.gz')).sort().reverse();
+            // ⚠️ 保留策略**按文件修改时间**排序，不能按文件名 —— 文件名的时间戳是
+            // `2026_10_13` 这种**不补零**格式，字典序里 '1' < '9'，于是 10 月的名字排到
+            // 所有 9 月文件之后，reverse() 后落在**队尾** = 正是下面循环要 unlink 的那一头：
+            // **每次新建的备份当场被自己删掉**。2026-10-01 → 10-13 本地滚动备份因此
+            // 静默失效 13 天（`ISSUES.md` 🟡）。用 mtime 就不依赖文件名格式。
+            const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.sql.gz'))
+                .map(f => ({ f, t: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs }))
+                .sort((a, b) => b.t - a.t)   // 新的在前
+                .map(x => x.f);
             if (files.length > 24) {
                 for (let i = 24; i < files.length; i++) fs.unlinkSync(path.join(BACKUP_DIR, files[i]));
             }
             sendTgMessage(`💾 <b>[系统自检] 自动化容灾备份完成</b>\n📦 文件名: <code>${backup.filename}</code>\n📊 文件大小: ${(backup.size/1024).toFixed(2)} KB\n⏳ 频率策略: 每 ${intervalHours} 小时一次`);
 
             // TG 每日只发一份异地存档（日期标记文件，pm2 重启也不重发；本地仍每12h滚动24份）
+            // ⚠️ **盖戳必须放在发送成功之后**。原写法无条件盖戳：一发送失败，当天就再也不
+            // 重试，而人只看到"备份完成"的文字 —— 失败被彻底藏起来（13 天没人发现）。
             const shanghaiDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
             const sentFlag = path.join(BACKUP_DIR, `.tg_sent_${shanghaiDate}`);
             if (!fs.existsSync(sentFlag)) {
-                sendTgDocument(backup.filepath, `💾 <b>异地容灾备份</b>\n📦 ${backup.filename}\n📊 ${(backup.size/1024).toFixed(2)} KB`);
-                fs.writeFileSync(sentFlag, backup.filename);
+                try {
+                    await sendTgDocument(backup.filepath, `💾 <b>异地容灾备份</b>\n📦 ${backup.filename}\n📊 ${(backup.size/1024).toFixed(2)} KB`);
+                    fs.writeFileSync(sentFlag, backup.filename);
+                } catch (e) {
+                    // 说清是哪一半坏了：本地这份是好的，坏的是云端那份（且不盖戳 → 下次重试）
+                    console.error('[Backup] 异地存档发送失败:', e.message);
+                    sendTgMessage(`🚨 <b>异地容灾备份发送失败</b>\n本地备份正常（${backup.filename}），但<b>云端那份没送到</b>：\n<code>${e.message}</code>\n12 小时后的下一次会自动重试。`);
+                }
             }
         }
     } catch (e) {
