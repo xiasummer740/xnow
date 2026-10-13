@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { Config } from '../models/index.js';
 import { sendTgMessage, sendTgDocument } from './tgBot.js';
+import { sendBackupEmail } from './email.js';
 
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -81,6 +82,17 @@ export const autoBackupTask = async () => {
                 // e.message 是任意文本，塞进 HTML 消息前必须转义，否则含 < & 时告警本身会被 400 拒掉。
                 console.error('[Backup] 异地存档发送失败:', e.message);
                 sendTgMessage(`🚨 <b>异地容灾备份发送失败</b>\n本地备份正常（${backup.filename}），但<b>云端那份没送到</b>：\n<code>${esc(e.message)}</code>\n12 小时后的下一次会自动重试。`);
+            }
+
+            // 📧 邮件那份异地存档。和 TG **各自独立 try/catch** —— 一条通道挂了不能连累另一条，
+            // 也不能因为 TG 发失败就跳过邮件（反之亦然）。
+            // 收件人取 smtp_email 自发自收：后台「邮件服务 (SMTP)」那四个框就是祥哥要的
+            // 「能自己改邮箱」的地方，换邮箱时 host / email / 授权码 一起改（SMTP 的固有语义）。
+            try {
+                await sendBackupEmail(backup.filepath, backup.filename, backup.size);
+            } catch (e) {
+                console.error('[Backup] 邮件存档发送失败:', e.message);
+                sendTgMessage(`🚨 <b>邮件异地存档发送失败</b>\n本地备份正常（${backup.filename}），但<b>邮件那份没送到</b>：\n<code>${esc(e.message)}</code>\n12 小时后的下一次会自动重试。`);
             }
         }
     } catch (e) {

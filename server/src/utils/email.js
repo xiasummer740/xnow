@@ -93,3 +93,38 @@ export const sendEmailCode = async (toEmail, code) => {
         return { success: false, message: error.message };
     }
 };
+
+// 📎 备份文件走邮件异地存档（2026-10-14，祥哥：「我需要的是备份的文件」+「发邮箱也行」）
+//
+// 和 TG 那份**互为冗余**：任一通道把账号封了/墙了，另一条还在。
+//
+// ⚠️ **故意不复用上面的 sendEmailCode**：那个写死了验证码模板、不支持附件，而且把错误
+// 吞成 `{success:false}` 返回。验证码吞错无所谓（用户会点重发），但备份是**唯一的异地
+// 副本**，「到底送到没有」必须让调用方知道 —— 所以这里任何一步失败都往外抛。
+export const sendBackupEmail = async (filepath, filename, size) => {
+    const allConfigs = await Config.findAll();
+    const cm = {};
+    allConfigs.forEach(c => { if (c.key) cm[String(c.key).toLowerCase().trim()] = c.value; });
+
+    const host = cm['smtp_host'] || 'smtp.qq.com';
+    const port = parseInt(cm['smtp_port']) || 465;
+    const user = cm['smtp_email'];
+    const pass = cm['smtp_pass'];
+    if (!user || !pass) throw new Error('SMTP 未配置：smtp_email / smtp_pass 为空');
+
+    const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465 || port === 587,
+        auth: { user, pass }
+    });
+
+    // 自发自收：文件落到自己的收件箱，VPS 没了它还在
+    await transporter.sendMail({
+        from: `"XNOW 容灾备份" <${user}>`,
+        to: user,
+        subject: `【XNOW 容灾备份】${filename}`,
+        text: `备份文件见附件。\n\n文件名: ${filename}\n大小: ${(size / 1024).toFixed(2)} KB\n时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n这封邮件是系统自动发送的异地容灾存档 —— VPS 若丢失，凭此附件可完整恢复数据。`,
+        attachments: [{ filename, path: filepath }]
+    });
+};
