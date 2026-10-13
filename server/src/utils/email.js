@@ -98,10 +98,16 @@ export const sendEmailCode = async (toEmail, code) => {
 //
 // 和 TG 那份**互为冗余**：任一通道把账号封了/墙了，另一条还在。
 //
+// 2026-10-14 二次改动：参数改成收**一组**附件。因为数据库之外还有一处数据
+// （`data/pending_payments.json`，支付补单队列），它不落在任何一张表里，
+// 只送数据库就会把它漏掉 —— 得跟着一起走。
+//
 // ⚠️ **故意不复用上面的 sendEmailCode**：那个写死了验证码模板、不支持附件，而且把错误
 // 吞成 `{success:false}` 返回。验证码吞错无所谓（用户会点重发），但备份是**唯一的异地
 // 副本**，「到底送到没有」必须让调用方知道 —— 所以这里任何一步失败都往外抛。
-export const sendBackupEmail = async (filepath, filename, size) => {
+//
+// @param attachments [{ filepath, filename, size }, ...] 第一个视为主备份
+export const sendBackupEmail = async (attachments) => {
     const allConfigs = await Config.findAll();
     const cm = {};
     allConfigs.forEach(c => { if (c.key) cm[String(c.key).toLowerCase().trim()] = c.value; });
@@ -119,12 +125,16 @@ export const sendBackupEmail = async (filepath, filename, size) => {
         auth: { user, pass }
     });
 
+    const list = attachments
+        .map(a => `文件名: ${a.filename}    大小: ${(a.size / 1024).toFixed(2)} KB`)
+        .join('\n');
+
     // 自发自收：文件落到自己的收件箱，VPS 没了它还在
     await transporter.sendMail({
         from: `"XNOW 容灾备份" <${user}>`,
         to: user,
-        subject: `【XNOW 容灾备份】${filename}`,
-        text: `备份文件见附件。\n\n文件名: ${filename}\n大小: ${(size / 1024).toFixed(2)} KB\n时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n这封邮件是系统自动发送的异地容灾存档 —— VPS 若丢失，凭此附件可完整恢复数据。`,
-        attachments: [{ filename, path: filepath }]
+        subject: `【XNOW 容灾备份】${attachments[0].filename}`,
+        text: `备份文件见附件。\n\n${list}\n时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n这封邮件是系统自动发送的异地容灾存档 —— VPS 若丢失，凭附件可完整恢复数据。`,
+        attachments: attachments.map(a => ({ filename: a.filename, path: a.filepath }))
     });
 };

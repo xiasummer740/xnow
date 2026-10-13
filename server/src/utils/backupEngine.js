@@ -1,12 +1,22 @@
 import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { Config } from '../models/index.js';
 import { sendTgMessage, sendTgDocument } from './tgBot.js';
 import { sendBackupEmail } from './email.js';
 
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+// 📎 数据库之外还有一处数据：**支付补单队列**（`paymentTracker.js` 读写的这个 JSON 文件，
+//    记录"客户点了付款但还没跟渠道确认完"的单子，用于回调失败时自动补单）。
+//    它**不落在任何一张表里** —— 只备份数据库就会把它整个漏掉，VPS 一没这份补单记录就没了。
+//    所以每次备份**顺带把它一起送出去**。
+//    直接从原位读、**不往备份目录拷副本**：省得再给保留策略添一种文件类型，
+//    也不用动 `.sql.gz` 那套恢复路径。路径与 paymentTracker.js 保持一致。
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PENDING_FILE = path.join(__dirname, '../../data/pending_payments.json');
 
 // 🔒 备份/恢复统一用 bash -o pipefail：任一步骤失败（如 mysqldump 连不上库）
 // 都会让整条管道以非 0 退出，杜绝「gzip 收尾吞错 → 空备份却报成功」的静默失败。
@@ -75,8 +85,18 @@ export const autoBackupTask = async () => {
             // 截图的 5:06 / 17:06 两条正是如此）。用户没法从 TG 上分辨"设计上今天不发"和
             // "又坏了"。现在合并成**一条**：看见消息就一定看见文件。
             const caption = `💾 <b>[系统自检] 自动化容灾备份完成</b>\n📦 <code>${backup.filename}</code>\n📊 ${(backup.size/1024).toFixed(2)} KB\n⏳ 频率策略: 每 ${intervalHours} 小时一次`;
+            // 数据库之外的那份数据（支付补单队列）。**存在才带** —— 全新装的机器上还没这个文件，
+            // 那种情况下不该因为"少一个文件"把整次备份判成失败。
+            const pending = fs.existsSync(PENDING_FILE)
+                ? { filepath: PENDING_FILE, filename: 'pending_payments.json', size: fs.statSync(PENDING_FILE).size }
+                : null;
+            const pendingCaption = pending
+                ? `💾 <b>[系统自检] 支付补单记录</b>（数据库之外的另一份数据）\n📦 <code>pending_payments.json</code>\n📊 ${(pending.size/1024).toFixed(2)} KB`
+                : '';
+
             try {
                 await sendTgDocument(backup.filepath, caption);
+                if (pending) await sendTgDocument(pending.filepath, pendingCaption);
             } catch (e) {
                 // 说清是哪一半坏了：本地这份是好的，坏的是云端那份。下次跑（12h 后）自动重试。
                 // e.message 是任意文本，塞进 HTML 消息前必须转义，否则含 < & 时告警本身会被 400 拒掉。
@@ -89,7 +109,7 @@ export const autoBackupTask = async () => {
             // 收件人取 smtp_email 自发自收：后台「邮件服务 (SMTP)」那四个框就是祥哥要的
             // 「能自己改邮箱」的地方，换邮箱时 host / email / 授权码 一起改（SMTP 的固有语义）。
             try {
-                await sendBackupEmail(backup.filepath, backup.filename, backup.size);
+                await sendBackupEmail(pending ? [backup, pending] : [backup]);
             } catch (e) {
                 console.error('[Backup] 邮件存档发送失败:', e.message);
                 sendTgMessage(`🚨 <b>邮件异地存档发送失败</b>\n本地备份正常（${backup.filename}），但<b>邮件那份没送到</b>：\n<code>${esc(e.message)}</code>\n12 小时后的下一次会自动重试。`);
