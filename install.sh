@@ -127,12 +127,24 @@ if [ -f .env ]; then
   cp .env ".env.bak.$(date +%s)"
 fi
 
+# 🔑 换机恢复**必须把原来那把 JWT_SECRET 带过来**。
+#    它是全部登录凭证的签名密钥：换一把 = 已发出的 token 全部作废 = 全体用户被踢下线重登。
+#    上面那个 `if [ -f .env ]` 只在本机重跑时救得了命；**新机器上没有旧 .env**（.env 被
+#    .gitignore 挡在仓库外），所以只能从外面喂进来，不喂就会随机生成新的一把。
+#    优先级：命令行给的值 > 本机遗留 .env 里的值 > 随机生成。
+#    用法：XNOW_JWT_SECRET=<旧密钥> bash install.sh
+JWT_VALUE="${XNOW_JWT_SECRET:-${OLD_JWT:-}}"
+if [ -z "$JWT_VALUE" ]; then
+  JWT_VALUE=$(openssl rand -hex 32)
+  warn "已生成全新的 JWT_SECRET。若是换机恢复，请改用 XNOW_JWT_SECRET=<旧密钥> bash install.sh 重跑 —— 否则全部用户需要重新登录"
+fi
+
 cat > .env << ENVEOF
 DB_HOST=127.0.0.1
 DB_USER=root
 DB_PASS=$DB_PASS
 DB_NAME=xnow_db
-JWT_SECRET=${OLD_JWT:-$(openssl rand -hex 32)}
+JWT_SECRET=$JWT_VALUE
 PORT=3000
 ENVEOF
 
