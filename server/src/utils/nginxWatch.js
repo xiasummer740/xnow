@@ -95,9 +95,18 @@ const LOG_PATH = process.env.NGINX_ERROR_LOG || '/var/log/nginx/error.log';
 const LEVELS = /\[(emerg|alert|crit)\]/;
 
 // 已知噪声，不是本站故障，不打扰（告警一旦变吵就会被无视，等于没有）：
-//  · SSL_do_handshake 是互联网扫描器撞 443 的握手失败，天天都有
+//  · SSL_do_handshake / SSL_read / SSL_write —— 这三个全是「**外部客户端在 TLS 层
+//    没按规矩说话**」：扫描器撞 443、爬虫拿明文去拍加密端口、说到一半就走人……
+//    nginx 只是记账，它**不可能由本站的代码/配置/数据引起**，静音它们不丢真信号。
+//    数据支撑（2026-10-13 在生产机统计全部轮转日志）：近 14 天 167 条 crit 里
+//    **100% 都是这三个**（164 条 handshake + 2 条 read + 1 条 sigalg），零真故障。
+//    祥哥明确要求别再报这类（2026-10-13：「我不希望再看见，因为我看见以为是真有报错」）。
 //  · conflicting server name 是历史遗留的重复站点配置（见 .claude/TODO.md）
-const NOISE = /SSL_do_handshake\(\) failed|conflicting server name/;
+// ⚠️ 边界：**只静音 SSL 层**，别把别的错误往这个名单里塞。真故障的签名不在这里 ——
+//    例如 2026-09-21 那次腰斩 27 小时的事故是
+//    `open() "/var/lib/nginx/proxy/…" failed (13: Permission denied) while reading upstream`，
+//    它不含 SSL_*() failed，**照报不误**。改本条时已用真实日志行做过对照（见 project-checks.md）。
+const NOISE = /SSL_do_handshake\(\) failed|SSL_read\(\) failed|SSL_write\(\) failed|conflicting server name/;
 
 // 游标存「上次报到最后一行」的内容而不是行号：日志轮转后行号会整体错位，内容比对天然抗轮转。
 //
