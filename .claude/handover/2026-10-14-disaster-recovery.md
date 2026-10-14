@@ -136,6 +136,50 @@ XNOW_JWT_SECRET=<旧密钥> bash install.sh /path/to/xnow_backup_xxx.tar.gz
 
 ---
 
+### 3.3 死锁的**根治**：空库自动建初始管理员（2026-10-15）
+
+3.2 只是**绕开**了死锁 —— 前提是你手上有备份包。**没有备份包的全新站**（比如要开个新站、
+或者备份也一起丢了）仍然是打不开的盒子。2026-10-15 祥哥问到这一点，才查出：**本来有解，
+是自己在安全加固时删掉的**。
+
+| 提交 | 删掉了什么 |
+|---|---|
+| `40892dac` `fix: 安全加固 - 万能验证码/路径穿越/SSL/postMessage` | 注册的万能验证码 `if (code === '666888') return {valid:true}` |
+| `c824db8b` `security: 移除硬编码超管离线口令 super-admin-offline-token` | 影子账户 `admin`/`admin123` → 直接签发超管令牌（`cb20bb3d` 引入） |
+
+**删得对**：本仓库是 PUBLIC，硬编码超管口令等于任何"还没被认领"的实例，
+谁先看到代码谁就能拿最高权限。**但删完没有补替代**，死锁就回来了。
+当时的安全清单还留在 `.claude/PROGRESS.md:87-101`。
+
+**补法（不留代码后门）**：`install.sh` 收尾时若 `users` 表为空 → 建一个**真实的数据库账号**
+`admin` / `admin123`（`super_admin`，余额 99999，凭据也写到 `/root/xnow-initial-admin.txt`）。
+与被删掉的影子账户的区别：
+
+| | 被删的影子账户 | 现在的初始管理员 |
+|---|---|---|
+| 身份来源 | 代码里的 `if (account==='admin' && password==='admin123')` | 数据库里一行真实记录 |
+| 令牌 | 返回硬编码字符串 `super-admin-offline-token`（中间件其实不认，本身是个 bug） | 走正常 `/api/login` 拿真 JWT |
+| 生效范围 | 所有实例，直到出现第一个 admin | 只在该机器空库时创建一次；改密码即失效 |
+| 可覆盖 | 否 | 是：`XNOW_INITIAL_ADMIN_PASS=xxx` |
+
+**实测**（演练机 `87.83.104.229`，2026-10-15）：
+
+- 建号语句：`users` 表的 `created_at`/`updated_at` 是 **NOT NULL 且无默认值**，必须显式写 `NOW()`。
+  少写这两列会 `ERROR 1364: Field 'created_at' doesn't have a default value`
+  —— 网上常见的"6 列"写法在这里一定失败（我实测踩过）。
+- `POST /api/login {"phone":"admin","password":"admin123"}` → 200 + 真 JWT（169 字符）
+- `/api/admin/users` → 200；`/api/user/status` → 200 `{"balance":"999999.00","role":"super_admin"}`
+  （`user.js:15` 本来就有 super_admin 的特判分支 —— 说明这套设计当年就是为冷启动准备的）
+- 经 nginx 再走一遍 → 200
+- 脚本里那段新代码在"与真表结构相同的空表"上跑通：INSERT 成功、`created_at` 有值、
+  `admin123` bcrypt 比对通过；有数据时走"跳过"分支（真库当时 5 个账号 → 一个都没动）
+
+**⚠️ 残留风险**：默认值 `admin123` 写在公开仓库里 → 新站装完到改密码之间是敞口。
+所以新站装完**当天就要登录改密码**；另外 `auth.js` 里"库为空时第一个注册者自动成为管理员"
+（`realUserCount === 0`）那条规则还在，别让陌生人抢注。
+
+---
+
 ## 4. 我踩的坑（接手的人别再踩）
 
 ### 4.1 ⚠️ 测试脚本写到了**生产路径**（本人实际踩中）

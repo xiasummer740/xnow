@@ -29,6 +29,8 @@ read -p "MySQL 密码: " DB_PASS
 #      要发验证码 → 得先在后台配好 SMTP；
 #      而 SMTP 配置本身**存在数据库里**，新机器的库是空的。
 #      于是：登不进、也注册不了，备份包明明在手上却没有任何入口能倒进去。
+#      ✅ 2026-10-15 已解开：脚本收尾时会检测 users 表为空 → 自动建初始管理员
+#         admin / admin123（不留代码后门，登录后改密码即失效）。详见文件末尾「冷启动」一节。
 #    用法：bash install.sh /path/to/xnow_backup_xxx.tar.gz
 BACKUP_ARCHIVE="${1:-}"
 if [ -n "$BACKUP_ARCHIVE" ] && [ ! -f "$BACKUP_ARCHIVE" ]; then
@@ -513,6 +515,45 @@ else
   warn "Nginx 80 端口未响应"
 fi
 
+# ══════════════════════════════════════════════════════
+# 🔑 冷启动：空库时创建初始管理员（账号 admin / 密码 admin123）
+# ══════════════════════════════════════════════════════
+# 为什么必须补这一步：新装的机器本来是个**死锁** ——
+#   注册必须过邮箱验证码 → 发验证码要先配 SMTP → 而 SMTP 配置**存在数据库里**，
+#   新库是空的 → 没账号就进不去后台配它。于是：登不进、也注册不了，
+#   备份包明明在手上，却没有任何入口能倒进去。
+#
+# 历史上这里有过两个硬编码口子：万能验证码 666888、以及影子账户 admin/admin123
+# 直接签发超管令牌。2026 年初的安全加固把它们删了（提交 40892dac / c824db8b）——
+# **删得对**：本仓库是 PUBLIC，硬编码的超管口令等于任何"还没被认领"的实例，
+# 谁先看到代码谁就能拿最高权限。但删完没补替代，死锁就回来了。
+#
+# 这里补的是**不留代码后门**的版本：只在 users 表真的为空时，建一个**真实的数据库账号**。
+# 它不是代码里的万能口令，只是一台机器上的初始凭据 —— 登录后改掉密码即彻底失效。
+# 想换初始密码（推荐）：XNOW_INITIAL_ADMIN_PASS=你的密码 bash install.sh
+INITIAL_ADMIN_PASS=""
+_seed_users=$(mysql -h 127.0.0.1 -u root -p"$DB_PASS" -N -e "SELECT COUNT(*) FROM xnow_db.users;" 2>/dev/null | tr -d '[:space:]' || true)
+if [ -z "$_seed_users" ]; then
+  warn "读不到 users 表（后端可能还没把表建出来），跳过初始管理员创建"
+elif [ "$_seed_users" != "0" ]; then
+  ok "库里已有 $_seed_users 个账号，跳过初始管理员创建"
+else
+  _seed_pass="${XNOW_INITIAL_ADMIN_PASS:-admin123}"
+  _seed_hash=$(cd /var/www/xnow/server && XNOW_SEED_PASS="$_seed_pass" node -e \
+    "import('bcryptjs').then(async b=>{process.stdout.write(await b.default.hash(process.env.XNOW_SEED_PASS,10))})" 2>/dev/null)
+  if [ -z "$_seed_hash" ]; then
+    warn "bcryptjs 不可用，初始管理员未创建 —— 请手工执行（见 README 灾备一节）"
+  elif mysql -h 127.0.0.1 -u root -p"$DB_PASS" xnow_db -e \
+    "INSERT INTO users (id, phone, role, balance, password_hash, api_key, created_at, updated_at) VALUES (1,'admin','super_admin',99999,'$_seed_hash','xnow_init_$(date +%s)',NOW(),NOW());" 2>/dev/null; then
+    INITIAL_ADMIN_PASS="$_seed_pass"
+    printf '%s\n' "XNOW 初始管理员   账号=admin   密码=$INITIAL_ADMIN_PASS   （登录后请立刻改密码）" > /root/xnow-initial-admin.txt
+    chmod 600 /root/xnow-initial-admin.txt
+    ok "初始管理员已创建：账号 admin / 密码 $INITIAL_ADMIN_PASS"
+  else
+    warn "初始管理员创建失败，请手工执行（见 README 灾备一节）"
+  fi
+fi
+
 echo ""
 echo "============================================"
 echo "  部署完成！"
@@ -522,6 +563,13 @@ if [ "$CERT_OK" -eq 1 ]; then
   echo "  SSL: Let's Encrypt (自动续期)"
 else
   echo "  SSL: 自签证书"
+fi
+if [ -n "$INITIAL_ADMIN_PASS" ]; then
+  echo ""
+  echo "  🔑 初始管理员:  账号 admin   密码 $INITIAL_ADMIN_PASS"
+  echo "     ⚠️ 请登录后立刻改密码。默认值 admin123 写在公开代码里，"
+  echo "        改掉之前，任何知道这个默认值的人都能进你的后台。"
+  echo "     （同样内容已存一份在 /root/xnow-initial-admin.txt）"
 fi
 echo "  后端进程: pm2 list"
 echo "  查看日志: pm2 logs xnow-backend"
