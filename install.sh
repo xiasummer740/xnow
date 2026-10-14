@@ -38,13 +38,26 @@ fi
 
 # ── 系统依赖 ──────────────────────────────────────────
 echo "[1/6] 安装系统依赖..."
-apt update -qq
-DEBIAN_FRONTEND=noninteractive apt install -y curl wget git nginx mysql-server > /dev/null 2>&1 || \
-  DEBIAN_FRONTEND=noninteractive apt install -y curl wget git nginx mariadb-server > /dev/null 2>&1
+# ⚠️ 全新 VPS 一开机 unattended-upgrades / apt-daily 往往正在跑并占着 apt 锁。不等待的话
+#    `apt update` 会直接失败，而它下面没有兜底 → set -e 让脚本停在第 1 步，报错还是
+#    "Could not get lock" 这种与真实原因无关的信息。2026-10-14 演练实测：那台机器上有个
+#    8/20 起就卡死的 apt-daily 一直占锁，脚本正是死在这里。
+APT_OPTS="-o DPkg::Lock::Timeout=600"
+apt $APT_OPTS update -qq
+DEBIAN_FRONTEND=noninteractive apt $APT_OPTS install -y curl wget git nginx mysql-server > /dev/null 2>&1 || \
+  DEBIAN_FRONTEND=noninteractive apt $APT_OPTS install -y curl wget git nginx mariadb-server > /dev/null 2>&1
 ok "完成"
 
 # ── Node.js（阿里云镜像，国内快）───────────────────────
-echo "[2/6] 安装 Node.js 18..."
+# ⚠️ 版本下限是 20.19，**不要退回 18**：依赖树里的 htmlparser2@12 是纯 ESM 包，
+#    而 sanitize-html 是 CommonJS，它用 require() 去加载那个 ESM —— 「require(ESM)」
+#    这个能力 Node 18 没有，20.19+ 才有（22.12+ 默认开启，20.19 回移了同一特性）。
+#    Node 18 上的后果不是"告警"而是后端启动即崩：ERR_REQUIRE_ESM，全站不可用。
+#    2026-10-14 整机恢复演练实测（同一份 node_modules，只换 Node）：
+#      v18.20.8 → 崩，3000 端口不监听；v20.20.2 → 正常启动（与生产同版）。
+NODE_FULL="20.20.2"
+NODE_MAJOR="20"
+echo "[2/6] 安装 Node.js ${NODE_MAJOR}..."
 ARCH=$(uname -m)
 NODE_ARCH=""
 [ "$ARCH" = "x86_64" ] && NODE_ARCH="x64"
@@ -52,8 +65,8 @@ NODE_ARCH=""
 
 if command -v node &> /dev/null; then
   NODE_VER=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-  if [ "$NODE_VER" -ne 18 ]; then
-    warn "当前 Node.js v$(node -v | cut -d'v' -f2)，建议 v18，继续使用"
+  if [ "$NODE_VER" -lt "$NODE_MAJOR" ]; then
+    warn "当前 Node.js v$(node -v | cut -d'v' -f2) 低于 v${NODE_MAJOR}，后端可能因 require(ESM) 缺失而起不来"
   fi
   ok "Node.js $(node -v)"
 else
@@ -61,11 +74,11 @@ else
     fail "不支持的架构: $ARCH"
     exit 1
   fi
-  curl -fsSL "https://mirrors.aliyun.com/nodejs-release/v18.20.8/node-v18.20.8-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz
+  curl -fsSL "https://mirrors.aliyun.com/nodejs-release/v${NODE_FULL}/node-v${NODE_FULL}-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz
   tar -xf /tmp/node.tar.xz -C /usr/local/
-  ln -sf /usr/local/node-v18.20.8-linux-${NODE_ARCH}/bin/* /usr/local/bin/
+  ln -sf /usr/local/node-v${NODE_FULL}-linux-${NODE_ARCH}/bin/* /usr/local/bin/
   rm -f /tmp/node.tar.xz
-  ok "Node.js v18.20.8"
+  ok "Node.js v${NODE_FULL}"
 fi
 
 # 安装 / 确保 PM2 可用
@@ -73,7 +86,7 @@ if ! command -v pm2 &> /dev/null; then
   npm install -g pm2 2>&1 | tail -1 || true
   # 如果 pm2 还没在 PATH 里，创建软链接
   if ! command -v pm2 &> /dev/null; then
-    PM2_BIN="$(npm root -g 2>/dev/null)/../bin/pm2"
+    PM2_BIN="$(npm root -g 2>/dev/null)/../../bin/pm2"
     [ -f "$PM2_BIN" ] && ln -sf "$PM2_BIN" /usr/local/bin/pm2
   fi
 fi
@@ -98,22 +111,38 @@ systemctl list-units --type=service --all 2>/dev/null | grep -qE 'mysql|mariadb'
   systemctl start $(systemctl list-units --type=service --all 2>/dev/null | grep -oE 'mysql|mariadb' | head -1) 2>/dev/null || true
 systemctl enable mysql 2>/dev/null || systemctl enable mariadb 2>/dev/null || true
 
-# 建库（先用密码试，失败再用无密码；双保险）
+# ── 建库 + 设置 root 密码 ──────────────────────────────
+# ⚠️ 这里有两个坑，2026-10-14 整机恢复演练实测踩过，别再踩：
+#  ① 不能拿 socket 连接去"验证密码对不对"：Debian/MariaDB 的 root@localhost 同时挂着
+#     unix_socket 插件（auth_or），走 socket 时它**无视密码、恒成功**。拿它当判据会误判成
+#     "密码已经OK"，于是真正设密码的语句永远不执行。
+#  ② MySQL 与 MariaDB 设密码语法不同，MariaDB 不认 `IDENTIFIED WITH … BY …`。生产是
+#     Ubuntu+MySQL 所以没暴露；新机器 apt 装到的是 mariadb-server，必然暴露。若这句再带
+#     `|| true`，失败会被**静默**吞掉，最后表现为"还原失败""后端连不上库"，排查方向被彻底带偏
+#     （真因是密码压根没设上）。
+#  验证必须用**后端真正会走的那条路**：TCP(127.0.0.1) + 密码。socket 能过 ≠ 后端能连。
 DB_OK=0
-if mysql -u root -p"$DB_PASS" -e "SELECT 1" &>/dev/null; then
-  mysql -u root -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-  mysql -u root -p"$DB_PASS" -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;" 2>/dev/null || true
-  DB_OK=1
-elif mysql -u root -e "SELECT 1" &>/dev/null; then
+if mysql -u root -e "SELECT 1" &>/dev/null; then
   mysql -u root -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-  mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;"
+  if mysql -u root -e "SELECT VERSION();" 2>/dev/null | grep -qi mariadb; then
+    mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('$DB_PASS'); FLUSH PRIVILEGES;"
+  else
+    mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS'; FLUSH PRIVILEGES;"
+  fi
+elif mysql -u root -p"$DB_PASS" -e "SELECT 1" &>/dev/null; then
+  mysql -u root -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS xnow_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+fi
+
+# 用 TCP + 密码验证 —— 后端就是这么连库的，这才是有意义的判据
+if mysql -h 127.0.0.1 -u root -p"$DB_PASS" xnow_db -e "SELECT 1" &>/dev/null; then
   DB_OK=1
 fi
 
 if [ "$DB_OK" -eq 1 ]; then
   ok "MySQL"
 else
-  fail "MySQL 配置失败，请检查服务状态后重试"
+  fail "MySQL 配置失败：TCP 连不上库（后端走的也是这条，必须先修好）"
+  warn "自查：mysql -h 127.0.0.1 -u root -p<密码> xnow_db -e 'SELECT 1'"
   exit 1
 fi
 
@@ -358,7 +387,7 @@ server {
     client_max_body_size 100M;
 
     # ══ Cloudflare 真实客户端 IP 还原 ══════════════════════════════════
-    # 站点挂在 Cloudflare 后面时必配。少了这段，$remote_addr 拿到的是 CF 边缘 IP：
+    # 站点挂在 Cloudflare 后面时必配。少了这段，\$remote_addr 拿到的是 CF 边缘 IP：
     # 按 IP 拉黑会误封整片用户、注册/登录 IP 全是机房地址、限流配额被整条边缘共享。
     # set_real_ip_from 是白名单：只有【从 CF 机房来的连接】才采信它给的客户端 IP，
     # 其他人直连源站伪造 CF-Connecting-IP 头不生效（已实测验证）。
@@ -469,8 +498,13 @@ else
 fi
 
 # 检查 Nginx
-if curl -sf -o /dev/null "http://127.0.0.1" 2>/dev/null; then
-  ok "Nginx 80 端口正常"
+# ⚠️ 别用 `curl -sf http://127.0.0.1` 直接探：不带 Host 头时请求会落到本脚本自己创建的
+#    ACME 兜底块（server_name _ + location / { return 404; }），404 会被 -f 判成失败，
+#    于是每次装完都打印一条 "Nginx 80 端口未响应" 的假告警。带上 Host 并按"有响应即算活"
+#    判断，与上面后端那条保持一致口径（301 跳转也是正常活着的表现）。
+NGINX_HTTP=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" "http://127.0.0.1" 2>/dev/null || echo "000")
+if [ "$NGINX_HTTP" != "000" ]; then
+  ok "Nginx 80 端口正常 (HTTP $NGINX_HTTP)"
 else
   warn "Nginx 80 端口未响应"
 fi
