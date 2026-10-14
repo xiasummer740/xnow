@@ -4,6 +4,7 @@
 
 | 日期 | 文件 | 一句话 |
 |------|------|--------|
+| 2026-10-14 | [disaster-recovery.md](2026-10-14-disaster-recovery.md) | **整机灾备**：换机会把全体用户踢下线（`JWT_SECRET` 被随机换掉）+ 新机器是个**死锁**（注册要验证码→验证码要 SMTP→SMTP 在空库里，导致网页「一键还原」够不着）。两处都已修并各自验证。⚠️ **但没做过真实整机演练** —— 接手第一件事就是它 |
 | 2026-09-21 | [nginx-truncated-response.md](2026-09-21-nginx-truncated-response.md) | 下单页「服务加载失败/网络异常」真凶是 **nginx 临时目录属主错位**（`nobody` vs `www-data`）→ 大响应被腰斩成半截 200。祥哥确认恢复后**已杜绝**：结构层 `proxy_max_temp_file_size 0`（腰斩不可能）+ 属主自愈巡检 + error.log 告警。实测故障态下 3/3 完整（原 5/5 断裂） |
 | 2026-09-19 | [login-401-flapping.md](2026-09-19-login-401-flapping.md) | 登录态反复弹窗：根因**已复现**（缓存里的旧令牌覆盖刚登录的新令牌）+ 修复 `index-tUWPgOd3.js` 已上线，祥哥真机确认 + 连续 3 小时零复发。**已结案** |
 | 2026-09-11 | [security-audit-batch1.md](2026-09-11-security-audit-batch1.md) | 全站安全审计 + 第一批 6 项后端修复。**已于 09-20 全部上线**（曾被「生产走 CF 未配 real_ip」卡住，real_ip 已补） |
