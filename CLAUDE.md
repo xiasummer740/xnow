@@ -45,7 +45,15 @@ bash install.sh    # 裸机引导部署（环境 + 数据库 + Nginx + SSL）
 - 部署相关见 xiangge-env `CLAUDE.reference.md` 部署清单
 - 🔴 **服务器上手工改过的配置，必须同步回 `install.sh` 模板** —— 否则以后重装又退回旧样。
   先例：Cloudflare 真实 IP 还原（22 条 `set_real_ip_from`）就是这么补回去的（提交 `353315bd`）。
-  ⚠️ **已知漏网**：`/etc/nginx/sites-enabled/` 下 4 个文件 —— `xnow-http-redirect` /
-  `xnow-https` / `xnow-spa` / `xnow-spa-https` —— **不在仓库里、也没有软链**，机器一挂就丢。
-  详见 `.claude/handover/2026-10-14-disaster-recovery.md` §6
+  第二例（2026-10-14 整机演练时发现）：模板里的 `try_files` 漏了 `$uri.html`，
+  会让 `/finance`、`/vpn`、`/en` 静默塌成 SPA 首页（HTTP 仍 200，只是内容全错）。已补。
+  ✅ **nginx 那 4 个文件的漏网已处理**（2026-10-14）：属于本项目的 3 个存档在
+  `deploy/nginx/production/`（sha256 与线上逐字节一致）。
+  ⚠️ **但第 4 个 `xnow-https` 根本不属于本项目** —— 它转发到 `127.0.0.1:8000` 的 uvicorn，
+  属于同机的另一个项目（`xnow-flow`／「XNOW 云控系统」，对外 `tk7188.com`）。
+  🔴 **而 `tk7188.com` 正是 xnow 同步数据的「上游」，就在同一台机器上、不在本项目备份范围内。**
+  换机后 xnow 会正常启动但上游不存在，服务同步会失败。
+  详见 `deploy/nginx/README.md` 与 `.claude/handover/2026-10-14-machine-drill-result.md` §10。
+- ⚠️ **Cloudflare 的 SSL 模式不要改成 Full (strict)**：源站证书是自签（`CN=IP`），
+  靠 CF 接受自签才对外可用，改 strict 会立刻全站 502。
 - ⚠️ **`ISSUES.md` 被 gitignore（仓库是 PUBLIC），永远不要 push 它**

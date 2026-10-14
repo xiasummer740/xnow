@@ -16,6 +16,7 @@
 | **数据能不能完整搬过去？** | **能。** 12 张表逐表一致；唯一差异是备份之后生产上真实新增的那 1 条访问记录。 |
 | **照现在的文档跑 `install.sh` 能救回来吗？** | **❌ 不能。** 见 §3，**不管装在哪台机器上（Debian 还是 Ubuntu）都装不出一个能用的站点**。 |
 | **修完这 5 处之后呢？** | **✅ 能。** §4 是全自动一次跑通的结果，装完即用，老 token 直接放行。 |
+| **换机会丢别的吗？** | **会，而且已找到 4 处。** `install.sh` 的 `try_files` 漏了 `$uri.html`（`/finance` `/vpn` `/en` 会塌成首页）、3 个页面只躺在服务器 `dist/` 里、生产的 nginx 配置不在仓库。**都已在 §10 修掉。** |
 
 ⚠️ 这条最要紧：**文档原来写的"灾备已修好并验证"，验证的是"代码逻辑正确"，
 不是"照文档能救回来"。** 两者的差别就是这次演练的全部价值 —— 真要出事那天才发现，就太晚了。
@@ -186,11 +187,14 @@ npm error A complete log of this run can be found in: /root/.npm/_logs/…
 
 ## 6. 遗留问题（本次没动的）
 
-1. 🔴 **生产上 4 个 nginx 文件不在仓库里、也没有软链** ——
-   `/etc/nginx/sites-enabled/` 下的 `xnow-http-redirect` / `xnow-https` / `xnow-spa` / `xnow-spa-https`。
-   本次已再次确认它们是**普通文件**（mtime 2026-08-01 ~ 09-20），机器一挂就丢。
-   而 `install.sh` 生成的是**另一套**（单文件 `/etc/nginx/sites-available/xnow` + 软链）——
-   也就是说**即使脚本跑通，nginx 这层也和现在生产不完全一样**。详见 `2026-10-14-disaster-recovery.md` §6。
+1. ✅ **已处理（但结论与原来写的不同）**：生产上那 4 个 nginx 文件——
+   本次逐字取回来核对后发现，**`xnow-https` 根本不属于本项目**（它转发到 `127.0.0.1:8000`
+   的 uvicorn，属于同机的另一个项目 `xnow-flow`／「XNOW 云控系统」）。
+   已把属于 xnow 的 3 个存档进 `deploy/nginx/production/`（sha256 与线上逐字节一致），
+   并在 `deploy/nginx/README.md` 里写清了两个项目共用一台机器这件事。详见 §10。
+   🔴 **由此暴露一个更严重的缺口：`tk7188.com` 正是 xnow 同步数据的「上游」，
+   而它和 xnow 跑在同一台机器上、不在本仓库也不在本项目的备份包里 ——
+   换机后 xnow 会正常启动，但上游不存在，服务同步会失败。换机前必须先问清上游谁负责恢复。**
 2. **生产 `/var/www/xnow` HEAD = `3d57a90f`，与仓库 HEAD 不一致** —— 生产没跟到最新提交。
    要确认是"故意不跟"还是"忘了拉"。
 3. **Node 版本漂移**：生产 v20.20.2、脚本原来装 v18。补丁已让脚本装 20.20.2，但**生产是怎么升到 20 的？**
@@ -233,3 +237,115 @@ npm error A complete log of this run can be found in: /root/.npm/_logs/…
 | **孤儿 node 进程霸占 3000 端口** | 新后端绑不上端口 → `EADDRINUSE` 崩溃循环，而 `pm2 list` 仍显示 `online`。**验收前必须确认"监听端口的 pid == pm2 管的 pid"。** |
 | **机器 IPv6 不通但地址和默认路由都在** | Node 18/20 默认先试 IPv6 → `npm install` **无报错地永久挂起**（`curl` 走 IPv4 所以看起来一切正常）。同一根因还让 `apt-daily` 从 8/20 卡到现在，占着 apt 锁。**排查法**：`node -e "https.get(...)"` 对比 `curl`。 |
 | **`ps aux \| grep … \| awk '{print $11}'` 经 PowerShell 传远端** | `$` 被 PowerShell 吃掉 → awk 语法错 → 管道输出**整体消失**，于是"没看到进程"被误读成"没有进程"。**诊断脚本一律写成文件传上去跑。** |
+| **我在排查时又踩了一次同一个坑** | 写 `echo "…（$uri.html 的实际用途）"` —— 双引号里 `$uri` 被展开，`set -u` 直接报 `uri: unbound variable`。**和 `install.sh` 缺陷 #5 是同一个坑**，说明这条极容易复发：**凡是在双引号里提到带 `$` 的 nginx/模板变量，一律单引号或转义。** |
+
+---
+
+## 10. 延伸发现：**换机就丢的东西**（都已修）
+
+演练的目标是"能不能恢复"，过程中顺带发现一串"**即使 `install.sh` 跑通也会丢**"的东西。
+这些不属于演练本身，但同属灾备，一并处理了。
+
+### 10.1 `try_files` 漏了 `$uri.html`（真回归，必修）
+
+生产是 `try_files $uri $uri.html $uri/ /index.html;`，而 `install.sh` 生成的模板
+漏了中间那个 `$uri.html`。看着无关紧要，实际不是 —— `client/public/` 下除 `index.html`
+外还有 `404.html` / `finance.html` 等，Vite 会把 `public/*` 原样拷进 `dist/`，
+**靠 `$uri.html` 才能让 `/finance`、`/vpn`、`/en` 命中各自页面**。
+
+带 Host 直连生产 443 实测（2026-10-14）：
+
+```
+/finance       HTTP 200  <title>XNOW 财务大盘预览</title>
+/vpn           HTTP 200  <title>XNOW 全球安全节点 - 高速稳定线路 · 多协议多端接入</title>
+/en            HTTP 200  <title>Buy TikTok Followers &amp; Social Media Growth - XNOW PRO SMM Panel</title>
+/404.html      HTTP 200  <title>404 - 页面未找到 | XNOW</title>
+```
+
+少了它，这些路径会**静默塌成 SPA 首页**：HTTP 仍然是 200，只是内容全错 ——
+是最难被发现的那种故障。**已修**（`install.sh`），并在演练机上跑了**第 4 轮复验**。
+
+**第 4 轮复验结果**（把机器清回接近全新 → 重跑整套 `install.sh` → 经 nginx 挨个访问）：
+
+```
+A. 生成的 nginx 配置： try_files $uri $uri.html $uri/ /index.html;     ✓ 修复在
+B. dist 里的 .html   ： 404/en/finance/google…/index/vpn  共 6 个       ✓ 新入仓的 3 个被构建带出来了
+
+C.【核心】每个路径是否命中自己的页面（若 $uri.html 缺失，后 3 个会变成首页标题）
+  /          HTTP 200  <title>XNOW PRO - TikTok涨粉/IG涨粉/YouTube订阅 全网底价社媒增长平台</title>
+  /finance   HTTP 200  <title>XNOW 财务大盘预览</title>                          ← ✅ 自己的
+  /vpn       HTTP 200  <title>XNOW 全球安全节点 - 高速稳定线路 · 多协议多端接入</title>  ← ✅ 自己的
+  /en        HTTP 200  <title>Buy TikTok Followers &amp; Social Media Growth …</title> ← ✅ 自己的
+  /404.html  HTTP 200  <title>404 - 页面未找到 | XNOW</title>                      ← ✅ 自己的
+
+D. 老 token 免登（接口 /api/user/status）
+  admin(uid=1)  直连 → 200      user(uid=4900) 直连 → 200
+  无 token → 401                伪造签名 → 401
+  admin 经 nginx(443) → 200     user 经 nginx(443) → 200
+  返回内容（证明不是空壳 200）：
+  {"status":"success","balance":"99974.769700","role":"admin","api_key":"xnow_…","phone":"…","email":"…"}
+
+E. 后端： restarts 0、只有一个 app.js 进程、监听 3000 的 pid 就是 pm2 那个
+F. 行数： users 4 / orders 11 / services 2887 / configs 27 / page_views 284 …
+G. 隔离： 8 个键全空、补单记录 []
+H. 同时确认假告警已消失： ✓ Nginx 80 端口正常 (HTTP 301)
+```
+
+**这一轮里 `[1/6]`~`[6/6]` 全绿，无任何人工帮助。**
+
+### 10.2 3 个页面只躺在服务器的 `dist/` 里
+
+生产 `client/dist/` 里有、而当时仓库和 `client/public/` 都没有的：
+
+| 文件 | 作用 | 丢了会怎样 |
+|---|---|---|
+| `vpn.html` | `/vpn` 页面（`XNOW 全球安全节点`）| 这个页面消失 |
+| `en.html` | `/en` 英文落地页 | 英文流量落地页消失 |
+| `google9e165c63d6e32363.html` | Google Search Console 站点验证 | **Google 搜索权益可能失效** |
+
+`dist/` 被 gitignore，所以换机就丢。**已放进 `client/public/`**，从此由构建自动产出。
+
+### 10.3 生产的 nginx 配置不在仓库（且其中一个不是我们的）
+
+`/etc/nginx/sites-enabled/` 下 4 个文件，机器一挂就丢。逐字取回来核对后：
+
+| 文件 | 归属 | 处理 |
+|---|---|---|
+| `xnow-http-redirect` | 通用（80 全站 301）| ✅ 已存档 |
+| `xnow-spa` | xnow（`127.0.0.1:8080` 回环入口，**疑似闲置**，日志零命中）| ✅ 已存档 |
+| `xnow-spa-https` | **xnow 的对外正式入口**（`server_name xnow.taikon.top`）| ✅ 已存档 |
+| `xnow-https` | ❌ **另一个项目**（`xnow-flow`，uvicorn:8000）| 故意**不收**进本仓库 |
+
+存档位置 `deploy/nginx/production/`，三个文件的 **sha256 与线上逐字节一致**（已核对）。
+`deploy/nginx/README.md` 里写了为什么没有把 `install.sh` 改成"逐字复制生产那套"：
+生产的证书是**自签 `CN=IP`、靠 Cloudflare 才对外可用**，而且它的 80 端口块
+**没有 ACME 验证路径**（这正是它只能用自签证书的原因）。照抄会把安装器**改坏**。
+`install.sh` 现在生成的版本功能等价或更好，差异已逐项列在该 README 里。
+
+### 10.4 🔴 这台机器上跑着两个项目，而 xnow 的上游就在同一台机器上
+
+| | 本项目 | 同机的另一个项目 |
+|---|---|---|
+| 名字 | **XNOW PRO**（本仓库）| **XNOW 云控系统**（`xnow-flow`）|
+| 域名 | `xnow.taikon.top` | `tk7188.com` + 裸 IP `192.129.210.52` |
+| 首页 title | `XNOW PRO - TikTok涨粉…` | `XNOW 云控系统` |
+| 技术栈 | Node/Express + Vue，pm2 名 `xnow-backend`，端口 3000 | Python `uvicorn`（`/opt/xnow-flow`，含 `auth.py`/`Config.plist`），端口 8000 |
+| 进程管理 | pm2 | systemd 单元 `xnow-backend.service`（**与 pm2 应用名撞车，排查时极易混淆**）|
+
+**而 `tk7188.com` 正是 xnow 同步数据的「上游」**（备份包里的 `configs.upstream_url`）。
+
+> 🔴 所以：**照本仓库的灾备恢复完 xnow，xnow 会正常启动，但它的上游不存在 → 服务同步会失败。**
+> 本仓库的备份**只覆盖 xnow**。换机前必须先问清：上游那个项目谁负责恢复、它的备份在哪。
+
+另外：这台机器的 `client/dist/` 里 `index.html` 与 `google*.html` 属主是 `root`，
+其余是 `197108`（另一个项目/另一个 uid） —— 说明这机器上的文件是**多个来源混着放**的，
+以后动这台机器要注意别只看一个项目的视角。
+
+### 10.5 顺带确认的既有事实
+
+- **`client/dist/index.html` 是被强制跟踪的**（`git ls-files` 可见），而 `dist/` 整体被 gitignore
+  —— 与 CLAUDE.md 里那条"动 VPS 前先比对 `client/dist/index.html`，`git pull` 会把线上前端打回旧包"一致。
+  ⚠️ 判据要用 `git diff HEAD`，**别比 md5**（CRLF 假红）。
+- 生产 `/etc/nginx/conf.d/` 里**只有** `00-proxy-buffer.conf`（`proxy_max_temp_file_size 0`），
+  是 `install.sh` 生成的、治"大响应被静默腰斩"的那条 —— 说明它在线上。
+  而 `install.sh` 还会生成 `00-acme-challenge.conf`，**生产上没有**（因为生产没用 ACME）。
