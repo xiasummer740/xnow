@@ -14,10 +14,15 @@
 | # | 读物 | 看什么 |
 |---|------|--------|
 | 1 | `README.md` | 项目是什么、怎么部署、**怎么灾备换机**（第 4、5 节） |
-| 2 | `.claude/TODO.md` | **现在停在哪**、下一步做什么、高危操作提醒 |
+| 2 | `.claude/TODO.md` | **现在停在哪**、下一步做什么、高危操作提醒。⚠️ 这个文件**不在 git 里**（见下方说明），拿整包文件夹才有；只有 git clone 的话直接看下一行的 handover |
 | 3 | `.claude/handover/INDEX.md` | 功能级接力笔记索引，按要做的功能挑相关的看 |
 | 4 | `.claude/PROGRESS.md` | 跨会话完整时间线（很长，按需搜不要通读） |
 | 5 | `ISSUES.md` | 已知未修问题。⚠️ **被 gitignore，因为仓库是 PUBLIC，永远不要 push 它** |
+
+> **为什么 `.claude/TODO.md` 不在 git 里**：`.gitignore:105` 有一条 `.claude/todo.md`，
+> 本意是忽略某个工具产物；Windows 大小写不敏感，把大写的 `TODO.md` 一起忽略了
+> （Linux 上不会）。**不是有意排除的**。目前维持现状 —— 它含 VPS IP、`/root/` 回滚路径等
+> 运维细节，而这个仓库是 PUBLIC。**整包交接文件夹时它在；`git clone` 时不在。**
 
 ## 目录
 
