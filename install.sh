@@ -19,6 +19,23 @@ fail(){ echo -e "  ${RED}✗${NC} $1"; }
 read -p "域名 (如 xnow.example.com): " DOMAIN
 read -p "MySQL 密码: " DB_PASS
 
+# 🔄 可选参数：备份包路径。**换机灾备**时用 —— 装完直接把数据灌进去。
+#    不传这个参数 = 全新空站，行为和以前完全一样。
+#
+#    为什么需要它：新装好的机器是个**死锁** ——
+#      要进【数据灾备中心】上传备份 → 得先是管理员；
+#      要当管理员 → 得是第一个注册的账号（空库时自动成为管理员）；
+#      要注册 → 得有邮箱验证码；
+#      要发验证码 → 得先在后台配好 SMTP；
+#      而 SMTP 配置本身**存在数据库里**，新机器的库是空的。
+#      于是：登不进、也注册不了，备份包明明在手上却没有任何入口能倒进去。
+#    用法：bash install.sh /path/to/xnow_backup_xxx.tar.gz
+BACKUP_ARCHIVE="${1:-}"
+if [ -n "$BACKUP_ARCHIVE" ] && [ ! -f "$BACKUP_ARCHIVE" ]; then
+  fail "找不到备份包: $BACKUP_ARCHIVE"
+  exit 1
+fi
+
 # ── 系统依赖 ──────────────────────────────────────────
 echo "[1/6] 安装系统依赖..."
 apt update -qq
@@ -147,6 +164,45 @@ DB_NAME=xnow_db
 JWT_SECRET=$JWT_VALUE
 PORT=3000
 ENVEOF
+
+# ── 可选：装完即恢复 ──────────────────────────────────
+# 放在这里（.env 已写好、后端还没启动）是有意的：后端第一次起来时
+# `sequelize.sync({ alter: false })` 会补建缺的表/配置项，但它看到表已存在就只做增量，
+# 不会去动我们刚灌进去的数据。反过来若先启动后端，空库会先被建出一套空表。
+if [ -n "$BACKUP_ARCHIVE" ]; then
+  echo "[5.5/6] 灌入备份数据..."
+
+  # 🚦 闸门：**只在空库时**才自动灌。本脚本可以重复执行，重跑时库里可能已经有真实数据，
+  #    无脑覆盖 = 把数据抹掉且不可逆 —— 这是整个脚本唯一会毁数据的地方，必须挡死。
+  TABLE_COUNT=$(mysql -h 127.0.0.1 -u root -p"$DB_PASS" -N -e \
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='xnow_db';" \
+    2>/dev/null | tr -d '[:space:]' || true)
+  if [ -z "$TABLE_COUNT" ]; then TABLE_COUNT=0; fi
+
+  if [ "$TABLE_COUNT" != "0" ]; then
+    fail "xnow_db 里已有 $TABLE_COUNT 张表，拒绝自动灌入（防止覆盖现有数据）"
+    warn "已跳过恢复。装完后请在网页【数据灾备中心】里上传还原。"
+  else
+    RS_TMP=$(mktemp -d)
+    if tar xzf "$BACKUP_ARCHIVE" -C "$RS_TMP" 2>/dev/null && [ -f "$RS_TMP/xnow_db.sql" ]; then
+      if mysql -h 127.0.0.1 -u root -p"$DB_PASS" xnow_db < "$RS_TMP/xnow_db.sql" 2>/dev/null; then
+        ok "数据库已还原 —— 用你**原来的账号密码**登录即可，不需要注册"
+      else
+        fail "数据库还原失败。网站会以空库启动，请改用网页【数据灾备中心】重新上传。"
+      fi
+      # 补单记录不落在任何一张表里，上面那条 mysql 带不回来，得单独放回原位
+      # （新机器上 server/data/ 还不存在，必须自己建目录）
+      if [ -f "$RS_TMP/pending_payments.json" ]; then
+        mkdir -p /var/www/xnow/server/data
+        cp "$RS_TMP/pending_payments.json" /var/www/xnow/server/data/pending_payments.json
+        ok "支付补单记录已还原"
+      fi
+    else
+      fail "解包失败、或包里没有 xnow_db.sql —— 不是本系统产出的备份，已跳过恢复"
+    fi
+    rm -rf "$RS_TMP"
+  fi
+fi
 
 npm install
 
