@@ -443,7 +443,11 @@ server {
         # 而旧页面指向旧代码包 —— 表现为「服务器上是新包，用户端毫无变化」。
         # no-cache 不是不缓存，是「用之前先问服务器有没有变」，没变回 304，变了回 200。
         add_header Cache-Control "no-cache";
-        try_files \$uri \$uri/ /index.html;
+        # ⚠️ 中间这个 \$uri.html 不能省！client/public/ 下除 index.html 外还有
+        # 404.html / finance.html（以及必须补进 public 的 vpn.html / en.html / Google 验证文件），
+        # Vite 会把它们原样拷进 dist/，靠 \$uri.html 才能让 /finance、/vpn、/en 命中各自页面。
+        # 少了它，这些路径会静默塌成 SPA 首页 —— HTTP 仍 200，但页面内容全错（实测过）。
+        try_files \$uri \$uri.html \$uri/ /index.html;
     }
 }
 NGXEOF
