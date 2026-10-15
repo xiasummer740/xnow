@@ -162,7 +162,7 @@ XNOW_JWT_SECRET=<旧密钥> bash install.sh /path/to/xnow_backup_xxx.tar.gz
 | 生效范围 | 所有实例，直到出现第一个 admin | 只在该机器空库时创建一次；改密码即失效 |
 | 可覆盖 | 否 | 是：`XNOW_INITIAL_ADMIN_PASS=xxx` |
 
-**实测**（演练机 `87.83.104.229`，2026-10-15）：
+**实测**（演练机，2026-10-15）：
 
 - 建号语句：`users` 表的 `created_at`/`updated_at` 是 **NOT NULL 且无默认值**，必须显式写 `NOW()`。
   少写这两列会 `ERROR 1364: Field 'created_at' doesn't have a default value`

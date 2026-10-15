@@ -27,7 +27,7 @@
 
 | 项 | 值 |
 |---|---|
-| 演练机 | `87.83.104.229`（Debian 12 / systemd 252 / **1 核 725MB 内存 4.8G 盘**） |
+| 演练机 | 一台临时 VPS（**IP 已隐去**）（Debian 12 / systemd 252 / **1 核 725MB 内存 4.8G 盘**） |
 | 生产 | Ubuntu 20.04 + MySQL + Node **v20.20.2**（`/var/www/xnow` HEAD `3d57a90f`） |
 | 用的备份 | `xnow_backup_2026_10_14_12_39_19.tar.gz`（sha256 `22381f98…`，内含 `xnow_db.sql` 768906B + `pending_payments.json`） |
 | 密钥 | 从 vault 取出，sha256 `4d0ec885…`，**与生产 `.env` 逐位相同** |
