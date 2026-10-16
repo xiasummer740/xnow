@@ -107,6 +107,11 @@ nul
 .claude/_tmp_services.json
 client/.claude/startup-status.json
 client/public/.claude/
+client/src/.claude/startup-status.json
+server/src/.claude/startup-status.json
+# 误放进 src/ 的 MCP 模板（模板本身写着「复制到项目根目录 .mcp.json 才生效」，不该躺在 src/ 里）
+client/src/.mcp.json
+server/src/.mcp.json
 
 # logo 设计工作区（源文件+预览图，本地归档不入库）
 .claude/logo-src/

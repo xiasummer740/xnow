@@ -54,6 +54,8 @@ bash install.sh    # 裸机引导部署（环境 + 数据库 + Nginx + SSL）
   🔴 **而 `tk7188.com` 正是 xnow 同步数据的「上游」，就在同一台机器上、不在本项目备份范围内。**
   换机后 xnow 会正常启动但上游不存在，服务同步会失败。
   详见 `deploy/nginx/README.md` 与 `.claude/handover/2026-10-14-machine-drill-result.md` §10。
+  ✅ **2026-10-15 祥哥定调**：「上游需要备份干嘛，我知道上有信息 你不用操心」——
+  **上游的备份与恢复责任不归我们，别再问、也别再提**（已记入 `.claude/TODO.md` 的「不用做」清单）。
 - ⚠️ **Cloudflare 的 SSL 模式不要改成 Full (strict)**：源站证书是自签（`CN=IP`），
   靠 CF 接受自签才对外可用，改 strict 会立刻全站 502。
 - ⚠️ **`ISSUES.md` 被 gitignore（仓库是 PUBLIC），永远不要 push 它**
