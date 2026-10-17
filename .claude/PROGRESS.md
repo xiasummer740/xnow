@@ -1402,3 +1402,20 @@ POST /api/login {admin, admin123} → 200 + 真 JWT（id=1, role=super_admin）
 - 复检里加了一条**外网**探测（`https://xnow.taikon.top/api/public/config`）——
   **本地 200 不代表用户能访问**（CF/回源那一层可能坏）
 - **实测**：`WATCHDOG_TEST=1` → `TG 告警已发送` + `MAIL_OK` + `邮件告警已发送 -> 464844409@qq.com` ✓
+
+### 当日收工状态（2026-10-17 05:05，祥哥「今天先做到这」）
+
+| 项 | 状态 |
+|---|---|
+| 后端 | `xnow-backend` online，健康检查本地 200 |
+| 外网（经 CF） | `/api/public/config` **200**、首页 **200** |
+| 开机自启 | `pm2-root` **enabled**（今天才补上） |
+| 看门狗 | `xnow-watchdog.timer` **active**，双通道告警实测通过 |
+| 厂商 agent | `nezha-agent` **disabled** |
+| 数据 | users=4 / orders=11 / services=2880 / configs=27，磁盘 48% |
+
+**唯一没办成的一件：外部监控（UptimeRobot）** —— 祥哥注册时页面正常加载，但提交返回
+`Error signing up / 503`，`Send me a magic link` 同样 503。判断是**机房/代理出口 IP 触发其反欺诈风控**
+（页面静态资源不受影响，提交账号信息即被挡）。留给下次：手机 4G/5G 流量重试，或换
+BetterStack / healthchecks.io。**探针基线已记：`grep -c -i uptimerobot` = 0**，建成后应 > 0 且打在
+`/api/public/config`（若打在首页说明地址填错，等于没监控）。
