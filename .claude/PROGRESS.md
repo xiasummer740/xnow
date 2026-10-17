@@ -1330,3 +1330,46 @@ POST /api/login {admin, admin123} → 200 + 真 JWT（id=1, role=super_admin）
 
 **状态**：代码全部已提交并推送（末次 `b73345ff`），本地 = 远端，工作区干净，生产未受影响（全程未动）。
 **剩余**：演练机销毁（只有祥哥能做）＋ 生产 `JWT_SECRET` 与备份包的异地副本（只有祥哥能做）。
+
+---
+
+## [2026-10-17] 生产事故：重启后后端未自启 → 全站 API 挂 2 小时 47 分（已恢复 + 补上开机自启）
+
+祥哥发来 `/order` 截图：「服务加载失败」「余额查询中…」卡住不动。
+
+### 根因（两步，缺一不可）
+
+1. **VPS 在 01:44 重启过** —— `last -x` 显示是正常关机流程（`runlevel (to lvl 5)`），不是崩溃
+2. **重启后没有任何东西把后端拉起来** —— `systemctl status pm2-root` → `Unit pm2-root.service could not be found`
+   （`dump.pm2` 还是 **8 月 28 日**的旧快照，pm2 守护进程重启后根本没起）
+
+于是 nginx（活着）照常发静态页 → 页面能打开、登录态也还在（token 存在浏览器里），
+但每个 `/api/*` 都 `connect() failed (111: Connection refused)`（后端 3000 没人监听）→
+余额查不到、服务分类加载失败。**用户眼里是"网站坏了"，其实是后端进程不在。**
+
+### 救治
+
+- 删掉排障时误建的 pm2 空进程 → `pm2 start src/app.js --name xnow-backend`（cwd `/var/www/xnow/server`）
+- `pm2 save` ✓ —— 存档里现在是**绝对路径** `/var/www/xnow/server/src/app.js`，`resurrect` 可用
+- `pm2 startup systemd -u root --hp /root` → **`pm2-root.service` 已创建并 enabled**
+  （`ExecStart=... pm2 resurrect`、`WantedBy=multi-user.target`、`User=root`）
+- 验证：直连 `:3000/api/public/config` **200**、经 nginx **200**、**经 Cloudflare 外网 200**；
+  数据完好 `users=4 / orders=11 / services=2880 / configs=27`
+
+### 教训
+
+- **"机器重启" 要当成一次独立事故来验**：`nginx 活着 ≠ 站点活着`。pm2 不自启时全站 API 静默全挂，
+  而静态首页照样 200 —— **只监控首页会漏掉整场事故**。
+- **开机自启此前根本没配**（`pm2-root` 单元不存在），因为以前没人重启过这台机器，所以一直没暴露。
+  现在已 enabled，并按三件事验证过：存档里 exec 是绝对路径 + 文件存在 + 单元 enabled。
+- 排障时我两次被 `PowerShell → ssh` 的引号转义坑到（一次误建 pm2 空进程、一次命令被截断）。
+  **正确姿势：本地写 `.sh` → `scp` 上去 → `tr -d '\r' | bash`**，别在 ssh 命令里拼复杂引号/`$`。
+
+### 顺带发现（未处理，供决策）
+
+- `nezha-agent`（**服务商自带的监控 agent**，不属本项目）在疯狂崩溃重启（`NRestarts=1927`，
+  报 `open data/config.yaml: no such file or directory`）—— 不影响 xnow，但白烧 CPU 与日志，
+  可以让服务商修或直接停掉。
+- 后端 error.log 持续刷 `[TG Doc Config Error] ENOENT ... backups/xnow_backup_2026_10_x.sql.gz`：
+  应用引用了已被保留策略删掉的旧备份文件。**无害**（不影响业务），但把 error.log 刷满，
+  建议改成「文件不存在就跳过」。
