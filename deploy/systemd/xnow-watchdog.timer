@@ -1,0 +1,11 @@
+[Unit]
+Description=每 2 分钟运行一次 XNOW 看门狗
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=10s
+Unit=xnow-watchdog.service
+
+[Install]
+WantedBy=timers.target

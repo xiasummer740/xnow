@@ -1373,3 +1373,21 @@ POST /api/login {admin, admin123} → 200 + 真 JWT（id=1, role=super_admin）
 - 后端 error.log 持续刷 `[TG Doc Config Error] ENOENT ... backups/xnow_backup_2026_10_x.sql.gz`：
   应用引用了已被保留策略删掉的旧备份文件。**无害**（不影响业务），但把 error.log 刷满，
   建议改成「文件不存在就跳过」。
+
+### 当天后续三项处理（祥哥点单）
+
+1. **停掉厂商监控 agent `nezha-agent`** —— 它一直在崩溃重启（`NRestarts=1927`，
+   `open data/config.yaml: no such file or directory`），白烧 CPU 与日志。已 `stop` + `disable`
+   （`is-enabled=disabled`、`is-active=inactive`），重启不会再起。
+   恢复方法：`systemctl enable --now nezha-agent`。
+2. **`[TG Bot Config Error] ENOENT ... .sql.gz` 查清：不是 bug，是 4 天前的历史残渣。**
+   `xnow-backend-error.log` 的**最后修改时间是 2026-10-13 06:16** —— 那批报错是当时旧代码留下的；
+   现在的代码只发「刚生成的那一个备份」，**没有任何重试旧文件的路径**；而
+   `tgBot.js` 里「文件不存在就抛错」正是 10-13 事故后**故意加的安全护栏**
+   （云端那份没送到必须让调用方知道），**不能改成静默跳过** —— 改了等于把护栏拆掉。
+   处理：`pm2 flush xnow-backend` 清掉陈年日志（4327 B → 0），error.log 从零开始。
+3. **加了看门狗**（`deploy/systemd/xnow-watchdog.{sh,service,timer}` + 该目录 README）：
+   每 2 分钟探一次 `/api/public/config`，后端掉线自动拉起并推 TG。
+   **已实测**：`pm2 stop xnow-backend` → 手动触发 → **14 秒自愈** → 200 → TG 告警收到 ✓。
+   它治「机器活着但后端死了」（今天这种）；**整机宕机它自己也跑不了** ——
+   那种要靠外部监控（建议祥哥加 UptimeRobot 免费探 `https://xnow.taikon.top/api/public/config`），**待他决定**。

@@ -1,0 +1,9 @@
+[Unit]
+Description=XNOW watchdog（后端掉线自动拉起 + TG 告警）
+After=network-online.target pm2-root.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/xnow-watchdog.sh
+Nice=10
