@@ -1391,3 +1391,14 @@ POST /api/login {admin, admin123} → 200 + 真 JWT（id=1, role=super_admin）
    **已实测**：`pm2 stop xnow-backend` → 手动触发 → **14 秒自愈** → 200 → TG 告警收到 ✓。
    它治「机器活着但后端死了」（今天这种）；**整机宕机它自己也跑不了** ——
    那种要靠外部监控（建议祥哥加 UptimeRobot 免费探 `https://xnow.taikon.top/api/public/config`），**待他决定**。
+
+### 告警通道接上双线（祥哥给了 `@Xnow001Bot` + `464844409@qq.com`）
+
+- `getMe` 核实机器人身份：`username: "Xnow001Bot"` ✓，`chat_id` 库里已有 ✓
+- 邮件：库里的 `smtp_host/port/email/pass` **四项齐全** ✓ → 新增 `deploy/systemd/xnow-alert-mail.cjs`
+  （**独立于站点进程**：不 import 站点代码、不连数据库，SMTP 参数由看门狗经环境变量传入，
+  用 `NODE_PATH` 复用站点 `nodemailer` → **站点挂了也能发信**），收件人 `ALERT_TO=464844409@qq.com`
+- 看门狗改成 `send_alerts()` **同时发 TG + 邮件**；新增 `WATCHDOG_TEST=1` 自检模式（只测通道、不动站点）
+- 复检里加了一条**外网**探测（`https://xnow.taikon.top/api/public/config`）——
+  **本地 200 不代表用户能访问**（CF/回源那一层可能坏）
+- **实测**：`WATCHDOG_TEST=1` → `TG 告警已发送` + `MAIL_OK` + `邮件告警已发送 -> 464844409@qq.com` ✓
