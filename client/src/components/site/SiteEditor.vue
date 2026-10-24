@@ -5,7 +5,7 @@
        进入编辑态后：每个区块右上角出现 ↑ ↓ 🙈 ✏️，底部出现保存栏。 -->
   <div v-if="canEdit">
     <button v-if="!editing" @click="enter" class="site-edit-fab" title="编辑我的首页">
-      ✏️ 编辑我的店
+      <span class="fab-ico">✏️</span><span class="fab-txt">编辑我的店</span>
     </button>
 
     <template v-else>
@@ -502,6 +502,22 @@ onBeforeUnmount(exit);
   border: 0; border-radius: 999px; padding: 12px 20px;
   font-weight: 800; font-size: 14px; cursor: pointer;
   box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: opacity .2s, padding .2s, background .2s;
+}
+/* 74 期：电脑上这块浮标老压住右下角的卡片内容。桌面端先收成一个圆图标、
+   半透明，鼠标移上去再展开文字——既不挡内容，入口也还在。 */
+@media (min-width: 1024px) {
+  .site-edit-fab { padding: 12px 14px; opacity: .55; }
+  .site-edit-fab .fab-txt {
+    display: inline-block; max-width: 0; overflow: hidden; white-space: nowrap;
+    transition: max-width .22s ease;
+  }
+  .site-edit-fab:hover { opacity: 1; }
+  .site-edit-fab:hover .fab-txt { max-width: 96px; }
+}
+@media (max-width: 1023px) {
+  .site-edit-fab .fab-ico { display: none; }
 }
 .site-edit-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;

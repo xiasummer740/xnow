@@ -275,12 +275,15 @@
               <div>
                 <label class="block text-[10px] text-slate-500 mb-1">首屏版式（结构不同，不只是换色）</label>
                 <select v-model="form.hero_variant" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                  <option value="">跟随模板</option>
+                  <option value="">跟随模板（推荐）</option>
                   <option value="center">居中大标题 · 电商落地页</option>
                   <option value="split">左文右价卡 · SaaS 产品页</option>
                   <option value="editorial">杂志排版 · 左对齐 + 首字下沉</option>
                   <option value="terminal">终端窗口 · 极客工具感</option>
                 </select>
+                <p v-if="form.hero_variant || form.services_variant" class="mt-1 text-[10px] text-amber-400/90 leading-relaxed">
+                  ⚠️ 你选了具体版式，上面 6 套模板的版式都会被它盖掉（只剩配色不同）。想用模板自带的版式，把这两项都选回「跟随模板」。
+                </p>
               </div>
               <div>
                 <label class="block text-[10px] text-slate-500 mb-1">服务列表版式</label>
