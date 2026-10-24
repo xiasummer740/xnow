@@ -38,9 +38,19 @@ const pricingError = (multiplier, agentDiscount) => {
     discount = d;
   }
   if (m * discount < 1) {
-    return `定价过低：倍率 ${m} × 代理折扣 ${discount} = ${(m * discount).toFixed(2)}，低于成本倍率 1.0，代理下单平台每单将亏损`;
+    // 说人话：告诉他"最低能卖多少倍"，而不是甩一个数学不等式
+    const floor = (1 / discount).toFixed(2);
+    return `定价过低：你的代理折扣是 ${discount}，最低要卖 ${floor} 倍才不亏（你填的是 ${m} 倍）`;
   }
   return null;
+};
+
+// 该站当前允许的最低售价倍率（由代理折扣决定），供前端提示用
+const minMultiplier = (agentDiscount) => {
+  const d = (agentDiscount === undefined || agentDiscount === null || agentDiscount === '' || !isFinite(parseFloat(agentDiscount)) || parseFloat(agentDiscount) <= 0)
+    ? DEFAULT_AGENT_DISCOUNT
+    : parseFloat(agentDiscount);
+  return Math.max(1, Number((1 / d).toFixed(2)));
 };
 
 // 获取所有分站（管理员看全部，代理看自己的）
@@ -211,6 +221,8 @@ router.get('/', authenticate, async (req, res) => {
       o.smtp_pass = o.smtp_pass ? '******' : null;
       o.bufpay_key = o.bufpay_key ? '******' : null;
       o.cryptomus_key = o.cryptomus_key ? '******' : null;
+      // 前端据此提示「最低可售价」，避免站长填 1 倍被拒还不知道为什么
+      o.min_multiplier = minMultiplier(o.agent_discount);
       return o;
     });
     res.json({ status: 'success', data: safe(sites) });
@@ -518,10 +530,26 @@ router.delete('/:id', authenticate, async (req, res) => {
   try {
     const site = await Site.findByPk(req.params.id);
     if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+
+    // 🧹 把该站的用户放回主站。
+    //    不处理的话：站点记录没了，但 users.site_id 还指着它 ——
+    //    这些用户既不属于任何分站、又带着一个悬空的 site_id，
+    //    后续下单与统计都会指向一个不存在的站。这是删除站点必须收尾的事。
+    const { User } = await import('../models/index.js');
+    const moved = await User.update({ site_id: 0 }, { where: { site_id: site.id } });
+
+    // 域名 vhost 与证书一并清理（先于删记录，删了就找不到域名了）
+    if (site.custom_domain) {
+      try { removeVhost(site.id, site.custom_domain); reloadNginx(); } catch (e) {}
+    }
+
     await site.destroy();
     bustSiteCache();
-    sendTgMessage(`🗑️ <b>分站已删除</b>\n🌐 域名: <code>${site.domain}</code>\n📛 名称: ${site.name}`);
-    res.json({ status: 'success', message: '分站已删除' });
+    sendTgMessage(`🗑️ <b>分站已删除</b>\n🌐 域名: <code>${site.domain}</code>\n📛 名称: ${site.name}\n👥 归位主站的用户: ${moved?.[0] ?? 0}`);
+    res.json({
+      status: 'success',
+      message: `分站已删除${moved?.[0] ? `，${moved[0]} 个用户已回到主站` : ''}`
+    });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '删除失败' });
   }
