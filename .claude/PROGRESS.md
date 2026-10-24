@@ -1537,3 +1537,13 @@ BetterStack / healthchecks.io。**探针基线已记：`grep -c -i uptimerobot` 
 踩坑记录：给 `Admin.vue` 插卡片时多写了一个 `</div>` → `vite` 报
 `Invalid end tag (1113:5)`；删掉重复闭合即恢复。教训：改长模板必须立刻构建，别攒着改。
 
+### ④ 平台图标换成真实品牌 logo
+祥哥要"准确的平台 logo"。做法：取 simple-icons 官方矢量路径（TikTok/Telegram/Facebook/
+Instagram/Twitter 旧版小鸟/Line/Shopee/WhatsApp），**内联进 bundle**，按各品牌主色填充：
+- 不引外链 CDN（国内加载失败 + 隐私/CSP 风险），也不放 `<img src>`（单色 SVG 会变黑）
+- `<svg viewBox="0 0 24 24" :style="{fill: 品牌色}" v-html="路径">` → 单色品牌图标，深色卡片上很干净
+- 全部/其他/Traffic 不是品牌，继续用字符图标
+
+踩坑记录二：用 PowerShell 生成 JS 代码块时先用了双引号包裹含 `"` 的 SVG → 语法非法；
+改反引号模板字符串解决。教训：机器生成代码块一律用不含歧义的分隔符。
+
