@@ -539,6 +539,8 @@ router.get('/:id/prices', authenticate, async (req, res) => {
     const discount = effectiveDiscount(site);
 
     const q = String(req.query.q || '').trim();
+    const cat = String(req.query.category || '').trim();
+    const plat = String(req.query.platform || '').trim();
     // services 表没有 status 列（全表都是在上架的服务），只按关键词过滤
     const where = {};
     const { Op } = (await import('sequelize')).default;
@@ -549,10 +551,66 @@ router.get('/:id/prices', authenticate, async (req, res) => {
         { type: { [Op.like]: `%${q}%` } },
       ];
     }
+    // 🔑 祥哥 2026-10-25：「能不能跟主站的服务分类顺序一样，好找好改」
+    //    所以这里必须按 services.sort 排序（主站 Order 页就是这么排的），
+    //    不能按 category 字母序 —— 字母序下站长永远找不到要改的那条。
+    //    分类清单按"首次出现的顺序"给出，前端照着这个顺序排胶囊。
+    if (cat) where.category = cat;
+
+    const catRows = await Service.findAll({
+      attributes: ['category'],
+      order: [['sort', 'ASC'], ['service_id', 'ASC']],
+    });
+    const catOrder = [];
+    const catCount = new Map();
+    for (const row of catRows) {
+      const c = String(row.category || '').trim();
+      if (!c) continue;
+      if (!catCount.has(c)) { catCount.set(c, 0); catOrder.push(c); }
+      catCount.set(c, catCount.get(c) + 1);
+    }
+    // 🧭 一级筛选：把分类归到平台（分站客户在主站看到的就是按平台分组的）。
+    //    上游分类名很长（带【…】备注和 emoji），手机上没法一眼看完，所以先按平台收窄。
+    const PLATFORMS = [
+      ['TikTok', /tiktok/i], ['Instagram', /instagram|\big\b/i], ['YouTube', /youtube/i],
+      ['Telegram', /telegram/i], ['Facebook', /facebook/i], ['Twitter', /twitter|\bx\/twitter/i],
+      ['Spotify', /spotify/i], ['Apple Music', /apple music/i], ['Audiomack', /audiomack/i],
+      ['SoundCloud', /soundcloud/i], ['Shopee', /shopee/i], ['Line', /\bline\b/i],
+      ['WhatsApp', /whatsapp/i], ['Discord', /discord/i], ['Twitch', /twitch/i],
+    ];
+    const platformOf = (name) => {
+      for (const [label, re] of PLATFORMS) if (re.test(name)) return label;
+      return '其他';
+    };
+    const categories = catOrder.map((c) => ({
+      name: c,
+      count: catCount.get(c),
+      platform: platformOf(c),
+    }));
+    // 平台列表按主站顺序首次出现排（客户看到的顺序）
+    const platOrder = [];
+    for (const c of categories) {
+      if (c.platform === '其他') continue;                       // 兜底桶永远排最后
+      if (!platOrder.includes(c.platform)) platOrder.push(c.platform);
+    }
+    if (categories.some((c) => c.platform === '其他')) platOrder.push('其他');
+    const platforms = platOrder.map((p) => ({
+      name: p,
+      count: categories.filter((c) => c.platform === p).reduce((n, c) => n + c.count, 0),
+      categories: categories.filter((c) => c.platform === p).length,
+    }));
+
+    // 🧭 平台筛选：用上面算好的分类清单反查，保证点「TikTok 87」列出来的就是那 87 条
+    if (!cat && plat) {
+      const inPlat = categories.filter((c) => c.platform === plat).map((c) => c.name);
+      where.category = inPlat.length ? { [Op.in]: inPlat } : { [Op.in]: ['__none__'] };
+    }
+
+    const limit = cat ? 600 : (plat ? 600 : (q ? 120 : 200));
     const services = await Service.findAll({
       where,
-      order: [['category', 'ASC'], ['service_id', 'ASC']],
-      limit: 80,
+      order: [['sort', 'ASC'], ['service_id', 'ASC']],
+      limit,
     });
 
     const ids = services.map(sv => sv.service_id);
@@ -596,6 +654,12 @@ router.get('/:id/prices', authenticate, async (req, res) => {
         discount_label: site.discount_label || '',
         discount_until: parseInt(site.discount_until || 0),
         cost_multiplier: costMult,
+        categories,
+        platforms,
+        category: cat,
+        query: q,
+        total_in_category: cat ? services.length : undefined,
+        truncated: services.length >= limit,
         items: rows,
       }
     });

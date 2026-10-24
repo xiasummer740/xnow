@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { readPreviewDraft } from '../utils/previewDraft';
 const i18nDict = {
   zh: { console: '控制台', balance: '余额', logout: '退出登录', menu_order: '开始下单', menu_mass: '批量下单', menu_history: '历史订单', menu_recharge: '大佬充值', menu_vip: '至尊代理', menu_admin: '管理密室', menu_api: '开发者 API', menu_backup: '灾备中心', search_placeholder: '搜索订单号 / 链接...', sys_notice: '系统公告', category: '服务分类 (Category)', service: '具体服务项目 (Service)', link: '目标链接 (Link)', quantity: '下单数量', total_price: '预估金额', submit_order: '立即提交订单', waiting_data: '正在加载服务列表...', select_cat_first: '请先选择分类', guide_title: '💡 下单规范指南', guide_1: '⚠️ 1. 订单完成前切勿重复下单。', guide_2: '⚠️ 2. 确保账号为公开状态。', recharge_title: '资金充值', recharge_desc: '安全、即时到账的聚合支付收银台', select_pay: '选择支付方式', recharge_amount: '充值金额', actual_pay: '应付金额', actual_get: '实际到账', pay_btn: '立即安全支付', wechat: '微信支付', alipay: '支付宝', usdt: 'USDT (TRC20)', rmb_desc_title: 'ℹ️ RMB 充值说明', rmb_desc_1: '建议充值金额为 5 的整数倍。微信/支付宝支付需要额外 ', rmb_desc_2: '5%', rmb_desc_3: ' 的通道费【', rmb_desc_4: '单次充值500元以上会赠送5%，相当于减免手续费', rmb_desc_5: '】。', rmb_tip: '💡 Tip: 充值 500+ 免手续费', usd_desc_title: '⚡ USDT 省钱攻略', usd_desc_4: '若使用 USDT-TRC20 支付，可使用能量租赁的方式节省 ', usd_desc_5: '80%', usd_desc_6: ' 的 TRX 手续费；TRX 自助能量租赁平台👇', usd_btn: 'TRX 能量租赁平台 👉 点击进入', 
   super_admin_badge: '超级系统管理', admin_badge: '至尊管理员', agent_badge: '至尊代理', gold_badge: '黄金用户', 
@@ -17,6 +18,7 @@ export const useAppStore = defineStore('app', {
       // 分站且没有站名时用中性词，绝不回落成平台品牌
       siteName: cachedName || '增长服务',   // 真实站名由 /api/public/config 下发；兜底用中性词，bundle 里不留平台名
       siteLogo: '/logo.png', isSubsite: cachedSubsite, siteId: 0,
+      isPreview: false,   // 🖼 装修页预览：本次访问是从草稿 URL 进来的（不写库）
       tgBotLink: '',   // 由 /api/public/config 下发（分站不下发 → 客服链接走站长自己的）
       globalRefreshTrigger: 0,
     // 🎨 分站主题（主站为空 → 外观与改造前一致）
@@ -104,7 +106,47 @@ export const useAppStore = defineStore('app', {
         hero_bg_url: d.hero_bg_url || ''
       };
       this.applyTheme();
+      // 🖼 92 期：装修页的"真预览"——草稿配置从 URL 带进来，覆盖掉库里的值，
+      //    站长在后台改一下就立刻能看到真首页长什么样（不写库、不写本地缓存）。
+      this.applyPreviewDraft();
     } } catch(e) {} this.fetchRate(); },
+
+  /** 把 ?draft=… 带进来的草稿套到 store 上（只在预览时存在） */
+  applyPreviewDraft() {
+    const draft = readPreviewDraft();
+    if (!draft) return;
+    this.isPreview = true;
+    const map: Record<string, any> = draft;
+    if (map.siteName !== undefined && String(map.siteName).trim()) this.siteName = String(map.siteName);
+    if (map.siteLogo !== undefined) this.siteLogo = map.siteLogo || this.siteLogo;
+    if (map.footerText !== undefined) this.footerText = map.footerText || '';
+    if (map.supportUrl !== undefined) this.supportUrl = map.supportUrl || '';
+    if (map.announcement !== undefined) this.announcement = map.announcement || '';
+    if (map.themeTemplate) this.themeTemplate = map.themeTemplate;
+    if (map.themeColor) this.themeColor = map.themeColor;
+    this.themeAccent = map.themeAccent || '';
+    this.uiRadius = map.uiRadius || '';
+    this.uiDensity = map.uiDensity || '';
+    this.cardStyle = map.cardStyle || '';
+    this.fontStyle = map.fontStyle || '';
+    this.btnShape = map.btnShape || '';
+    this.heroLayout = map.heroLayout || '';
+    this.bgColor = map.bgColor || '';
+    this.bgImage = map.bgImage || '';
+    this.fontScale = map.fontScale || '';
+    this.heroVariant = map.heroVariant || '';
+    this.servicesVariant = map.servicesVariant || '';
+    this.customCss = map.customCss || '';
+    this.faviconUrl = map.faviconUrl || '';
+    this.discountLabel = map.discountLabel || '';
+    if (map.sectionTitles && typeof map.sectionTitles === 'object') this.sectionTitles = map.sectionTitles;
+    if (Array.isArray(map.advantages)) this.advantages = map.advantages;
+    if (Array.isArray(map.homeModules)) this.homeModules = map.homeModules;
+    if (map.hero && typeof map.hero === 'object') this.hero = { ...this.hero, ...map.hero };
+    this.applyCustomCss();
+    this.applyFavicon();
+    this.applyTheme();
+  },
   applyCustomCss() {
     if (typeof document === 'undefined') return;
     let el = document.getElementById('xn-site-css') as HTMLStyleElement | null;

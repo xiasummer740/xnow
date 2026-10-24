@@ -19,8 +19,35 @@ const msgOk = ref(true);
 
 const items = ref([]);
 const query = ref('');
+// 🗂 92 期：分类顺序跟主站一模一样（后端按 services.sort 排完回传）
+const categories = ref([]);
+const platforms = ref([]);
+const activePlatform = ref('');   // '' = 全部平台
+const activeCategory = ref('');   // '' = 该平台下全部分类
+
+// 分类名普遍很长（带【…】备注、emoji），胶囊上只显示短名，完整名放 title
+const shortCat = (name) => {
+  let n = String(name || '');
+  n = n.split('【')[0].replace(/[（(][^）)]*[）)]\s*$/, '').trim();
+  n = n.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim();
+  if (!n) n = String(name || '').split('【')[0].trim();
+  return n.length > 16 ? n.slice(0, 15) + '…' : n;
+};
+
+// 当前平台下可见的分类（未选平台时显示全部）
+const visibleCats = computed(() =>
+  activePlatform.value ? categories.value.filter((c) => c.platform === activePlatform.value) : categories.value);
+
+const pickPlatform = (p) => {
+  activePlatform.value = p;
+  activeCategory.value = '';
+  load();
+};
+
 const draft = ref({});            // service_id -> 输入框里的价格（字符串）
 const meta = ref({ multiplier: 0, cost_multiplier: 0, discount_rate: 1, discount_label: '', discount_until: 0 });
+const itemsAllCount = computed(() =>
+  categories.value.reduce((n, c) => n + (c.count || 0), 0) || items.value.length);
 
 // 折扣草稿
 const dRate = ref(1);
@@ -32,12 +59,18 @@ const auth = () => ({ Authorization: `Bearer ${userStore.token}` });
 async function load() {
   loading.value = true;
   try {
-    const q = query.value ? `?q=${encodeURIComponent(query.value)}` : '';
+    const qs = [];
+    if (query.value) qs.push(`q=${encodeURIComponent(query.value)}`);
+    if (activeCategory.value) qs.push(`category=${encodeURIComponent(activeCategory.value)}`);
+    if (!activeCategory.value && activePlatform.value) qs.push(`platform=${encodeURIComponent(activePlatform.value)}`);
+    const q = qs.length ? `?${qs.join('&')}` : '';
     const r = await fetch(`/api/sites/${props.siteId}/prices${q}`, { headers: auth() });
     const d = await r.json();
     if (d.status !== 'success') { flash(d.message || '读取失败', false); return; }
     const data = d.data;
     items.value = data.items || [];
+    if (Array.isArray(data.categories) && data.categories.length) categories.value = data.categories;
+    if (Array.isArray(data.platforms) && data.platforms.length) platforms.value = data.platforms;
     meta.value = data;
     dRate.value = Number(data.discount_rate || 1);
     dLabel.value = data.discount_label || '';
@@ -51,6 +84,24 @@ async function load() {
     loading.value = false;
   }
 }
+
+// 全部视图下按分类分组（顺序 = 主站顺序，组内顺序 = 主站顺序）
+const grouped = computed(() => {
+  if (activeCategory.value) return [{ name: activeCategory.value, items: items.value }];
+  const out = [];
+  const idx = new Map();
+  for (const it of items.value) {
+    const c = it.category || '其他';
+    if (!idx.has(c)) { idx.set(c, out.length); out.push({ name: c, items: [] }); }
+    out[idx.get(c)].items.push(it);
+  }
+  return out;
+});
+
+const pickCategory = (c) => {
+  activeCategory.value = c;
+  load();
+};
 
 function flash(text, ok = true) {
   msg.value = text; msgOk.value = ok;
@@ -200,18 +251,53 @@ onMounted(load);
         价格单位是「每 1000 个」。
       </p>
 
-      <div class="flex gap-2 mb-3">
+      <div class="flex gap-2 mb-2">
         <input v-model="query" @keyup.enter="load" placeholder="搜服务名 / 分类，例如 TikTok 粉丝"
                class="flex-grow bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
         <button @click="load" class="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">搜索</button>
       </div>
 
+      <!-- 🧭 一级：平台（跟主站客户看到的分组一致），先把近百个分类收窄到十几条 -->
+      <div v-if="platforms.length" class="flex gap-1.5 overflow-x-auto pb-2 mb-1.5 custom-scrollbar">
+        <button type="button" @click="pickPlatform('')"
+                class="shrink-0 px-2.5 py-1 rounded-full text-[11px] border font-bold whitespace-nowrap"
+                :class="!activePlatform ? 'border-amber-400 text-amber-300 bg-amber-400/10' : 'border-slate-700 text-slate-400 hover:text-slate-200'">
+          全部平台
+        </button>
+        <button v-for="p in platforms" :key="p.name" type="button" @click="pickPlatform(p.name)"
+                class="shrink-0 px-2.5 py-1 rounded-full text-[11px] border whitespace-nowrap"
+                :class="activePlatform === p.name ? 'border-amber-400 text-amber-300 bg-amber-400/10' : 'border-slate-700 text-slate-400 hover:text-slate-200'">
+          {{ p.name }}<span class="opacity-60"> {{ p.categories }}</span>
+        </button>
+      </div>
+
+      <!-- 🗂 二级：分类（顺序 = 主站顺序），名字太长只显示短名，完整名悬停可见 -->
+      <div v-if="categories.length" class="flex gap-1.5 overflow-x-auto pb-2 mb-2 custom-scrollbar">
+        <button type="button" @click="pickCategory('')"
+                class="shrink-0 px-2.5 py-1 rounded-full text-[11px] border whitespace-nowrap"
+                :class="!activeCategory ? 'border-sky-400 text-sky-300 bg-sky-400/10' : 'border-slate-700 text-slate-400 hover:text-slate-200'">
+          全部分类 <span class="opacity-60">{{ activePlatform ? visibleCats.length : categories.length }}</span>
+        </button>
+        <button v-for="c in visibleCats" :key="c.name" type="button" @click="pickCategory(c.name)"
+                :title="c.name"
+                class="shrink-0 px-2.5 py-1 rounded-full text-[11px] border whitespace-nowrap max-w-[13rem] truncate"
+                :class="activeCategory === c.name ? 'border-sky-400 text-sky-300 bg-sky-400/10' : 'border-slate-700 text-slate-400 hover:text-slate-200'">
+          {{ shortCat(c.name) }}<span class="opacity-60"> {{ c.count }}</span>
+        </button>
+      </div>
+
       <div v-if="loading" class="text-xs text-slate-500 py-6 text-center">读取中…</div>
       <div v-else-if="!items.length" class="text-xs text-slate-500 py-6 text-center">没搜到服务，换个关键词试试</div>
 
-      <div v-else class="space-y-2 max-h-[26rem] overflow-y-auto custom-scrollbar pr-1 pb-14">
-        <div v-for="it in items" :key="it.service_id"
-             class="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+      <div v-else class="max-h-[26rem] overflow-y-auto custom-scrollbar pr-1 pb-14">
+        <div v-for="g in grouped" :key="g.name" class="mb-2">
+          <div v-if="!activeCategory" class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur px-1 py-1.5 mb-1.5
+                      text-[11px] font-bold text-sky-300/90 border-b border-slate-800 flex items-center justify-between">
+            <span :title="g.name">{{ shortCat(g.name) }}</span>
+            <span class="text-slate-500 font-normal">{{ g.items.length }} 条</span>
+          </div>
+          <div v-for="it in g.items" :key="it.service_id"
+             class="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-2">
           <div class="flex items-start justify-between gap-3 flex-wrap">
             <div class="min-w-0 flex-grow">
               <div class="text-xs text-slate-200 line-clamp-2">{{ it.name }}</div>
@@ -235,8 +321,13 @@ onMounted(load);
             <span class="block sm:inline sm:ml-1">· 你赚 ¥{{ marginOf(it).profit }} / 千（毛利 {{ marginOf(it).pct }}%）</span>
             <span v-if="marginOf(it).lose" class="block mt-0.5">· 低于成本价，保存会被拒</span>
           </div>
+          </div>
         </div>
       </div>
+
+      <p v-if="meta.truncated" class="text-[10px] text-amber-400/80 mt-2">
+        ⚠️ 服务太多，这里只列了前 {{ items.length }} 条 —— 用上面的平台/分类或搜索框定位更准
+      </p>
 
       <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
         <span class="text-[11px]" :class="msgOk ? 'text-emerald-400' : 'text-red-400'">{{ msg }}</span>

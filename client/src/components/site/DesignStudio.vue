@@ -12,89 +12,59 @@
        ══════════════════════════════════════════════════════════════════════ -->
   <div class="space-y-4">
 
-    <!-- ── 实时预览（手机外框，可折叠）────────────────────────────── -->
+    <!-- ── 实时预览：直接嵌入【真的分站首页】────────────────────── -->
+    <!-- 祥哥 2026-10-25："这个预览跟首页也不像啊" —— 之前是 CSS 画的近似图。
+         现在把真实首页放进手机框，未保存的改动通过 URL 草稿传进去，改一下就变。 -->
     <section class="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden">
-      <button type="button" @click="openPreview = !openPreview"
-        class="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800/40 transition">
-        <span class="flex items-center gap-2 text-sm font-bold text-white">
-          📱 实时预览
-          <span class="text-[10px] font-normal text-slate-500">改一下就变，不用保存</span>
-        </span>
-        <span class="text-xs text-amber-400">{{ openPreview ? '收起' : '展开' }}</span>
-      </button>
-
-      <div v-show="openPreview" class="px-4 pb-4">
-        <div class="mx-auto rounded-[26px] p-2 border-[3px] border-slate-700/80 bg-slate-950 shadow-2xl"
-             style="max-width:300px">
-          <div class="mx-auto mb-1 h-[3px] w-12 rounded-full bg-slate-700"></div>
-          <div class="rounded-[18px] overflow-hidden" :style="shellStyle">
-            <!-- 顶部导航 -->
-            <div class="flex items-center justify-between px-3 py-2" :style="navStyle">
-              <span :style="{ color: pv.brand, fontWeight: 800, fontSize: '11px', fontFamily: pv.font }">
-                {{ form.name || '你的站点名' }}
-              </span>
-              <div class="flex gap-2">
-                <span v-for="n in ['服务', '充值', '我的']" :key="n"
-                  :style="{ color: 'rgba(226,232,240,.55)', fontSize: '9px' }">{{ n }}</span>
-              </div>
-            </div>
-            <!-- Hero -->
-            <div class="px-3 pt-3 pb-2">
-              <div v-if="form.hero_badge" class="inline-block mb-1 px-1.5 py-0.5 rounded"
-                :style="{ background: pv.soft, color: pv.brand, fontSize: '7px', fontWeight: 700 }">
-                {{ form.hero_badge.slice(0, 18) }}
-              </div>
-              <div :style="{ color: '#f8fafc', fontSize: '15px', fontWeight: 900, lineHeight: 1.25, fontFamily: pv.font }">
-                {{ form.hero_title || form.name || '你的站点名' }}
-              </div>
-              <div :style="{ color: 'rgba(148,163,184,.9)', fontSize: '9px', marginTop: '3px' }">
-                {{ form.hero_subtitle || '全自动数字营销 · 秒级交付' }}
-              </div>
-              <div class="flex gap-1.5 mt-2">
-                <span :style="btnPrimary">{{ form.hero_btn1_text || '立即下单' }}</span>
-                <span :style="btnGhost">{{ form.hero_btn2_text || '查看价格' }}</span>
-              </div>
-            </div>
-            <!-- 模块（跟着开关和排序走）-->
-            <div class="px-3 pb-2 space-y-1.5">
-              <div v-for="m in previewModules" :key="m.key" :style="cardStyle" class="px-2 py-1.5">
-                <div class="flex items-center justify-between">
-                  <span :style="{ color: '#e2e8f0', fontSize: '9px', fontWeight: 700, fontFamily: pv.font }">
-                    {{ moduleTitle(m.key) }}
-                  </span>
-                  <span v-if="m.key === 'hot_services'" :style="{ color: pv.brand, fontSize: '9px', fontWeight: 700 }">
-                    ¥{{ samplePrice }}/千
-                  </span>
-                </div>
-                <div v-if="m.key === 'hot_services'" class="mt-1 space-y-1">
-                  <div v-for="(sv, i) in ['TikTok 涨粉', 'Telegram 成员']" :key="i" class="flex items-center justify-between">
-                    <span :style="{ color: 'rgba(203,213,225,.9)', fontSize: '8px' }">{{ sv }}</span>
-                    <span :style="{ color: 'rgba(148,163,184,.8)', fontSize: '8px' }">下单</span>
-                  </div>
-                </div>
-                <div v-else :style="{ color: 'rgba(148,163,184,.6)', fontSize: '8px', marginTop: '2px' }">
-                  {{ moduleHint(m.key) }}
-                </div>
-              </div>
-              <div v-if="!previewModules.length" :style="{ color: 'rgba(148,163,184,.6)', fontSize: '9px' }" class="py-2 text-center">
-                首页模块全部关闭了，只剩导航和 Hero
-              </div>
-            </div>
-            <!-- 页脚 -->
-            <div class="px-3 py-1.5 text-center" :style="{ borderTop: `1px solid ${pv.border}` }">
-              <span :style="{ color: 'rgba(148,163,184,.75)', fontSize: '8px' }">
-                {{ form.footer_text || `© ${new Date().getFullYear()} ${form.name || '你的站点名'}` }}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center justify-between mt-2">
-          <p class="text-[10px] text-slate-500">近似预览：配色/圆角/字体/模块顺序与实际一致</p>
-          <a v-if="site && site.domain" :href="`//${site.domain}`" target="_blank"
-            class="text-[11px] text-sky-400 hover:text-sky-300 shrink-0">打开真实站点 ↗</a>
+      <div class="flex items-center justify-between gap-2 px-3 sm:px-4 py-3">
+        <button type="button" @click="openPreview = !openPreview" class="flex items-center gap-2 text-sm font-bold text-white shrink-0">
+          <span class="whitespace-nowrap">📱 实时预览</span>
+          <span class="hidden sm:inline text-[10px] font-normal text-slate-500 whitespace-nowrap">就是真实首页，改一下立刻变</span>
+        </button>
+        <div class="flex items-center gap-1 shrink-0">
+          <button v-for="d in DEVICES" :key="d.key" type="button" @click="device = d.key"
+            class="px-2 py-1 rounded-md text-[10px] border whitespace-nowrap shrink-0"
+            :class="device === d.key ? 'border-amber-400 text-amber-300 bg-amber-400/10' : 'border-slate-700 text-slate-400'">
+            {{ d.label }}
+          </button>
+          <button type="button" @click="openPreview = !openPreview" class="text-[10px] text-slate-400 px-1 whitespace-nowrap shrink-0">
+            {{ openPreview ? '收起' : '展开' }}
+          </button>
         </div>
       </div>
+
+      <div v-show="openPreview" class="px-3 pb-3">
+        <div v-if="!previewUrl" class="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center">
+          <p class="text-xs text-slate-400">这个站还没有可访问的域名，没法做真预览</p>
+          <p class="text-[10px] text-slate-600 mt-1">先去「域名」页确认站点地址可用</p>
+        </div>
+        <template v-else>
+          <div ref="boxRef" class="mx-auto w-full rounded-[22px] p-1.5 border-[3px] border-slate-700 bg-slate-950 shadow-2xl">
+            <div class="rounded-[15px] overflow-hidden bg-slate-900 relative"
+                 :style="{ height: Math.round(deviceHeight * scale) + 'px' }">
+              <!-- iframe 按真实设备宽度渲染，再整体等比缩放到容器里：
+                   这样看到的就是客户在 390 宽手机上看到的真实排版，而不是被压扁的版本 -->
+              <iframe :src="previewUrl" :key="previewKey" class="border-0 origin-top-left"
+                      :width="deviceWidth" :height="deviceHeight"
+                      :style="{ transform: `scale(${scale})` }"
+                      title="分站首页预览" referrerpolicy="no-referrer"></iframe>
+              <div v-if="previewLoading" class="absolute inset-0 grid place-items-center bg-slate-950/60">
+                <span class="text-[11px] text-amber-300">刷新预览…</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between mt-2 gap-2">
+            <p class="text-[10px] text-slate-500">预览里显示的是<b class="text-slate-400">还没保存</b>的改动；保存后才对客户生效</p>
+            <div class="flex items-center gap-2 shrink-0">
+              <button type="button" @click="refreshPreview" class="text-[11px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700">↻ 刷新</button>
+              <a v-if="site && site.domain" :href="`//${site.domain}`" target="_blank"
+                class="text-[11px] text-sky-400 hover:text-sky-300">打开真实站点 ↗</a>
+            </div>
+          </div>
+        </template>
+      </div>
     </section>
+
 
     <!-- ── 一键风格（可视化）────────────────────────────────────── -->
     <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
@@ -406,7 +376,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { encodePreviewDraft } from '../../utils/previewDraft'
 
 const props = defineProps({
   form: { type: Object, required: true },
@@ -426,6 +397,98 @@ defineEmits(['apply-preset', 'reset-styles', 'pick-image'])
 
 const BG_PRESETS = computed(() => props.bgPresets)
 const openPreview = ref(true)
+
+// 🖼 真预览：设备档位 + 草稿 URL
+// 宽度用真实视口宽（手机 390 就是客户手机上的宽度），高度是预览框可视高度
+const DEVICES = [
+  { key: 'phone', label: '手机', width: 390, height: 640 },
+  { key: 'tablet', label: '平板', width: 768, height: 640 },
+  { key: 'desktop', label: '桌面', width: 1180, height: 640 }
+]
+const device = ref('phone')
+const deviceWidth = computed(() => (DEVICES.find((d) => d.key === device.value) || DEVICES[0]).width)
+const deviceHeight = computed(() => (DEVICES.find((d) => d.key === device.value) || DEVICES[0]).height)
+
+// 容器实际宽度 → 缩放比（永远不超过 1，手机档基本是 1:1）
+const boxRef = ref(null)
+const boxW = ref(360)
+const scale = computed(() => {
+  const w = boxW.value || 360
+  return Math.min(1, Math.max(0.3, w / deviceWidth.value))
+})
+const measure = () => {
+  const el = boxRef.value
+  if (el) boxW.value = el.clientWidth
+}
+let ro = null
+const observeBox = () => {
+  nextTick(() => {
+    measure()
+    if (boxRef.value && ro) { try { ro.observe(boxRef.value); } catch (e) {} }
+  })
+}
+onMounted(() => {
+  measure()
+  if (typeof ResizeObserver !== 'undefined') ro = new ResizeObserver(() => measure())
+  observeBox()
+  window.addEventListener('resize', measure)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measure)
+  if (ro) { try { ro.disconnect(); } catch (e) {} }
+})
+// 预览框是在 previewUrl 赋上之后才渲染出来的，得等它挂载完再量
+
+const previewUrl = ref('')
+const previewKey = ref(0)
+const previewLoading = ref(false)
+
+watch([device, openPreview], observeBox)
+watch(previewUrl, observeBox)
+let previewTimer = null
+
+// 把表单里"影响外观/文案"的字段收成草稿，交给 iframe 里的真实首页渲染
+const buildDraft = () => ({
+  siteName: props.form.name, siteLogo: props.form.logo,
+  footerText: props.form.footer_text, supportUrl: props.form.support_url,
+  announcement: props.form.announcement, discountLabel: props.form.discount_label,
+  themeTemplate: props.form.template, themeColor: props.form.color, themeAccent: props.form.accent,
+  uiRadius: props.form.ui_radius, uiDensity: props.form.ui_density, cardStyle: props.form.card_style,
+  fontStyle: props.form.font_style, btnShape: props.form.btn_shape, heroLayout: props.form.hero_layout,
+  bgColor: props.form.bg_color, bgImage: props.form.bg_image, fontScale: props.form.font_scale,
+  heroVariant: props.form.hero_variant, servicesVariant: props.form.services_variant,
+  customCss: props.form.custom_css, faviconUrl: props.form.favicon_url,
+  sectionTitles: props.form.section_titles, advantages: props.form.advantages,
+  homeModules: props.form.modules,
+  hero: {
+    hero_badge: props.form.hero_badge, hero_title: props.form.hero_title,
+    hero_subtitle: props.form.hero_subtitle, hero_desc: props.form.hero_desc,
+    hero_btn1_text: props.form.hero_btn1_text, hero_btn1_url: props.form.hero_btn1_url,
+    hero_btn2_text: props.form.hero_btn2_text, hero_btn2_url: props.form.hero_btn2_url,
+    hero_bg_url: props.form.hero_bg_url
+  }
+})
+
+const schedulePreview = () => {
+  const domain = props.site && props.site.domain
+  if (!domain) { previewUrl.value = ''; return }
+  previewLoading.value = true
+  clearTimeout(previewTimer)
+  previewTimer = setTimeout(() => {
+    const d = encodePreviewDraft(buildDraft())
+    previewUrl.value = `//${domain}/?pv=1&draft=${d}&t=${Date.now()}`
+    previewKey.value++
+    setTimeout(() => { previewLoading.value = false }, 900)
+  }, 700)
+}
+
+const refreshPreview = () => schedulePreview()
+
+watch(
+  () => JSON.stringify(buildDraft()),
+  () => schedulePreview(),
+  { immediate: true }
+)
 
 // ── 预览样式（与真实站点同一套令牌）──────────────────────────────
 const shellStyle = computed(() => ({
