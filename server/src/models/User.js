@@ -11,6 +11,9 @@ const User = sequelize.define('User', {
   custom_multiplier: { type: DataTypes.DECIMAL(4, 2), allowNull: true, defaultValue: null }, 
   api_key: { type: DataTypes.STRING(64), unique: true, allowNull: true },
   vip_expire_at: { type: DataTypes.DATE, allowNull: true },
+  // 💳 至尊代理月费到期（87 期）：0 = 未纳入/永久（不误伤存量代理）
+  agent_expire_at: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  agent_remind_keys: { type: DataTypes.STRING(40), allowNull: false, defaultValue: '' },
   register_ip: { type: DataTypes.STRING(45), allowNull: true },
   last_login_ip: { type: DataTypes.STRING(45), allowNull: true },
   // 💡 核心加法：新增最后登录时间字段

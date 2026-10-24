@@ -1260,3 +1260,67 @@ Beta 里唯一挂公网域名的站 `laozhang.taikon.top`（真实 LE 证书，H
 | XNOW / xnow.taikon.top / 上游 / 供应商 / 渠道商 / 进货 / 返佣 / 至尊代理 / 我的分站 / 推广赚钱 / Xnow001Bot | **全部 0 命中** ✅ |
 | `/order`、`/login` | 200，泄漏词 0 ✅ |
 | canonical | 无（不指向主站）✅ |
+
+---
+
+## 二十七、商业化计费（87 期）：代理 99 + 每站 99 + 1 天试用
+
+### 祥哥定的规则（2026-10-25）
+
+| 项 | 规则 |
+|---|---|
+| 至尊代理 | ¥99/月，**只是资格，不含分站** |
+| 分站 | 每开一个再 ¥99/月，想开几个买几个 |
+| 新站 | 给 **1 天试用**（24 小时），到期未付费即停 |
+| 到期 | **没有宽限期**，提前 7/3/1 天提醒（试用是 6/1 小时），到点就停 |
+| 停站后 | 域名打 410 墓碑、数据一条不删，续费立刻恢复 |
+| 扣款来源 | **主站余额**（流水 site_id=0 记平台收入）；分站自有商户只收他自己客户的钱 |
+
+价格都放在 `configs` 表（`agent_monthly_price` / `site_monthly_price` / `site_trial_hours`），
+改价不用改代码、不用重新部署。
+
+### 新接口
+
+| 接口 | 作用 |
+|---|---|
+| `GET /api/billing/plan` | 价格与规则（前台展示） |
+| `GET /api/billing/status` | 我的代理/分站到期情况、剩余天数 |
+| `POST /api/billing/agent/subscribe` | 开通/续费代理 ¥99（扣余额 → 30 天） |
+| `POST /api/billing/site/:id/renew` | 续费分站 ¥99（扣余额 → +30 天，同时恢复被停的站） |
+| `POST /api/sites` | 建站：**域名可不填**，自动分配免费子域名；首个站走试用，之后扣费 |
+
+定时体检 `setInterval(runSiteBillingCheck, 10min)`：停过期站、降级过期代理、发提前提醒。
+
+### 实测矩阵（Beta，全绿）
+
+| 场景 | 结果 |
+|---|---|
+| 不填域名开站 | 自动分配 `5a7gdd.taikon.top`，**当场签发正式证书**，套餐 trial、扣 ¥0、24 小时到期 ✅ |
+| 余额 0 开第二站 | `余额不足：需要 ¥99.00，当前余额 ¥0.00。请先充值。`，不建站不扣钱 ✅ |
+| 充 ¥99 再开 | 扣 ¥99、套餐 paid、30 天、流水「分站月费 ¥-99」✅ |
+| 续费试用站 | 余额 0 时被拒；充值后扣 ¥99 转 paid、+30 天 ✅ |
+| 到期停站 | 状态 expired、真实 vhost 删除、立 410 墓碑，HTTP/HTTPS **都是 410** ✅ |
+| 续费恢复 | 墓碑清除、vhost 重建、HTTPS 回到 200、数据原样 ✅ |
+| 提前提醒 | 剩 6 天触发「7 天」档一次；再跑一次不重复提醒 ✅ |
+| 代理到期 | 角色降为 user、名下 3 个站全部 expired 且 410 ✅ |
+| 降级后开站 | 被拒，余额不动 ✅ |
+| 代理已过期但角色还是 agent | 被拒（按数据库判断，不信 token），余额不动 ✅ |
+| 续费代理 | 扣 ¥99、+30 天、角色恢复 agent ✅ |
+| 存量老站 | `expire_at=0` → 永不过期，不被误停 ✅ |
+
+### 这一轮撞到的三个真问题（都已修）
+
+1. **`req.user` 里没有 `agent_expire_at`** —— 鉴权中间件只查了 5 个字段，
+   `req.user.agent_expire_at` 是 `undefined`，判断被静默跳过 →
+   **代理过期的人照样能开新站，还被成功扣了 ¥99**。
+   修法：中间件带上 `balance` / `agent_expire_at`，建站时再按数据库 role 复核。
+2. **`sites.status` 是 ENUM('active','suspended')** —— 写 `expired` 直接
+   `Data truncated for column 'status'`，到期停站静默失败。
+   修法：模型加 `expired`，并在 app.js 里幂等 `MODIFY COLUMN` 扩老库 ENUM。
+3. **墓碑配置引用不存在的证书** —— 写死 `/etc/nginx/ssl/<域名>.crt`，
+   而分站用的是 Let's Encrypt（在 `/etc/letsencrypt` 下）→ `nginx -t` 失败 →
+   reload 被跳过 → 墓碑根本没生效，到期站还能正常打开。
+   修法：墓碑按「LE → 自签 → 平台兜底证书」顺序挑真实存在的证书；
+   停站时先删真实 vhost 再立墓碑（否则两个同名 server 打架）。
+   （另外我自己写的 `restoreSiteDomain` 用了相对路径 `client/dist`，
+   把 vhost 的 root 写坏导致首页 500 —— 已改绝对路径。）

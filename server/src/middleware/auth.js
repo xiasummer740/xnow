@@ -29,7 +29,10 @@ export const authenticate = async (req, res, next) => {
   // 若把数据库抖动当成 401，一次抖动就会把全体在线用户踢下线。
   let user;
   try {
-    user = await User.findByPk(decoded.id, { attributes: ['id', 'phone', 'role', 'is_banned', 'ban_reason'] });
+    // balance / agent_expire_at 也要带：计费相关路由（开站、续费）要在这一层就能判断
+    // 「代理是否到期」，否则 req.user.agent_expire_at 是 undefined，判断会静默跳过
+    // —— 87 期实测：代理已过期的人仍能开新站并成功扣费。
+    user = await User.findByPk(decoded.id, { attributes: ['id', 'phone', 'role', 'is_banned', 'ban_reason', 'balance', 'agent_expire_at'] });
   } catch (e) {
     console.error('❌ [Auth] 回查用户失败:', e.message);
     return res.status(503).json({ status: 'error', message: '服务暂时不可用，请稍后重试' });

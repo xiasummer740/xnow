@@ -10,6 +10,8 @@ import { sequelize, User, Config } from './models/index.js';
 import { autoSyncServices } from './utils/sync.js';
 import { autoSyncOrders } from './utils/orderSync.js';
 import { autoSyncAnnouncement } from './utils/announceSync.js';
+import billingRoutes from './routes/billing.js';
+import { runSiteBillingCheck } from './utils/siteBilling.js';
 import { autoTrafficWarning } from './routes/vpn.js';
 import { checkNginxErrors, checkNginxTempDirs } from './utils/nginxWatch.js';
 
@@ -85,7 +87,8 @@ app.get('/api/health', async (req, res) => {
 
 app.use('/api/user', userRoutes);
 app.use('/api/services', servicesRoutes); 
-app.use('/api/orders', ordersRoutes); 
+app.use('/api/orders', ordersRoutes);
+app.use('/api/billing', billingRoutes);   // 💳 代理/分站月费（87 期） 
 app.use('/api/transactions', transactionsRoutes); 
 app.use('/api/pay', payRoutes);
 app.use('/api/admin', adminRoutes);
@@ -103,6 +106,9 @@ const initDatabase = async () => {
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_rate FLOAT NOT NULL DEFAULT 1"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_label VARCHAR(40) DEFAULT NULL"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_until BIGINT NOT NULL DEFAULT 0"); } catch (e) {}
+    // 💳 87 期：分站到期要把 status 置为 'expired'，但老库的 ENUM 只有 active/suspended，
+    //    直接写会报 Data truncated for column 'status'（实测踩到）。这里幂等扩一下取值。
+    try { await sequelize.query("ALTER TABLE sites MODIFY COLUMN status ENUM('active','suspended','expired') NOT NULL DEFAULT 'active'"); } catch (e) {}
 
     // 🔧 自动补列（83 期）：上线演练时发现的真问题 ——
     //    生产库的 sites 表是早期版本，只有 11 列；而 sync({alter:false}) 只在**建表**时
@@ -177,6 +183,9 @@ app.listen(PORT, "127.0.0.1", async () => {
   setTimeout(autoSyncAnnouncement, 30000);
   setInterval(autoSyncAnnouncement, 1000 * 60 * 30);
   setInterval(reconcilePayments, 1000 * 60 * 2);
+  // 💳 分站/代理到期体检：停站 + 提前 7/3/1 天（试用 6/1 小时）提醒
+  setInterval(runSiteBillingCheck, 1000 * 60 * 10);
+  setTimeout(runSiteBillingCheck, 1000 * 60 * 2);
   setInterval(autoTrafficWarning, 1000 * 60 * 60); // 每小时检查流量预警
   setInterval(checkNginxTempDirs, 1000 * 60 * 5);  // nginx 临时目录属主自愈（防大响应被腰斩）
   setInterval(checkNginxErrors, 1000 * 60 * 5);    // nginx 严重错误告警（防静默故障）

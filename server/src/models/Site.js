@@ -9,7 +9,7 @@ const Site = sequelize.define('Site', {
   logo: { type: DataTypes.STRING(512), allowNull: true },
   multiplier: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 2.0 },
   agent_discount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0.8 },
-  status: { type: DataTypes.ENUM('active', 'suspended'), defaultValue: 'active' },
+  status: { type: DataTypes.ENUM('active', 'suspended', 'expired'), defaultValue: 'active' },
   announcement: { type: DataTypes.TEXT, allowNull: true },
   // 🎨 三期主题系统
   template: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'classic' },
@@ -72,6 +72,13 @@ const Site = sequelize.define('Site', {
   discount_rate: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 1.0 },
   discount_label: { type: DataTypes.STRING(40), allowNull: true },   // 首页那行小字，如「开业 8 折」
   discount_until: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+
+  // 💳 分站月费（87 期）：代理 99/月 只是资格，每开一个分站再 +99/月。
+  //    expire_at 用毫秒时间戳（0 = 老数据/未纳入计费，永不过期，避免上线把存量站误停）。
+  expire_at: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  plan: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'free' },  // trial / paid / free(老数据)
+  // 已发过哪些到期提醒（如 "7,3,1" 或试用的 "t6,t1"），防止同一档位重复轰炸
+  remind_keys: { type: DataTypes.STRING(40), allowNull: false, defaultValue: '' },
 }, {
   tableName: 'sites',
   timestamps: true,

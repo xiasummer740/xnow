@@ -1,7 +1,8 @@
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
-import { Site, User, Config, Service, SiteServicePrice } from '../models/index.js';
+import { sequelize, Site, User, Config, Service, SiteServicePrice } from '../models/index.js';
+import { getBillingConfig, chargeBalance, genSubdomain, renewSite } from '../utils/siteBilling.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
@@ -317,9 +318,20 @@ router.post('/', authenticate, async (req, res) => {
     }
   }
 
-  const { domain, name, logo, multiplier } = req.body;
-  if (!domain || !name) {
-    return res.json({ status: 'error', message: '域名和站点名称不能为空' });
+  const { name, logo, multiplier } = req.body;
+  if (!name) {
+    return res.json({ status: 'error', message: '站点名称不能为空' });
+  }
+
+  // 🌐 域名现在是**可选**的：不填就自动分配一个免费子域名（*.taikon.top 是泛解析，
+  //    写一条 vhost 立刻生效，不需要等 DNS）。站长想用自己的域名也可以，填上就行。
+  let domain = req.body.domain;
+  if (!domain || !String(domain).trim()) {
+    try {
+      domain = await genSubdomain();
+    } catch (e) {
+      return res.json({ status: 'error', message: e.message || '子域名分配失败' });
+    }
   }
 
   const cleanDomain = String(domain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/\/.*$/, '');
@@ -352,41 +364,90 @@ router.post('/', authenticate, async (req, res) => {
       ? parseInt(req.body.owner_id)
       : req.user.id;
 
-  // 🔢 每位站长能开几个站。
-  //    ⚠️ 默认值 = 1：每位站长只能开 1 个分站（祥哥 2026-10-24 定）。
-  //    想放宽：把 configs.max_sites_per_agent 设成 2 / 3 / …；显式设 0 表示不限。
-  //    做成配置项是因为这属于经营策略，改规则不该每次都改代码重新部署。
-  //    平台管理员（admin/super_admin）不受限制，方便自己做测试站。
-  if (!['admin', 'super_admin'].includes(req.user.role)) {
-    let maxSites = 1;
-    try {
-      const cfg = await Config.findOne({ where: { key: 'max_sites_per_agent' } });
-      if (cfg && cfg.value !== '' && cfg.value !== null) {
-        const n = parseInt(cfg.value, 10);
-        // 显式配置优先：0 = 不限；正数 = 上限
-        if (Number.isFinite(n) && n >= 0) maxSites = n;
+    // 💳 计费（87 期，祥哥 2026-10-25 定）：
+    //    · 至尊代理 ¥99/月 只是资格，**不含分站**
+    //    · 每开一个分站再 ¥99/月，想开几个买几个
+    //    · 名下第 1 个站给 1 天试用，到期未付费即停站（无宽限期，提前提醒）
+    //    · 之后再开站：先从主站余额扣 ¥99，开 30 天
+    //    平台管理员开站不计费（方便自测）。
+    const isStaff2 = ['admin', 'super_admin'].includes(req.user.role);
+    const billing = await getBillingConfig();
+    let plan = 'free';
+    let expireAt = 0;
+
+    if (!isStaff2) {
+      // ⚠️ 以数据库为准：token 里的 role 是签发那一刻的，代理降级后旧 token 仍是 agent
+      const ownerRow = await User.findByPk(ownerId);
+      if (!ownerRow) return res.json({ status: 'error', message: '用户不存在' });
+      if (ownerRow.role !== 'agent') {
+        return res.json({ status: 'error', message: '仅至尊代理可创建分站，请先开通代理（¥' + billing.agentMonthly + '/月）' });
       }
-    } catch (e) { /* 读不到配置就用默认值 1：不能因为配置表异常让人无限开站 */ }
-    if (maxSites > 0) {
-      const owned = await Site.count({ where: { owner_id: ownerId } });
-      if (owned >= maxSites) {
+      const agentExp = Number(ownerRow.agent_expire_at || 0);
+      if (agentExp && Date.now() >= agentExp) {
         return res.json({
           status: 'error',
-          message: `每位站长最多开 ${maxSites} 个分站（你现在已有 ${owned} 个）。如需增开请联系平台。`
+          message: `你的至尊代理已到期，请先续费代理（¥${billing.agentMonthly}/月）再开分站`
         });
       }
-    }
-  }
 
-    const site = await Site.create({
-      owner_id: ownerId,
-      domain: cleanDomain,
-      name: String(name).trim(),
-      logo: logo || null,
-      multiplier: multiplierValue,
-      announcement: null,
-      status: 'active'
-    });
+      let maxSites = 0; // 0 = 不限：每个站都要付费，本身就是闸门
+      try {
+        const c = await Config.findOne({ where: { key: 'max_sites_per_agent' } });
+        if (c && c.value !== '' && c.value !== null) {
+          const n = parseInt(c.value, 10);
+          if (Number.isFinite(n) && n >= 0) maxSites = n;
+        }
+      } catch (e) {}
+      const owned = await Site.count({ where: { owner_id: ownerId } });
+      if (maxSites > 0 && owned >= maxSites) {
+        return res.json({ status: 'error', message: `每位站长最多开 ${maxSites} 个分站（你现在已有 ${owned} 个）。` });
+      }
+
+      if (owned === 0) {
+        plan = 'trial';
+        expireAt = Date.now() + billing.trialHours * 3600e3;
+      } else {
+        plan = 'paid';
+        expireAt = Date.now() + billing.renewDays * 86400e3;
+      }
+    }
+
+    // 建站 + 扣费放在同一个事务里：扣了钱却建站失败必须整体回滚
+    const t = await sequelize.transaction();
+    let site;
+    let paidAmount = 0;
+    let newBalance = null;
+    try {
+      if (plan === 'paid') {
+        const payer = await User.findByPk(ownerId, { transaction: t, lock: t.LOCK.UPDATE });
+        const pay = await chargeBalance(payer, billing.siteMonthly, '分站月费',
+          `开站「${String(name).trim()}」月费 ¥${billing.siteMonthly}（${cleanDomain}，${billing.renewDays} 天）`, t);
+        if (!pay.ok) {
+          await t.rollback();
+          return res.json({ status: 'error', message: pay.message });
+        }
+        paidAmount = billing.siteMonthly;
+        newBalance = pay.balance;
+      }
+
+      site = await Site.create({
+        owner_id: ownerId,
+        domain: cleanDomain,
+        name: String(name).trim(),
+        logo: logo || null,
+        multiplier: multiplierValue,
+        announcement: null,
+        status: 'active',
+        plan,
+        expire_at: expireAt,
+        remind_keys: '',
+      }, { transaction: t });
+
+      await t.commit();
+    } catch (e) {
+      try { await t.rollback(); } catch (_) {}
+      throw e;
+    }
     bustSiteCache();
 
     // 🏬 二十九期：免费子域名也走「各自独立 vhost」，不用泛域名。
@@ -429,7 +490,19 @@ router.post('/', authenticate, async (req, res) => {
 
     sendTgMessage(`🏗️ <b>新分站创建</b>\n🌐 <b>域名:</b> <code>${cleanDomain}</code>\n📛 <b>名称:</b> ${name}\n👤 <b>站长UID:</b> <code>${ownerId}</code>\n💹 <b>倍率:</b> ${multiplierValue}`);
 
-    res.json({ status: 'success', message: `分站创建成功${publishNote}`, data: site });
+    const planNote = plan === 'trial'
+      ? `｜🎁 已开始 ${billing.trialHours} 小时免费试用，到期前会提醒，之后 ¥${billing.siteMonthly}/月`
+      : plan === 'paid'
+        ? `｜💳 已扣 ¥${paidAmount}，有效期到 ${new Date(expireAt).toLocaleDateString('zh-CN')}`
+        : '';
+    res.json({
+      status: 'success',
+      message: `分站创建成功${publishNote}${planNote}`,
+      data: {
+        ...site.toJSON(),
+        billing: { plan, expire_at: expireAt, trial_hours: billing.trialHours, monthly: billing.siteMonthly, paid: paidAmount, balance: newBalance },
+      },
+    });
   } catch (e) {
     res.status(500).json({ status: 'error', message: `创建失败: ${e.message}` });
   }

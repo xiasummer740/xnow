@@ -304,26 +304,56 @@ export const removeVhost = (siteId, domain, opts = {}) => {
 export const gonePath = (domain) =>
   path.join(NGINX_DIR, `xnow-gone-${String(domain).replace(/[^a-z0-9.-]/gi, '')}`);
 
+// 给墓碑挑一对**真实存在**的证书。找不到就退回平台自签证书 ——
+// 之前写死 /etc/nginx/ssl/<域名>.crt，分站用的是 Let's Encrypt（在 /etc/letsencrypt 下），
+// 这个文件根本不存在 → nginx -t 失败 → reload 被跳过 → 墓碑压根没生效，站点照样 200。
+const pickParkCert = (safe) => {
+  const leCrt = `/etc/letsencrypt/live/${safe}/fullchain.pem`;
+  const leKey = `/etc/letsencrypt/live/${safe}/privkey.pem`;
+  if (fs.existsSync(leCrt) && fs.existsSync(leKey)) return { crt: leCrt, key: leKey };
+  const selfCrt = path.join(SSL_DIR, `${safe}.crt`);
+  const selfKey = path.join(SSL_DIR, `${safe}.key`);
+  if (fs.existsSync(selfCrt) && fs.existsSync(selfKey)) return { crt: selfCrt, key: selfKey };
+  // 兜底：平台自己的自签证书（保证 nginx -t 一定过）
+  const fallback = String(process.env.SITE_DEFAULT_CERT || '').trim();
+  if (fallback && fs.existsSync(`${fallback}.crt`) && fs.existsSync(`${fallback}.key`)) {
+    return { crt: `${fallback}.crt`, key: `${fallback}.key` };
+  }
+  try {
+    const cand = fs.readdirSync(SSL_DIR)
+      .filter(f => f.endsWith('.crt') && fs.existsSync(path.join(SSL_DIR, f.replace(/\.crt$/, '.key'))));
+    if (cand.length) {
+      const base = cand[0].replace(/\.crt$/, '');
+      return { crt: path.join(SSL_DIR, `${base}.crt`), key: path.join(SSL_DIR, `${base}.key`) };
+    }
+  } catch (e) {}
+  return null;
+};
+
 export const parkDomain = (domain) => {
   const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
   if (!safe) return false;
-  const body = `# 自动生成：域名 ${safe} 已释放（原分站已删除）
+  const cert = pickParkCert(safe);
+  const httpsBlock = cert
+    ? `
+server {
+    listen 443 ssl http2;
+    server_name ${safe};
+    ssl_certificate     ${cert.crt};
+    ssl_certificate_key ${cert.key};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    return 410;
+}
+`
+    : ''; // 连一张证书都找不到：只立 80 的墓碑，443 交给默认 server（总比配置报错、整机不重载好）
+  const body = `# 自动生成：域名 ${safe} 已释放（原分站已删除/已到期）
 # 由 server/src/utils/siteDomain.js 写入，请勿手工编辑
 server {
     listen 80;
     server_name ${safe};
     return 410;
 }
-
-server {
-    listen 443 ssl http2;
-    server_name ${safe};
-    ssl_certificate     /etc/nginx/ssl/${safe}.crt;
-    ssl_certificate_key /etc/nginx/ssl/${safe}.key;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    return 410;
-}
-`;
+${httpsBlock}`;
   try { fs.writeFileSync(gonePath(domain), body); return true; } catch (e) { return false; }
 };
 
