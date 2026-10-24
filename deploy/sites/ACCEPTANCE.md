@@ -1904,3 +1904,81 @@ server { listen 443 ssl http2;  server_name *.taikon.top *.xnow.taikon.top;  ret
 - `t1.xnow.taikon.top`（站点 1，早期测试站）的 DNS 已失效 ——
   `xnow.taikon.top` 没有泛解析。新站默认走 `*.taikon.top`（有泛解析），不受影响。
   若要保留这个站，把域名改到 `*.taikon.top` 即可。
+
+---
+
+## 三十八、自有域名成功链路 + 过期续费 + 三个红线级 bug（96 期）
+
+### 一、自有域名「成功分支」终于验通了
+
+以前只验过失败分支（域名没指向 → 要求加 TXT）。这轮用 `sslip.io`（把 IP 写进域名、自带解析）
+走通了真实成功链路，等于站长的自有域名：
+
+```
+POST /api/sites/25/domain  {domain: "site96.192-129-210-52.sslip.io"}
+  → {"status":"success","message":"域名已开通，证书已自动签发 ✅",
+     "data":{"status":"active","cert_mode":"letsencrypt",
+             "vhost":"/etc/nginx/sites-enabled/xnow-site-25-site96.192-129-210-52.sslip.io"}}
+
+证书        issuer=Let's Encrypt，CN=site96.192-129-210-52.sslip.io，有效期到 2027-01-22
+访问        https://该域名/ → 200，标题「阿明涨粉工作室」，主站痕迹 0 处
+原域名      demostore.taikon.top 仍 200
+解绑        DELETE → custom_domain 清空、状态回 active、旧域名变中性 404
+```
+
+一句话：**站长填一个已指向本机的域名，点一下，就自动拿到正式证书并能卖货。**
+
+### 二、修掉的三个红线级 bug
+
+**① 所有分站首页统计恒为 0（0 在售服务 / 0 累计订单 / 0 服务用户）**
+`SiteModules.vue` 的 `onMounted` 里先判 `isSubsite`，而这个值来自异步拉的配置 ——
+组件挂载时配置还没回来，请求被整段跳过。改成挂载就拉 + 配置到位补拉。修后：
+`2,839 / 0 / 1`（两个域名都正常）。
+
+**② 续费后最长 60 秒按「主站」返回品牌和价格（红线）**
+站点域名缓存 60 秒一刷，且只缓存 `active` 站点。停站 → 移出缓存；续费 → 状态回 active，
+但缓存没失效。这 60 秒内页面是分站的壳、**API 却按主站返回**：
+实测 `site_name=XNOW` —— 客户会看到平台的名字和主站价格。
+修法：续费后与停站后都立刻 `clearSiteCache()`。修后实测 **1.3 秒**认回自己。
+
+**③ 停站页是 nginx 英文默认页**
+原来 `return 410;` 只有状态码，访客看到光秃秃的 `410 Gone`，像跑路。
+改成中性中文页（不提平台、不提品牌）：
+> 这个站点已下线 / 如果你是访客：请联系站点的客服，或稍后再来看看。
+> 如果你是站长：站点数据都还在，续费后即可恢复访问。
+
+顺带给 TG 通知加了 15 秒超时（axios 默认不超时，体检脚本实测卡了 10 分钟）。
+
+### 三、过期 → 续费 完整演练（数据保留是承诺的核心）
+
+```
+① 开站 过期演练站 → 2rtppe.taikon.top（自签证书兜底路径也顺带验了）
+② 把 expire_at 调到过去 → 触发体检
+   → status=expired、vhost 拆掉、立 410 墓碑
+   → 访客看到「这个站点已下线」，主站痕迹 0 处 ✅
+   → 数据仍在（统计接口 200，价格行、客户、订单一条没动）✅
+③ 续费 POST /api/billing/site/37/renew → 扣 ¥99、30 天
+   → status=active、vhost 重建、域名 200、配置认回自己（1.3s）✅
+④ 清理：删站 + 删证书 + 退款，旧域名回到中性 404 ✅
+```
+
+### 四、nginx 兜底补齐：443 default_server
+
+上一期的通配只覆盖 `*.taikon.top / *.xnow.taikon.top`。
+站长的**自有域名**解绑或过期后，DNS 仍指向本机，但已没有任何 vhost ——
+这类「任意第三方域名」会落到默认 server（Beta 或主站）。
+现在 443 的兜底块就是 `default_server`：
+
+```
+site96.192-129-210-52.sslip.io → 404 页面不存在（解绑后）
+foo.example.com                → 404 页面不存在
+baz.whatever.net               → 404 页面不存在
+```
+
+已知域名全部复核无恙：xnow.taikon.top / beta.taikon.top / 三个分站域名 → 200；
+按 IP 访问 → 200（原 vhost 未受影响）。
+
+### 五、Beta 数据已复原
+
+站点数 3（demostore / laozhang / t1）、站长余额 ¥300、客户余额 ¥50、
+演练站与测试订单/扣款全部清除、`custom_domain` 为空、状态 active。

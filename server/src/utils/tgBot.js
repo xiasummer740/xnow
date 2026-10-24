@@ -20,7 +20,8 @@ export const sendTgMessage = async (message) => {
             text: finalMessage,
             parse_mode: 'HTML',
             disable_web_page_preview: true
-        }).catch(e => console.error('[TG Bot Send Error]', e.message));
+        }, { timeout: 15000 })   // 96 期：axios 默认不超时，网络抖动会挂很久（体检实测卡 10 分钟）
+        .catch(e => console.error('[TG Bot Send Error]', e.message));
 
     } catch (error) {
         console.error('[TG Bot Config Error]', error.message);

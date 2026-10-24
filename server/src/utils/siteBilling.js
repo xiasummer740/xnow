@@ -14,6 +14,7 @@
 import path from 'path';
 import { Site, User, Config, Transaction } from '../models/index.js';
 import { sendTgMessage } from './tgBot.js';
+import { clearSiteCache } from '../middleware/site.js';
 import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureCert } from './siteDomain.js';
 
 export const DEFAULTS = {
@@ -134,6 +135,8 @@ export const runSiteBillingCheck = async () => {
           site.status = 'expired';
           site.domain_status = 'none';
           await site.save();
+          // 96 期：停站同样要清缓存，否则这 60 秒内域名还能按分站解析到后端
+          try { clearSiteCache(); } catch (e) {}
           report.expiredSites++;
           await sendTgMessage(
             `⏰ <b>分站已到期停站</b>\n🏬 ${site.name}\n🌐 <code>${site.domain}</code>\n` +

@@ -10,6 +10,7 @@
 import express from 'express';
 import { sequelize, Site, User, Config } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
+import { clearSiteCache } from '../middleware/site.js';
 import {
   getBillingConfig, chargeBalance, renewSite, restoreSiteDomain, fmt,
 } from '../utils/siteBilling.js';
@@ -140,6 +141,10 @@ router.post('/site/:id/renew', authenticate, async (req, res) => {
     if (site.status === 'active') {
       restoreSiteDomain(site).catch(() => {});
     }
+    // 🔴 96 期：续费后必须立刻清域名缓存。
+    //    否则最长 60 秒内这个域名仍被当成"没有站点"→ 按主站返回品牌与价格，
+    //    客户会看到平台的名字（实测 site_name=XNOW，红线）。
+    try { clearSiteCache(); } catch (e) {}
 
     res.json({
       status: 'success',

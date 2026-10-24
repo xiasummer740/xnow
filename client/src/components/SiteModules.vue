@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 
 const appStore = useAppStore()
@@ -112,17 +112,33 @@ const faqs = computed(() => zh.value ? [
   { q: 'Refunds?', a: 'Unstarted orders can be cancelled and refunded.' }
 ])
 
-onMounted(async () => {
-  if (!isSubsite.value) return
+// 📊 96 期修：以前这里是「onMounted 里先判 isSubsite，不是分站就直接 return」。
+//    isSubsite 来自 appStore.themeTemplate，而配置是异步拉的 ——
+//    组件挂载时配置还没回来，就把请求整段跳过了，
+//    结果所有分站首页固定显示「0 在售服务 / 0 累计订单 / 0 服务用户」，
+//    看起来像站点坏了（实测 demostore 与自有域名都是 0）。
+//    现在：挂载就拉，配置到位后再补拉一次（配置为分站时才补）。
+const loadSiteStats = async () => {
   try {
     const r1 = await fetch('/api/public/site-stats')
     const d1 = await r1.json()
-    if (d1.status === 'success') stats.value = d1.data
+    if (d1.status === 'success' && d1.data) stats.value = d1.data
   } catch (e) {}
+}
+const loadHot = async () => {
   try {
     const r2 = await fetch('/api/public/hot-services')
     const d2 = await r2.json()
     if (d2.status === 'success' && Array.isArray(d2.data)) hot.value = d2.data
   } catch (e) {}
+}
+
+onMounted(() => { loadSiteStats(); loadHot(); })
+
+// 配置到位后如果确认是分站、且统计还是空的，再补一次（覆盖慢网/慢接口的情况）
+watch(isSubsite, (v) => {
+  if (!v) return
+  if (!stats.value || !stats.value.services) loadSiteStats()
+  if (!hot.value.length) loadHot()
 })
 </script>

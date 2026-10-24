@@ -350,6 +350,20 @@ const pickParkCert = (safe) => {
   return null;
 };
 
+
+// 📄 96 期：墓碑页的中性正文。
+//    以前 `return 410;` 只有状态码，访客看到的是 nginx 自带的英文 "410 Gone" 白页 ——
+//    分站到期后客户一脸懵，看着像跑路。现在给一句中文说明，
+//    仍然不提平台、不提品牌（红线），也不暗示"还有个上级"。
+const GONE_PAGE = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
+  '<meta name="viewport" content="width=device-width,initial-scale=1"><title>站点已下线</title>' +
+  '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+  'background:#0f1115;color:#9aa4b2;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}' +
+  'div{text-align:center;padding:24px}h1{font-size:20px;margin:0 0 10px;color:#e5e7eb}' +
+  'p{font-size:13px;margin:0;line-height:1.8}</style></head><body><div>' +
+  '<h1>这个站点已下线</h1><p>如果你是访客：请联系站点的客服，或稍后再来看看。<br>' +
+  '如果你是站长：站点数据都还在，续费后即可恢复访问。</p></div></body></html>';
+
 export const parkDomain = (domain) => {
   const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
   if (!safe) return false;
@@ -362,7 +376,8 @@ server {
     ssl_certificate     ${cert.crt};
     ssl_certificate_key ${cert.key};
     ssl_protocols       TLSv1.2 TLSv1.3;
-    return 410;
+    default_type text/html;
+    return 410 '${GONE_PAGE}';
 }
 `
     : ''; // 连一张证书都找不到：只立 80 的墓碑，443 交给默认 server（总比配置报错、整机不重载好）
@@ -371,7 +386,8 @@ server {
 server {
     listen 80;
     server_name ${safe};
-    return 410;
+    default_type text/html;
+    return 410 '${GONE_PAGE}';
 }
 ${httpsBlock}`;
   try { fs.writeFileSync(gonePath(domain), body); return true; } catch (e) { return false; }
