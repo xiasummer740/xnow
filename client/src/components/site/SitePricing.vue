@@ -1,7 +1,7 @@
 <script setup>
 // 💰 站长自己的价格体系：单服务定价 + 活动折扣
 //    后端：GET/PUT /api/sites/:id/prices、PUT /api/sites/:id（折扣三字段）
-//    红线：任何价格乘上折扣都不得低于站长进货价，后端会拦（这里只负责把话说清楚）。
+//    红线：任何价格乘上折扣都不得低于站长的成本价，后端会拦（这里只负责把话说清楚）。
 import { ref, computed, onMounted } from 'vue';
 import { useUserStore } from '../../stores/user';
 
@@ -149,7 +149,7 @@ onMounted(load);
       </div>
 
       <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
-        打折只影响你的客户看到的价格，你的进货成本不变。系统有底线：打完折也不许低于你的进货价，填太狠会直接拦下。
+        打折只影响你的客户看到的价格，你的成本不变。系统有底线：打完折也不许低于你的成本价，填太狠会直接拦下。
       </p>
 
       <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
@@ -191,7 +191,7 @@ onMounted(load);
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <h2 class="font-bold text-sm text-amber-400">单个服务改价（可选）</h2>
         <span class="text-[10px] text-slate-500">
-          进货倍率 {{ meta.cost_multiplier }} · 当前全场 {{ meta.multiplier }} 倍
+          成本保护线 {{ meta.cost_multiplier }} 倍 · 当前全场 {{ meta.multiplier }} 倍
         </span>
       </div>
 
@@ -233,7 +233,7 @@ onMounted(load);
                :class="marginOf(it).lose ? 'text-red-400' : 'text-emerald-400/80'">
             <span class="block sm:inline">客户实付 ¥{{ marginOf(it).sell }} / 千</span>
             <span class="block sm:inline sm:ml-1">· 你赚 ¥{{ marginOf(it).profit }} / 千（毛利 {{ marginOf(it).pct }}%）</span>
-            <span v-if="marginOf(it).lose" class="block mt-0.5">· 低于进货价，保存会被拒</span>
+            <span v-if="marginOf(it).lose" class="block mt-0.5">· 低于成本价，保存会被拒</span>
           </div>
         </div>
       </div>

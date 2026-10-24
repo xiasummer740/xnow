@@ -570,7 +570,7 @@ router.put('/:id/prices', authenticate, async (req, res) => {
       if (rate < floor - 0.000001) {
         return res.json({
           status: 'error',
-          message: `「${sv.name}」定价过低：${rate} 低于成本线 ${floor}（每 1000 个进货 ${(baseRate * costMult).toFixed(4)}）。站长可自定义，但不能亏本卖。`
+          message: `「${sv.name}」定价过低：${rate} 低于成本线 ${floor}（每 1000 个你的成本是 ${(baseRate * costMult).toFixed(4)}）。价格由你自己定，但不能亏本卖。`
         });
       }
       toUpsert.push({ site_id: site.id, service_id: sid, rate });
@@ -802,7 +802,7 @@ router.put('/:id', authenticate, async (req, res) => {
         if (nextRate < floorRate - 0.0001) {
           return res.json({
             status: 'error',
-            message: `折扣太深：你的倍率 ${nextMult} × 折扣 ${nextRate} = ${(nextMult * nextRate).toFixed(2)}，低于进货倍率 ${costMult}，每单会倒亏。最低只能打到 ${floorRate}（约 ${(floorRate * 10).toFixed(1)} 折）。`
+            message: `折扣太深：你的倍率 ${nextMult} × 折扣 ${nextRate} = ${(nextMult * nextRate).toFixed(2)}，低于成本保护线 ${costMult} 倍，每单会倒亏。最低只能打到 ${floorRate}（约 ${(floorRate * 10).toFixed(1)} 折）。`
           });
         }
         site.discount_rate = nextRate;
