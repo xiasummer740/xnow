@@ -573,3 +573,47 @@ Beta 的 vhost 里写着 `server_name beta.xnow.taikon.top beta.taikon.top *.xno
 修完 laozhang 一次「修复域名」就从自签升级成正式证书 ✅
 
 生产证书（`/etc/nginx/ssl/xnow.crt`）**一个字没动** ✅
+
+## 12. 分站自有 SMTP 实测（69 期，铁证）
+
+做法：在服务器上起一个**假邮件服务器**（127.0.0.1:2525，几十行 socket 代码，不装依赖），
+把客户端说的每句话都记下来；然后给演示站配上「站长自己的」SMTP，账号故意带标记
+`site-owner@demo.test / site-secret-123`，再点「发送测试邮件」。
+
+假服务器收到的原文：
+
+```
+CMD EHLO [127.0.0.1]
+CMD AUTH PLAIN AHNpdGUtb3duZXJAZGVtby50ZXN0AHNpdGUtc2VjcmV0LTEyMw==
+CMD MAIL FROM:<site-owner@demo.test>
+AUTHDEC |site-owner@demo.test|site-secret-123        ← 解码后：用的就是站长的账号密码
+DATA From: 阿明涨粉工作室 验证                        ← 发件人用的是站长站名
+DATA To: customer@example.com
+DATA Subject: 【阿明涨粉工作室】SMTP
+```
+
+结论：
+- 连接目标 = 站长配的 `127.0.0.1:2525`（不是平台 SMTP）✅
+- AUTH 用的 = 站长自己的账号密码 ✅
+- 发件人显示 = 站长站名「阿明涨粉工作室」✅ **没有出现 XNOW** ✅
+- 接口返回「测试信已发出，请查收」（说明真实走了 SMTP 会话，不是假的成功提示）✅
+- 测完已把演示站的 SMTP 清空，假服务器已停 ✅
+
+注册验证码同样走站长 SMTP：`auth.js` 里 `sendVerifyCode` 收的就是 `req.site.smtp_*`
+——客户收到的验证邮件是从站长邮箱发出的，客户看不到平台。
+
+## 13. 生产上线前发现的数据库结构缺口（重要）
+
+`server/src/app.js:99` 只有 `sequelize.sync({ alter: false })` —— **只建缺失的表，不给已有表补列**。
+69 期逐表对比生产库与 Beta 库：
+
+| 表 | 生产缺 | 后果 |
+|---|---|---|
+| `sites` | **43 列**（模板/色系/外观/域名/SMTP/商户/首页模块…） | 查分站即 `Unknown column` |
+| `orders` | `site_cost` | 分站订单扣成本失败 |
+| `transactions` | `site_id` | 流水归属丢失 |
+| `users`/`services`/`configs` | 一致 ✅ | — |
+
+已产出 `deploy/sites/migrate-sites.sql`（45 条 `ADD COLUMN IF NOT EXISTS` + 条件建索引），
+并在**生产克隆库**上验证：执行后六张表字段与 Beta **完全一致**，连跑两遍成功（幂等），纯 DDL 不改数据。
+配套 `deploy/sites/deploy-prod.sh` + `deploy/sites/PROD-DEPLOY.md`（备份四件套 + 四层回滚）。
