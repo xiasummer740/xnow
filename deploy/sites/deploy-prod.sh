@@ -110,8 +110,41 @@ if [ -n "$CHANGED" ]; then
     fi
     echo "     · $f"
   done
-  if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then echo "     [dry-run] 不执行 git checkout"; else
-    git checkout -- . || die "还原工作区失败"
+  # 🔍 98 期：把「生产独有、分支没有」的代码行摊开来看。
+  #    上线会用分支版本覆盖工作区 —— 万一生产上有**未入库的 hotfix**，
+  #    这里就是唯一能提前发现它的地方（89 期演练就靠这个核对了 5 个文件）。
+  DIFF_OUT="$PREFLIGHT/prod-vs-branch.diff"
+  mkdir -p "$PREFLIGHT"
+  # 只看运行时代码（server/src、client/src）——文档/构建产物不构成覆盖风险，
+  # 混进来会把真正要看的那几行淹掉（实测 343 行里绝大多数是 README/文档）。
+  # 只核对后端运行时代码：前端以构建产物 dist 上线，工作区的 client/src 不参与运行；
+  # 混进来会把「分支正常重构」误报成风险（实测 301 行里绝大多数是旧 App.vue）。
+  SCOPE="server/src"
+  git diff --ignore-cr-at-eol "origin/$BRANCH" -- $SCOPE > "$DIFF_OUT" 2>/dev/null
+  ONLY=$(git diff --ignore-cr-at-eol "origin/$BRANCH" -- $SCOPE 2>/dev/null \
+        | grep -E "^\+" | grep -v "^++" | grep -vE "^\+\s*(//|\*|$)" | wc -l)
+  echo "  🔍 生产独有代码行（分支里没有的）：${ONLY} 行 → 明细 $DIFF_OUT"
+  if [ "${ONLY:-0}" -gt 0 ]; then
+    echo "     ⚠️ 上线将用分支版本覆盖这些行，务必确认它们已被分支包含（或确实该删）："
+    git diff --ignore-cr-at-eol "origin/$BRANCH" -- $SCOPE 2>/dev/null \
+      | grep -E "^\+" | grep -v "^++" | grep -vE "^\+\s*(//|\*|$)" \
+      | head -6 | sed 's/^/        /'
+    echo "        （完整清单见 $DIFF_OUT；逐条核对记录见 deploy/sites/ACCEPTANCE.md §四十一）"
+  fi
+
+  # 🔒 98 期：除了 cp 备份，再存成 git stash ——
+  #    cp 备份只保留文件内容，stash 能保留「相对 HEAD 的完整差异」，
+  #    恢复时一条 `git stash pop` 就能原样回来，不依赖人记得哪个目录。
+  if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then
+    echo "     [dry-run] 会把上述手工改动存为 git stash（多一层可还原保险），不执行"
+  else
+    if git -c user.name=xnow-deploy -c user.email=deploy@localhost \
+         stash push -q -m "pre-go-live $(date +%F_%H%M%S)" -- . 2>/dev/null; then
+      echo "     ✅ 已存为 git stash：$(git stash list | head -1 | cut -c1-60)"
+      echo "        （要还原：cd $APP && git stash pop）"
+    else
+      git checkout -- . || die "还原工作区失败"
+    fi
   fi
 fi
 
