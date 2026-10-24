@@ -10,7 +10,9 @@ const i18nDict = {
 export const useAppStore = defineStore('app', {
   state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0,
     // 🎨 分站主题（主站为空 → 外观与改造前一致）
-    themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[] }),
+    themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[],
+    // ✍️ 十九期：首页文案自定义（主站为空 → Home.vue 回落到默认文案）
+    hero: {} as Record<string, string> }),
   actions: {
     toggleCurrency() { this.currency = this.currency === 'CNY' ? 'USD' : 'CNY'; }, toggleLang() { this.lang = this.lang === 'zh' ? 'en' : 'zh'; }, triggerRefresh() { this.globalRefreshTrigger++; }, 
     async fetchRate() { try { const resRate = await fetch('https://open.er-api.com/v6/latest/USD'); const dataRate = await resRate.json(); if(dataRate && dataRate.rates && dataRate.rates.CNY) this.exchangeRate = dataRate.rates.CNY; } catch(e) {} },
@@ -24,6 +26,14 @@ export const useAppStore = defineStore('app', {
       this.supportUrl = d.support_url || '';
       this.announcement = d.announcement || '';
       if (d.home_modules) { try { const m = JSON.parse(d.home_modules); if (Array.isArray(m)) this.homeModules = m; } catch(e) {} }
+      // ✍️ 十九期：首页文案（主站没有这些 key → 保持空对象 → 首页用默认文案）
+      this.hero = {
+        hero_badge: d.hero_badge || '', hero_title: d.hero_title || '',
+        hero_subtitle: d.hero_subtitle || '', hero_desc: d.hero_desc || '',
+        hero_btn1_text: d.hero_btn1_text || '', hero_btn1_url: d.hero_btn1_url || '',
+        hero_btn2_text: d.hero_btn2_text || '', hero_btn2_url: d.hero_btn2_url || '',
+        hero_bg_url: d.hero_bg_url || ''
+      };
       this.applyTheme();
     } } catch(e) {} this.fetchRate(); },
     applyTheme() {

@@ -13,18 +13,19 @@
     </header>
 
     <main class="relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
-      <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ appStore.lang === 'zh' ? '🚀 TikTok / IG / YouTube / Telegram 涨粉涨量平台' : '🚀 SMM Panel for TikTok / IG / YT / TG' }}</div>
-      <h1 class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
+      <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ hero.badge }}</div>
+      <h1 v-if="hero.title" class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ hero.title }}</span>
+      </h1>
+      <h1 v-else class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
         {{ appStore.lang === 'zh' ? '让你的社交媒体' : 'Make Your' }}<br/>
         <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ appStore.lang === 'zh' ? '🔥 火速出圈' : 'Social Media Explode' }}</span>
       </h1>
       <p class="text-slate-300 text-base md:text-lg max-w-2xl mx-auto mb-4 leading-relaxed">
-        {{ appStore.lang === 'zh'
-          ? 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 全平台社媒增长一次搞定'
-          : 'Buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook & X followers, website traffic — all platforms in one SMM panel' }}
+        {{ hero.subtitle }}
       </p>
       <p class="text-slate-500 text-sm max-w-lg mx-auto mb-10 leading-relaxed">
-        {{ appStore.lang === 'zh' ? '极速自动交付 · 全网底价 · 无需账号密码 · 注册即用' : 'Instant delivery · Wholesale prices · No password needed · Sign up and go' }}
+        {{ hero.desc }}
       </p>
 
       <!-- Platform quick preview -->
@@ -36,10 +37,16 @@
       </div>
 
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
-        <router-link to="/login" class="w-full sm:w-auto px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
+        <router-link v-if="hero.btn1Url" :to="hero.btn1Url" class="w-full sm:w-auto px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
+          {{ hero.btn1Text }}
+        </router-link>
+        <router-link v-else to="/login" class="w-full sm:w-auto px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
           {{ appStore.lang === 'zh' ? '⚡ 立即注册体验' : '⚡ Get Started Now' }}
         </router-link>
-        <router-link to="/vpn" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
+        <router-link v-if="hero.btn2Url" :to="hero.btn2Url" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
+          {{ hero.btn2Text }}
+        </router-link>
+        <router-link v-else to="/vpn" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
           {{ appStore.lang === 'zh' ? '🛡️ 安全节点' : '🛡️ VPN' }}
         </router-link>
       </div>
@@ -157,7 +164,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
 import SiteModules from '../components/SiteModules.vue';
@@ -168,6 +175,24 @@ const userStore = useUserStore();
 const route = useRoute();
 const router = useRouter();
 const vpnShopEnabled = ref(true);
+// ✍️ 首页文案：站长填了就用自己的，没填就用主站默认 —— 主站/未配置分站的外观一字不变
+const hero = computed(() => {
+  const zh = appStore.lang !== 'en'
+  const s = appStore.hero || {}
+  return {
+    badge: s.hero_badge || (zh ? '🚀 TikTok / IG / YouTube / Telegram 涨粉涨量平台' : '🚀 SMM Panel for TikTok / IG / YT / TG'),
+    title: s.hero_title || '',
+    subtitle: s.hero_subtitle || (zh
+      ? 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 全平台社媒增长一次搞定'
+      : 'Buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook & X followers, website traffic — all platforms in one SMM panel'),
+    desc: s.hero_desc || (zh ? '极速自动交付 · 全网底价 · 无需账号密码 · 注册即用' : 'Instant delivery · Wholesale prices · No password needed · Sign up and go'),
+    btn1Text: s.hero_btn1_text || (zh ? '⚡ 立即注册体验' : '⚡ Get Started Now'),
+    btn1Url: s.hero_btn1_url || '',
+    btn2Text: s.hero_btn2_text || (zh ? '🛡️ 安全节点' : '🛡️ VPN'),
+    btn2Url: s.hero_btn2_url || '',
+    bgUrl: s.hero_bg_url || ''
+  }
+})
 const previewServices = ref([]);
 const previewLoading = ref(true);
 

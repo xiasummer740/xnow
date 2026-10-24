@@ -329,6 +329,8 @@ router.put('/:id', authenticate, async (req, res) => {
     const { name, logo, multiplier, agent_discount, announcement, status,
             template, color, accent, footer_text, support_url, home_modules,
             smtp_host, smtp_port, smtp_user, smtp_pass,
+            hero_badge, hero_title, hero_subtitle, hero_desc,
+            hero_btn1_text, hero_btn1_url, hero_btn2_text, hero_btn2_url, hero_bg_url,
             bufpay_id, bufpay_key, cryptomus_id, cryptomus_key } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
@@ -356,6 +358,26 @@ router.put('/:id', authenticate, async (req, res) => {
       if (u && !/^https?:\/\//i.test(u)) return res.json({ status: 'error', message: '客服链接必须以 http(s):// 开头' });
       site.support_url = u || null;
     }
+    // ✍️ 首页文案：站长自己写的话。留空 = 用主站默认文案。
+    const textFields = {
+      hero_badge: 120, hero_title: 120, hero_subtitle: 255, hero_desc: 255,
+      hero_btn1_text: 40, hero_btn2_text: 40
+    };
+    for (const [k, max] of Object.entries(textFields)) {
+      const v = req.body[k];
+      if (v !== undefined) site[k] = String(v || '').trim().slice(0, max) || null;
+    }
+    // 🔒 链接类只允许 http(s) 或站内相对路径，防止 javascript: 伪协议
+    for (const k of ['hero_btn1_url', 'hero_btn2_url', 'hero_bg_url']) {
+      const v = req.body[k];
+      if (v === undefined) continue;
+      const u = String(v || '').trim();
+      if (u && !/^(https?:\/\/|\/)/i.test(u)) {
+        return res.json({ status: 'error', message: '链接必须是以 http(s):// 或 / 开头的地址' });
+      }
+      site[k] = u ? u.slice(0, 512) : null;
+    }
+
     if (home_modules !== undefined) {
       let mods = home_modules;
       if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { return res.json({ status: 'error', message: '首页模块格式错误' }); } }

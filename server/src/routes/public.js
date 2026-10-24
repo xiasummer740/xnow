@@ -30,6 +30,17 @@ router.get('/config', async (req, res) => {
       data.footer_text = req.site.footer_text || '';
       data.support_url = req.site.support_url || '';
       data.home_modules = req.site.home_modules || '';
+      // ✍️ 十九期：首页文案自定义（空则前端回落到主站默认文案）
+      data.logo_url = req.site.logo || '';
+      data.hero_badge = req.site.hero_badge || '';
+      data.hero_title = req.site.hero_title || '';
+      data.hero_subtitle = req.site.hero_subtitle || '';
+      data.hero_desc = req.site.hero_desc || '';
+      data.hero_btn1_text = req.site.hero_btn1_text || '';
+      data.hero_btn1_url = req.site.hero_btn1_url || '';
+      data.hero_btn2_text = req.site.hero_btn2_text || '';
+      data.hero_btn2_url = req.site.hero_btn2_url || '';
+      data.hero_bg_url = req.site.hero_bg_url || '';
     }
 
     res.json({ status: 'success', data });

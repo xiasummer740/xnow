@@ -117,6 +117,16 @@ const run = async () => {
     ['domain_token',  'VARCHAR(64) NULL'],
     ['cert_mode',     'VARCHAR(16) NULL'],
     ['custom_domain', 'VARCHAR(255) NULL'],
+    // ✍️ 十九期：首页文案自定义（模板决定骨架，文案决定说什么话）
+    ['hero_badge',     'VARCHAR(120) NULL'],
+    ['hero_title',     'VARCHAR(120) NULL'],
+    ['hero_subtitle',  'VARCHAR(255) NULL'],
+    ['hero_desc',      'VARCHAR(255) NULL'],
+    ['hero_btn1_text', 'VARCHAR(40) NULL'],
+    ['hero_btn1_url',  'VARCHAR(255) NULL'],
+    ['hero_btn2_text', 'VARCHAR(40) NULL'],
+    ['hero_btn2_url',  'VARCHAR(255) NULL'],
+    ['hero_bg_url',    'VARCHAR(512) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {

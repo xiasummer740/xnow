@@ -18,6 +18,18 @@ const Site = sequelize.define('Site', {
   footer_text: { type: DataTypes.STRING(255), allowNull: true },       // 页脚版权
   support_url: { type: DataTypes.STRING(255), allowNull: true },       // 客服链接（TG 等）
   home_modules: { type: DataTypes.TEXT, allowNull: true },             // 首页模块 JSON:[{key,enabled,order}]
+  // ✍️ 首页文案自定义（十九期·祥哥："选好模板之后在哪设计自己的网站？"）
+  //    模板决定"骨架长什么样"，这些字段决定"上面写什么话" —— 两者合起来才是"自己的站"。
+  //    留空则用主站默认文案，所以主站行为完全不受影响。
+  hero_badge: { type: DataTypes.STRING(120), allowNull: true },        // 顶部小标签
+  hero_title: { type: DataTypes.STRING(120), allowNull: true },        // 大标题
+  hero_subtitle: { type: DataTypes.STRING(255), allowNull: true },     // 副标题
+  hero_desc: { type: DataTypes.STRING(255), allowNull: true },         // 灰色小字说明
+  hero_btn1_text: { type: DataTypes.STRING(40), allowNull: true },     // 主按钮文字
+  hero_btn1_url: { type: DataTypes.STRING(255), allowNull: true },     // 主按钮链接
+  hero_btn2_text: { type: DataTypes.STRING(40), allowNull: true },     // 次按钮文字
+  hero_btn2_url: { type: DataTypes.STRING(255), allowNull: true },     // 次按钮链接
+  hero_bg_url: { type: DataTypes.STRING(512), allowNull: true },       // 首页背景图
   // 📧 分站自有发信（不配则回退主站 SMTP，但验证码会露出平台品牌）
   smtp_host: { type: DataTypes.STRING(128), allowNull: true },
   smtp_port: { type: DataTypes.INTEGER, allowNull: true },

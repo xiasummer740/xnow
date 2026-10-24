@@ -24,9 +24,12 @@
         </div>
         <div>
           <label class="block text-xs text-slate-400 mb-1">
-            售价倍率（1 ~ 100 倍，1 倍 = 你的进货价，越高越赚但客户越贵）
+            售价倍率（你至少卖 {{ createForm.multiplier || 2 }} 倍；倍率越高客户越贵、你赚得越多）
           </label>
           <input v-model.number="createForm.multiplier" type="number" step="0.1" min="1" max="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+          <p class="text-[10px] text-amber-500/80 mt-1">
+            提示：平台基础价 × 1 = 1 倍。你的进货价高于 1 倍，所以**卖得低于进货价会亏钱**，系统会拦住。
+          </p>
         </div>
         <button @click="createSite()" :disabled="creating" class="w-full py-2.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
           {{ creating ? '开通中…' : '立即开通' }}
@@ -40,6 +43,24 @@
 
     <!-- 已有分站 -->
     <div v-else class="space-y-5">
+      <!-- 🚦 开站清单：新手不知道"开完站还差什么"，这里直接告诉他 -->
+      <section v-if="pendingSteps.length" class="bg-gradient-to-br from-amber-500/10 to-slate-900/70 border border-amber-500/30 rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-sm text-amber-300">开站清单（还差 {{ pendingSteps.length }} 步才建议开卖）</h2>
+          <span class="text-[11px] text-amber-400/80">{{ doneSteps.length }} / {{ steps.length }} 已完成</span>
+        </div>
+        <ul class="space-y-2">
+          <li v-for="s in steps" :key="s.key" class="flex items-start gap-2 text-xs">
+            <span class="mt-[1px]">{{ s.done ? '✅' : '⬜' }}</span>
+            <div>
+              <span :class="s.done ? 'text-slate-500 line-through' : 'text-slate-200 font-bold'">{{ s.title }}</span>
+              <span v-if="!s.done" class="block text-[11px] text-slate-500 mt-0.5">{{ s.hint }}</span>
+            </div>
+          </li>
+        </ul>
+        <p class="text-[10px] text-slate-500 mt-3">清单只是提醒，不拦着你开卖。但如果「收款」没配，客户充不了值；「发信」没配，客户注册不了。</p>
+      </section>
+
       <!-- 收益看板 -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div v-for="c in cards" :key="c.label" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
@@ -77,42 +98,180 @@
       </section>
 
       <!-- 外观 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
-        <h2 class="font-bold text-sm text-amber-400">外观模板</h2>
-        <div>
-          <label class="block text-xs text-slate-400 mb-2">模板</label>
-          <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
-            <button v-for="t in templates" :key="t.key" @click="form.template = t.key"
-              class="px-2 py-2 rounded-lg text-xs border transition"
-              :class="form.template === t.key ? 'border-amber-400 bg-amber-400/10 text-amber-300 font-bold' : 'border-slate-700 text-slate-400 hover:border-slate-600'">
-              {{ t.label }}
-            </button>
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 mb-2">色系</label>
-          <div class="flex flex-wrap gap-2">
-            <button v-for="c in colors" :key="c.key" @click="form.color = c.key; form.accent = ''"
-              class="w-9 h-9 rounded-full border-2 transition"
-              :class="form.color === c.key && !form.accent ? 'border-white scale-110' : 'border-transparent opacity-70 hover:opacity-100'"
-              :style="{ background: c.hex }" :title="c.label"></button>
-          </div>
-          <div class="mt-2 flex items-center gap-2">
-            <input v-model="form.accent" placeholder="#RRGGBB 自定义" class="w-32 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs" />
-            <span class="text-[10px] text-slate-500">填了就覆盖上面的色系</span>
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 mb-2">首页模块（开关 + 排序）</label>
-          <div class="space-y-1.5">
-            <div v-for="(m, i) in form.modules" :key="m.key" class="flex items-center gap-2 bg-slate-950/60 rounded-lg px-3 py-2">
-              <input type="checkbox" v-model="m.enabled" class="accent-amber-400" />
-              <span class="text-xs flex-1">{{ moduleLabel(m.key) }}</span>
-              <button @click="moveModule(i, -1)" :disabled="i === 0" class="text-xs px-1.5 text-slate-500 disabled:opacity-30">↑</button>
-              <button @click="moveModule(i, 1)" :disabled="i === form.modules.length - 1" class="text-xs px-1.5 text-slate-500 disabled:opacity-30">↓</button>
+      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
+        <h2 class="font-bold text-sm text-amber-400 mb-3">外观模板</h2>
+        <div class="grid lg:grid-cols-2 gap-5">
+          <!-- 左：选择器 -->
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-2">模板</label>
+              <div class="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-3 gap-2">
+                <button v-for="t in templates" :key="t.key" @click="form.template = t.key"
+                  class="px-2 py-2 rounded-lg text-xs border transition"
+                  :class="form.template === t.key ? 'border-amber-400 bg-amber-400/10 text-amber-300 font-bold' : 'border-slate-700 text-slate-400 hover:border-slate-600'">
+                  {{ t.label }}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-2">色系</label>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="c in colors" :key="c.key" @click="form.color = c.key; form.accent = ''"
+                  class="w-9 h-9 rounded-full border-2 transition"
+                  :class="form.color === c.key && !form.accent ? 'border-white scale-110' : 'border-transparent opacity-70 hover:opacity-100'"
+                  :style="{ background: c.hex }" :title="c.label"></button>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                <input v-model="form.accent" placeholder="#RRGGBB 自定义" class="w-32 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs" />
+                <span class="text-[10px] text-slate-500">填了就覆盖上面的色系</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-2">首页模块（开关 + 排序）</label>
+              <div class="space-y-1.5">
+                <div v-for="(m, i) in form.modules" :key="m.key" class="flex items-center gap-2 bg-slate-950/60 rounded-lg px-3 py-2">
+                  <input type="checkbox" v-model="m.enabled" class="accent-amber-400" />
+                  <span class="text-xs flex-1">{{ moduleLabel(m.key) }}</span>
+                  <button @click="moveModule(i, -1)" :disabled="i === 0" class="text-xs px-1.5 text-slate-500 disabled:opacity-30">↑</button>
+                  <button @click="moveModule(i, 1)" :disabled="i === form.modules.length - 1" class="text-xs px-1.5 text-slate-500 disabled:opacity-30">↓</button>
+                </div>
+              </div>
             </div>
           </div>
+
+          <!-- 右：实时预览 -->
+          <div class="lg:sticky lg:top-4 self-start">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs text-slate-400">效果预览（点了就变，不用保存）</label>
+              <span class="text-[10px] text-slate-600">近似效果</span>
+            </div>
+
+            <div :style="previewShell"
+              class="rounded-xl overflow-hidden border border-slate-700/60 shadow-lg">
+              <!-- 顶部导航 -->
+              <div :style="previewNav" class="flex items-center justify-between px-3 py-2">
+                <span :style="{ color: pv.brand, fontWeight: 800, fontSize: '11px', fontFamily: pv.titleFont }">{{ form.name || '你的站点名' }}</span>                <div class="flex gap-2">
+                  <span v-for="n in ['服务', '充值', '我的']" :key="n" :style="{ color: 'rgba(226,232,240,.55)', fontSize: '9px' }">{{ n }}</span>
+                </div>
+              </div>
+
+              <!-- Hero -->
+              <div class="px-3 pt-3 pb-2">
+                <div :style="{ color: '#f8fafc', fontSize: '15px', fontWeight: 900, lineHeight: 1.25, fontFamily: pv.titleFont }">
+                  {{ form.hero_title || form.name || '你的站点名' }}
+                </div>
+                <div :style="{ color: 'rgba(148,163,184,.9)', fontSize: '9px', marginTop: '3px' }">
+                  {{ form.hero_subtitle || '全自动数字营销 · 秒级交付' }}
+                </div>
+                <div class="flex gap-1.5 mt-2">
+                  <span :style="previewBtnPrimary">{{ form.hero_btn1_text || '立即下单' }}</span>
+                  <span :style="previewBtnGhost">{{ form.hero_btn2_text || '查看价格' }}</span>
+                </div>
+              </div>
+
+              <!-- 模块（跟随开关与排序） -->
+              <div class="px-3 pb-2 space-y-1.5">
+                <div v-for="m in previewModules" :key="m.key" :style="previewCard" class="px-2 py-1.5">
+                  <div class="flex items-center justify-between">
+                    <span :style="{ color: '#e2e8f0', fontSize: '9px', fontWeight: 700, fontFamily: pv.titleFont }">{{ moduleLabel(m.key) }}</span>
+                    <span v-if="m.key === 'hot_services'" :style="{ color: pv.brand, fontSize: '9px', fontWeight: 700 }">¥{{ samplePrice }}/千</span>
+                  </div>
+                  <div v-if="m.key === 'stats'" class="flex gap-2 mt-1">
+                    <span v-for="s in ['2839 服务', '12.4k 订单', '99.2% 完成']" :key="s"
+                      :style="{ color: 'rgba(148,163,184,.85)', fontSize: '8px' }">{{ s }}</span>
+                  </div>
+                  <div v-else-if="m.key === 'hot_services'" class="mt-1 space-y-1">
+                    <div v-for="(sv, i) in ['TikTok 涨粉', 'Telegram 成员', '网页流量']" :key="i"
+                      class="flex items-center justify-between">
+                      <span :style="{ color: 'rgba(203,213,225,.9)', fontSize: '8px' }">{{ sv }}</span>
+                      <span :style="{ color: 'rgba(148,163,184,.8)', fontSize: '8px' }">下单</span>
+                    </div>
+                  </div>
+                  <div v-else :style="{ color: 'rgba(148,163,184,.6)', fontSize: '8px', marginTop: '2px' }">
+                    {{ moduleHint(m.key) }}
+                  </div>
+                </div>
+                <div v-if="!previewModules.length" :style="{ color: 'rgba(148,163,184,.6)', fontSize: '9px' }" class="py-2 text-center">
+                  首页模块全部关闭了，只剩导航和 Hero
+                </div>
+              </div>
+
+              <!-- 页脚 -->
+              <div :style="previewFooter" class="px-3 py-1.5 text-center">
+                <span :style="{ color: 'rgba(148,163,184,.75)', fontSize: '8px' }">
+                  {{ form.footer_text || `© ${new Date().getFullYear()} ${form.name || '你的站点名'}` }}
+                </span>
+              </div>
+            </div>
+
+            <p class="text-[10px] text-slate-500 mt-2 leading-relaxed">
+              这是近似预览（配色/圆角/阴影/字体/模块顺序与实际一致，真实页面还有动画与真实数据）。
+              保存后打开你的站，看到的就是最终效果。
+            </p>
+            <a v-if="site && site.domain" :href="`//${site.domain}`" target="_blank"
+              class="inline-block mt-1 text-[11px] text-sky-400 hover:text-sky-300">
+              保存后点这里打开真实站点 ↗
+            </a>
+          </div>
         </div>
+      </section>
+
+      <!-- ✍️ 首页文案：模板决定"骨架"，这里决定"上面写什么话" -->
+      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 class="font-bold text-sm text-amber-400">首页文案（把话换成你自己的）</h2>
+            <p class="text-[11px] text-slate-500 mt-1">
+              上面选的是「长什么样」，这里写的是「说什么话」。留空就用系统默认文案 —— 但默认文案和主站一样，客户一眼能认出来。
+            </p>
+          </div>
+          <button @click="fillHeroDemo" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px]">
+            用示例文案填满
+          </button>
+        </div>
+        <div class="grid md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">顶部小标签</label>
+            <input v-model="form.hero_badge" maxlength="120" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="🚀 全网最低价涨粉平台" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">大标题（显眼那一行）</label>
+            <input v-model="form.hero_title" maxlength="120" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="涨粉就找我们" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-slate-400 mb-1">副标题</label>
+            <input v-model="form.hero_subtitle" maxlength="255" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="TikTok / IG / YouTube 全平台涨粉，秒级交付" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-slate-400 mb-1">灰色小字说明</label>
+            <input v-model="form.hero_desc" maxlength="255" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="支持微信 / 支付宝 / USDT 充值，注册即用" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">主按钮文字</label>
+            <input v-model="form.hero_btn1_text" maxlength="40" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="⚡ 立即注册" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">主按钮链接</label>
+            <input v-model="form.hero_btn1_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="/login（留空默认注册页）" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">次按钮文字</label>
+            <input v-model="form.hero_btn2_text" maxlength="40" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="💬 联系客服" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">次按钮链接</label>
+            <input v-model="form.hero_btn2_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="https://t.me/你的客服" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-slate-400 mb-1">Logo 图片地址</label>
+            <input v-model="form.logo" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="/logo.png 或 https://你的图床/logo.png" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-slate-400 mb-1">首页背景图地址（可选）</label>
+            <input v-model="form.hero_bg_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空用模板自带背景" />
+          </div>
+        </div>
+        <p class="text-[10px] text-slate-500">链接只能填 http(s):// 开头的地址或站内路径（如 /login）。图片建议 1600×900 以内，纯色或暗色背景更耐看。</p>
       </section>
 
       <!-- 收款 -->
@@ -120,7 +279,7 @@
         <h2 class="font-bold text-sm text-amber-400">收款商户（钱直接进你的账户）</h2>
         <p class="text-[11px] text-slate-500 leading-relaxed">
           填你自己的 BufPay / Cryptomus 商户，客户在你站上付款时直接进你的账号。
-          不填则用平台商户（客户的钱会先到平台，需要你联系平台手动加余额，不推荐）。
+          不填的话**客户点充值会看到「暂未开通」**，只能由你手动给他加余额（兜底方式，不推荐长期这样）。
         </p>
         <div class="grid md:grid-cols-2 gap-3">
           <div>
@@ -284,6 +443,160 @@ const smtpTesting = ref(false)
 const smtpTestMsg = ref('')
 const smtpTestOk = ref(false)
 
+// 🚦 开站清单：把"开完站还差什么"算出来，别让新手盯着 6 个表单猜
+const minMul = computed(() => {
+  const m = parseFloat(site.value?.min_multiplier)
+  return isFinite(m) && m > 0 ? m : 1
+})
+const steps = computed(() => {
+  const s = site.value || {}
+  const mul = parseFloat(s.multiplier)
+  return [
+    {
+      key: 'price',
+      title: `设置售价（不低于 ${minMul.value} 倍才不亏）`,
+      done: isFinite(mul) && mul >= minMul.value,
+      hint: `现在是 ${isFinite(mul) ? mul : '未设置'} 倍。低于 ${minMul.value} 倍等于亏本卖。`
+    },
+    {
+      key: 'pay',
+      title: '配置收款商户（客户才能在线充值）',
+      done: !!(s.bufpay_id && s.bufpay_key) || !!(s.cryptomus_id && s.cryptomus_key),
+      hint: '没配的话客户点充值会看到「暂未开通」，只能靠你手动给他加余额。'
+    },
+    {
+      key: 'smtp',
+      title: '配置发信邮箱（客户注册要收验证码）',
+      done: !!(s.smtp_host && s.smtp_user && s.smtp_pass),
+      hint: '没配的话客户注册不了。填完记得点「发一封测试信」。'
+    },
+    {
+      key: 'look',
+      title: '换成你自己的样子（模板 + 色系 + 页脚）',
+      done: (s.template && s.template !== 'classic') || (s.color && s.color !== 'cyan') || !!s.footer_text,
+      hint: '默认样式和主站相近，换成自己的模板客户才看不出是同一家。'
+    },
+    {
+      key: 'copy',
+      title: '写自己的首页文案（标题/副标题/按钮）',
+      done: !!(s.hero_title || s.hero_subtitle),
+      hint: '模板决定长什么样，文案决定说什么话。默认文案和主站一模一样。'
+    },
+    {
+      key: 'domain',
+      title: '绑定自己的域名（可选，显得更专业）',
+      done: !!(s.custom_domain && s.domain_status === 'active'),
+      hint: '不绑也能用免费子域名，不影响收款。'
+    }
+  ]
+})
+const doneSteps = computed(() => steps.value.filter(x => x.done))
+const pendingSteps = computed(() => steps.value.filter(x => !x.done))
+
+// ============================================================================
+// 外观实时预览
+// 令牌值与 styles/site-theme.css 保持一致，否则"预览"和"真实页面"会对不上，
+// 站长按预览做的决定到了真站上就变样了 —— 那比没有预览更糟。
+// ============================================================================
+const PV_COLORS = {
+  cyan:   { brand: '#22d3ee', strong: '#06b6d4', soft: 'rgba(34,211,238,.18)' },
+  purple: { brand: '#a855f7', strong: '#9333ea', soft: 'rgba(168,85,247,.18)' },
+  green:  { brand: '#22c55e', strong: '#16a34a', soft: 'rgba(34,197,94,.18)' },
+  red:    { brand: '#ef4444', strong: '#dc2626', soft: 'rgba(239,68,68,.18)' },
+  orange: { brand: '#f97316', strong: '#ea580c', soft: 'rgba(249,115,22,.18)' },
+  blue:   { brand: '#3b82f6', strong: '#2563eb', soft: 'rgba(59,130,246,.18)' }
+}
+
+const pv = computed(() => {
+  const t = form.value.template || 'classic'
+  const c = PV_COLORS[form.value.color] || PV_COLORS.cyan
+  // 自定义主色：把 #rrggbb 转成同样的三件套
+  let brand = c.brand, strong = c.strong, soft = c.soft
+  const hex = String(form.value.accent || '').trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    brand = hex
+    strong = hex
+    soft = hex + '2e'   // 18% 透明近似
+  }
+  const base = { brand, strong, soft }
+  switch (t) {
+    case 'saas': return { ...base, radius: '0.5rem', surface: 'rgba(15,23,42,.55)', border: 'rgba(148,163,184,.12)', shadow: '0 6px 18px rgba(0,0,0,.35)', letter: '0.02em', titleFont: 'inherit', bg: '#0a1120' }
+    case 'minimal': return { ...base, radius: '0.75rem', surface: 'rgba(2,6,23,.6)', border: 'rgba(148,163,184,.1)', shadow: 'none', letter: '0.03em', titleFont: 'inherit', bg: '#04070f' }
+    case 'neon': return { ...base, radius: '1.25rem', surface: 'rgba(15,23,42,.78)', border: 'rgba(148,163,184,.3)', shadow: `0 0 40px ${soft}`, letter: '0', titleFont: 'inherit', bg: `radial-gradient(320px 160px at 16% -10%, ${soft}, transparent 60%), radial-gradient(260px 140px at 90% 0%, rgba(147,51,234,.16), transparent 60%), #060b18` }
+    case 'magazine': return { ...base, radius: '1.1rem', surface: 'rgba(17,24,39,.8)', border: 'rgba(148,163,184,.18)', shadow: '0 22px 60px rgba(0,0,0,.55)', letter: '0.06em', titleFont: 'Georgia, "Times New Roman", "Songti SC", serif', bg: '#0d1117' }
+    case 'glass': return { ...base, radius: '1.6rem', surface: 'rgba(255,255,255,.06)', border: 'rgba(255,255,255,.16)', shadow: '0 24px 60px rgba(0,0,0,.5)', letter: '0', titleFont: 'inherit', bg: `radial-gradient(300px 160px at 8% -8%, ${soft}, transparent 55%), radial-gradient(280px 140px at 95% 8%, rgba(56,189,248,.14), transparent 55%), #070d1a` }
+    default: return { ...base, radius: '1rem', surface: 'rgba(15,23,42,.72)', border: 'rgba(148,163,184,.18)', shadow: '0 18px 45px rgba(0,0,0,.45)', letter: '0', titleFont: 'inherit', bg: '#0b1220' }
+  }
+})
+
+const previewShell = computed(() => ({
+  background: pv.value.bg,
+  fontFamily: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+  letterSpacing: pv.value.letter
+}))
+const previewNav = computed(() => ({
+  background: 'rgba(2,6,23,.45)',
+  borderBottom: `1px solid ${pv.value.border}`
+}))
+const previewCard = computed(() => ({
+  background: pv.value.surface,
+  border: `1px solid ${pv.value.border}`,
+  borderRadius: pv.value.radius,
+  boxShadow: pv.value.shadow,
+  backdropFilter: form.value.template === 'glass' ? 'blur(6px)' : undefined
+}))
+const previewBtnPrimary = computed(() => ({
+  background: `linear-gradient(135deg, ${pv.value.brand}, ${pv.value.strong})`,
+  color: '#0b1220',
+  fontSize: '9px',
+  fontWeight: 800,
+  padding: '3px 9px',
+  borderRadius: `calc(${pv.value.radius} * 0.6)`,
+  boxShadow: `0 0 12px ${pv.value.soft}`
+}))
+const previewBtnGhost = computed(() => ({
+  border: `1px solid ${pv.value.border}`,
+  color: 'rgba(226,232,240,.8)',
+  fontSize: '9px',
+  padding: '3px 9px',
+  borderRadius: `calc(${pv.value.radius} * 0.6)`
+}))
+const previewFooter = computed(() => ({ borderTop: `1px solid ${pv.value.border}` }))
+
+// 预览里只显示"已启用"的模块，顺序与勾选顺序一致 —— 这才叫预览
+const previewModules = computed(() => (form.value.modules || []).filter(m => m.enabled).slice(0, 4))
+
+const hotPrice = ref('')
+const samplePrice = computed(() => hotPrice.value || '—')
+const loadHotPrice = async () => {
+  try {
+    const res = await fetch('/api/public/hot-services')
+    const data = await res.json()
+    const list = data.data || []
+    if (list.length && list[0].pricePerK) hotPrice.value = list[0].pricePerK
+  } catch (e) {}
+}
+
+const moduleHint = (key) => ({
+  announce: '一条滚动公告，比如「新用户首单 9 折」',
+  stats: '服务数 / 订单数 / 完成率，增加信任感',
+  hot_services: '把卖得最好的服务摆在首页',
+  faq: '4 条常见问题，减少客户来问',
+  vip: 'VIP 会员入口与折扣说明',
+  affiliate: '邀请好友返佣，让客户帮你拉客户'
+}[key] || '首页模块')
+
+// 一键填入示例文案：降低"不知道怎么下笔"的门槛（之后他改字即可）
+const fillHeroDemo = () => {
+  const n = form.value.name || '我们的站'
+  form.value.hero_badge = '🚀 全平台涨粉 · 秒级交付'
+  form.value.hero_title = `${n}，涨粉不用等`
+  form.value.hero_subtitle = 'TikTok / IG / YouTube / Telegram 全平台增长，下单即开始'
+  form.value.hero_desc = '支持微信 / 支付宝 / USDT 充值 · 无需账号密码 · 注册即用'
+  form.value.hero_btn1_text = '⚡ 立即注册'
+  form.value.hero_btn2_text = '💬 联系客服'
+}
+
 const testSmtp = async () => {
   if (!site.value) return
   smtpTesting.value = true
@@ -310,7 +623,9 @@ const form = ref({
   name: '', multiplier: 2.5, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
   bufpay_id: '', bufpay_key: '', cryptomus_id: '', cryptomus_key: '',
-  smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: ''
+  smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '',
+  logo: '', hero_badge: '', hero_title: '', hero_subtitle: '', hero_desc: '',
+  hero_btn1_text: '', hero_btn1_url: '', hero_btn2_text: '', hero_btn2_url: '', hero_bg_url: ''
 })
 
 const templates = [
@@ -361,7 +676,13 @@ const load = async () => {
         bufpay_id: s.bufpay_id || '', bufpay_key: s.bufpay_key ? '******' : '',
         cryptomus_id: s.cryptomus_id || '', cryptomus_key: s.cryptomus_key ? '******' : '',
         smtp_host: s.smtp_host || '', smtp_port: s.smtp_port || 465,
-        smtp_user: s.smtp_user || '', smtp_pass: s.smtp_pass ? '******' : ''
+        smtp_user: s.smtp_user || '', smtp_pass: s.smtp_pass ? '******' : '',
+        logo: s.logo || '',
+        hero_badge: s.hero_badge || '', hero_title: s.hero_title || '',
+        hero_subtitle: s.hero_subtitle || '', hero_desc: s.hero_desc || '',
+        hero_btn1_text: s.hero_btn1_text || '', hero_btn1_url: s.hero_btn1_url || '',
+        hero_btn2_text: s.hero_btn2_text || '', hero_btn2_url: s.hero_btn2_url || '',
+        hero_bg_url: s.hero_bg_url || ''
       }
       const r2 = await fetch(`/api/sites/stats?site_id=${s.id}`, { headers: headers() })
       const d2 = await r2.json()
@@ -401,7 +722,13 @@ const save = async (silent = false) => {
       bufpay_id: form.value.bufpay_id, bufpay_key: form.value.bufpay_key,
       cryptomus_id: form.value.cryptomus_id, cryptomus_key: form.value.cryptomus_key,
       smtp_host: form.value.smtp_host, smtp_port: form.value.smtp_port,
-      smtp_user: form.value.smtp_user, smtp_pass: form.value.smtp_pass
+      smtp_user: form.value.smtp_user, smtp_pass: form.value.smtp_pass,
+      logo: form.value.logo,
+      hero_badge: form.value.hero_badge, hero_title: form.value.hero_title,
+      hero_subtitle: form.value.hero_subtitle, hero_desc: form.value.hero_desc,
+      hero_btn1_text: form.value.hero_btn1_text, hero_btn1_url: form.value.hero_btn1_url,
+      hero_btn2_text: form.value.hero_btn2_text, hero_btn2_url: form.value.hero_btn2_url,
+      hero_bg_url: form.value.hero_bg_url
     }
     const res = await fetch(`/api/sites/${site.value.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) })
     const data = await res.json()
@@ -479,6 +806,6 @@ const loadMoreCustomers = () => loadCustomers(true)
 
 onMounted(async () => {
   await load()
-  if (site.value) loadOrders()
+  if (site.value) { loadOrders(); loadHotPrice() }
 })
 </script>
