@@ -66,6 +66,12 @@ const Site = sequelize.define('Site', {
   domain_token: { type: DataTypes.STRING(64), allowNull: true },   // TXT 验证用令牌
   cert_mode: { type: DataTypes.STRING(16), allowNull: true },      // letsencrypt / selfsigned / existing
   custom_domain: { type: DataTypes.STRING(255), allowNull: true },  // 站长绑定的自有域名（与免费子域名 domain 分开存）
+
+  // 🎫 分站折扣促销：站长给"自己的客户"打折（1.0 = 不打折，0.5 = 五折）
+  //    discount_until 是 Unix 秒，0 = 长期有效 —— 到点自动失效，不用手动关。
+  discount_rate: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 1.0 },
+  discount_label: { type: DataTypes.STRING(40), allowNull: true },   // 首页那行小字，如「开业 8 折」
+  discount_until: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
 }, {
   tableName: 'sites',
   timestamps: true,

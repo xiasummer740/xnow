@@ -22,7 +22,9 @@ router.get('/config', async (req, res) => {
     // 🌐 主站地址（站长推广链接要用）。服务端下发而不是前端取 window.location.origin：
     //    万一站长在自己的分站域名下打开了「我的分站」，取 origin 会生成一个分站链接，
     //    拉来的人就成了分站的客户，返佣也就落不到主站体系里。
-    data.main_origin = process.env.MAIN_ORIGIN || 'https://xnow.taikon.top';
+    // 🔒 main_origin 只在【主站】下发。分站的客户不该知道主站存在（站长自己也不想），
+    //    所以分站请求一律不带这个字段 —— 前端拿不到，也就拼不出主站链接。
+    if (!req.site) data.main_origin = process.env.MAIN_ORIGIN || 'https://xnow.taikon.top';
 
     // 分站覆盖：使用分站专属配置
     if (req.site) {
@@ -37,7 +39,17 @@ router.get('/config', async (req, res) => {
       data.site_id = String(req.site.id);
       data.is_subsite = 'true';
       // 🎨 三期：分站主题（模板 / 色系 / 页脚 / 客服 / 首页模块）
-      data.theme_template = req.site.template || 'classic';
+      // 🎫 折扣促销：只在生效期间下发给客户（首页显示「开业 9 折」这类标签）
+    {
+      const dr = parseFloat(req.site.discount_rate);
+      const du = parseInt(req.site.discount_until || 0);
+      const active = isFinite(dr) && dr > 0 && dr < 1 && !(du > 0 && Math.floor(Date.now() / 1000) > du);
+      data.discount_rate = active ? dr : 1;
+      data.discount_label = active ? (req.site.discount_label || '') : '';
+      data.discount_until = active ? du : 0;
+    }
+
+    data.theme_template = req.site.template || 'classic';
       data.theme_color = req.site.color || 'cyan';
       data.theme_accent = req.site.accent || '';
       data.footer_text = req.site.footer_text || '';

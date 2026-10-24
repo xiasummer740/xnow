@@ -19,6 +19,11 @@
 
     <main v-else :style="heroBgStyle" class="hero-wrap site-section relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
       <div class="hero-copy flex flex-col items-center">
+      <!-- 🎫 站长开的限时折扣：让客户第一眼就看到「现在便宜」 -->
+      <div v-if="appStore.discountLabel"
+           class="inline-block mb-6 mr-2 px-4 py-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 text-xs md:text-sm font-bold shadow-[0_0_15px_rgba(16,185,129,0.25)]">
+        🎫 {{ appStore.discountLabel }}
+      </div>
       <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ hero.badge }}</div>
       <h1 v-if="hero.title" class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
         <span class="site-brand-text text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ hero.title }}</span>

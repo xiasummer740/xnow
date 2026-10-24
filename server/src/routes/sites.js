@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
-import { Site, User, Config } from '../models/index.js';
+import { Site, User, Config, Service, SiteServicePrice } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
@@ -436,6 +436,155 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // 更新分站
+// ============================================================
+// 💰 服务定价：站长给自己的客户定价（不设就走站点总倍率）
+//    GET  /api/sites/:id/prices?q=关键词   —— 列出服务 + 该站售价 + 成本下限
+//    PUT  /api/sites/:id/prices           —— 批量保存 [{service_id, rate}]，rate=null 恢复默认
+//    红线：任何价格乘上折扣后都不得低于站长进货价（baseRate × 平台倍率 × 代理折扣）。
+// ============================================================
+const effectiveDiscount = (site) => {
+  const rate = parseFloat(site.discount_rate);
+  const until = parseInt(site.discount_until || 0);
+  if (!isFinite(rate) || rate <= 0 || rate >= 1) return 1;
+  if (until > 0 && Math.floor(Date.now() / 1000) > until) return 1;  // 过期自动失效
+  return rate;
+};
+
+router.get('/:id/prices', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    const isStaff = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaff && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权查看此分站' });
+    }
+
+    const globalMult = await getGlobalMultiplier();
+    const costMult = siteCostMultiplier(site.agent_discount, globalMult);
+    const siteMult = parseFloat(site.multiplier) || costMult;
+    const discount = effectiveDiscount(site);
+
+    const q = String(req.query.q || '').trim();
+    // services 表没有 status 列（全表都是在上架的服务），只按关键词过滤
+    const where = {};
+    const { Op } = (await import('sequelize')).default;
+    if (q) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${q}%` } },
+        { category: { [Op.like]: `%${q}%` } },
+        { type: { [Op.like]: `%${q}%` } },
+      ];
+    }
+    const services = await Service.findAll({
+      where,
+      order: [['category', 'ASC'], ['service_id', 'ASC']],
+      limit: 80,
+    });
+
+    const ids = services.map(sv => sv.service_id);
+    const overrides = ids.length
+      ? await SiteServicePrice.findAll({ where: { site_id: site.id, service_id: ids } })
+      : [];
+    const ovMap = new Map(overrides.map(o => [Number(o.service_id), parseFloat(o.rate)]));
+
+    const rows = services.map(sv => {
+      const baseRate = (sv.custom_rate !== null && sv.custom_rate !== undefined)
+        ? parseFloat(sv.custom_rate) : parseFloat(sv.rate);
+      const cost = baseRate * costMult;                     // 站长进货价（每 1000）
+      const listPrice = ovMap.has(Number(sv.service_id))
+        ? ovMap.get(Number(sv.service_id))                   // 站长给这个服务单独定的价
+        : baseRate * siteMult;                               // 没单设定价 = 总倍率
+      const sellPrice = listPrice * discount;                // 再叠加折扣
+      return {
+        service_id: sv.service_id,
+        name: sv.name,
+        category: sv.category,
+        type: sv.type,
+        min: sv.min,
+        max: sv.max,
+        base_rate: Number(baseRate.toFixed(6)),
+        cost_per_1k: Number(cost.toFixed(4)),
+        list_price: Number(listPrice.toFixed(4)),
+        sell_price: Number(sellPrice.toFixed(4)),
+        override: ovMap.has(Number(sv.service_id)) ? Number(ovMap.get(Number(sv.service_id)).toFixed(6)) : null,
+        margin_percent: sellPrice > 0 ? Number((((sellPrice - cost) / sellPrice) * 100).toFixed(1)) : 0,
+        below_cost: sellPrice < cost - 0.0001,
+      };
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        site_id: site.id,
+        multiplier: siteMult,
+        discount_rate: discount,
+        discount_label: site.discount_label || '',
+        discount_until: parseInt(site.discount_until || 0),
+        cost_multiplier: costMult,
+        items: rows,
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '读取定价失败：' + (e.message || e) });
+  }
+});
+
+router.put('/:id/prices', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    const isStaff = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaff && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权修改此分站' });
+    }
+
+    const items = Array.isArray(req.body.items) ? req.body.items : [];
+    if (!items.length) return res.json({ status: 'error', message: '没有要保存的定价' });
+
+    const globalMult = await getGlobalMultiplier();
+    const costMult = siteCostMultiplier(site.agent_discount, globalMult);
+    const discount = effectiveDiscount(site);
+
+    const ids = items.map(i => parseInt(i.service_id)).filter(Boolean);
+    const services = await Service.findAll({ where: { service_id: ids } });
+    const svMap = new Map(services.map(sv => [Number(sv.service_id), sv]));
+
+    const toUpsert = [];
+    const toDelete = [];
+    for (const it of items) {
+      const sid = parseInt(it.service_id);
+      const sv = svMap.get(sid);
+      if (!sv) return res.json({ status: 'error', message: `服务 ${it.service_id} 不存在` });
+
+      const raw = it.rate;
+      if (raw === null || raw === undefined || raw === '') { toDelete.push(sid); continue; }
+
+      const rate = parseFloat(raw);
+      if (!isFinite(rate) || rate <= 0) return res.json({ status: 'error', message: `服务 ${sid} 的价格必须大于 0` });
+
+      // 🔒 成本保护：站长即使想亏本也亏不了 —— 实收（含折扣）不得低于进货价
+      const baseRate = (sv.custom_rate !== null && sv.custom_rate !== undefined)
+        ? parseFloat(sv.custom_rate) : parseFloat(sv.rate);
+      const floor = Number((baseRate * costMult / discount).toFixed(6)); // 折算回"标价"的下界
+      if (rate < floor - 0.000001) {
+        return res.json({
+          status: 'error',
+          message: `「${sv.name}」定价过低：${rate} 低于成本线 ${floor}（每 1000 个进货 ${(baseRate * costMult).toFixed(4)}）。站长可自定义，但不能亏本卖。`
+        });
+      }
+      toUpsert.push({ site_id: site.id, service_id: sid, rate });
+    }
+
+    if (toDelete.length) await SiteServicePrice.destroy({ where: { site_id: site.id, service_id: toDelete } });
+    if (toUpsert.length) {
+      await SiteServicePrice.bulkCreate(toUpsert, { updateOnDuplicate: ['rate', 'updated_at'] });
+    }
+    res.json({ status: 'success', message: `已保存 ${toUpsert.length} 项定价${toDelete.length ? `，恢复默认 ${toDelete.length} 项` : ''}` });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '保存定价失败：' + (e.message || e) });
+  }
+});
+
 router.put('/:id', authenticate, async (req, res) => {
   try {
     const site = await Site.findByPk(req.params.id);
@@ -451,6 +600,7 @@ router.put('/:id', authenticate, async (req, res) => {
             hero_badge, hero_title, hero_subtitle, hero_desc,
             hero_btn1_text, hero_btn1_url, hero_btn2_text, hero_btn2_url, hero_bg_url,
             bufpay_id, bufpay_key, cryptomus_id, cryptomus_key,
+            discount_rate, discount_label, discount_until,
     bg_color, bg_image, font_scale } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
@@ -635,6 +785,37 @@ router.put('/:id', authenticate, async (req, res) => {
       }
       if (multiplier !== undefined) site.multiplier = nextMultiplier;
       if (agent_discount !== undefined) site.agent_discount = nextDiscount;
+    }
+
+    // 🎫 折扣促销：站长给自己的客户打折（限时/长期）
+    //    🔒 与倍率联立校验：倍率 × 折扣 不得低于站长进货倍率，否则每单倒亏。
+    if (discount_rate !== undefined || discount_label !== undefined || discount_until !== undefined) {
+      const nextMult = multiplier !== undefined ? parseFloat(multiplier) : parseFloat(site.multiplier);
+      const nextRate = discount_rate !== undefined ? parseFloat(discount_rate) : parseFloat(site.discount_rate);
+      const costMult = siteCostMultiplier(site.agent_discount, await getGlobalMultiplier());
+
+      if (discount_rate !== undefined) {
+        if (!isFinite(nextRate) || nextRate <= 0) return res.json({ status: 'error', message: '折扣必须大于 0' });
+        if (nextRate > 1) return res.json({ status: 'error', message: '折扣不能大于 1（1 = 不打折，0.85 = 八五折）' });
+        const floorRate = Number((costMult / nextMult).toFixed(4));
+        if (nextRate < floorRate - 0.0001) {
+          return res.json({
+            status: 'error',
+            message: `折扣太深：你的倍率 ${nextMult} × 折扣 ${nextRate} = ${(nextMult * nextRate).toFixed(2)}，低于进货倍率 ${costMult}，每单会倒亏。最低只能打到 ${floorRate}（约 ${(floorRate * 10).toFixed(1)} 折）。`
+          });
+        }
+        site.discount_rate = nextRate;
+      }
+      if (discount_label !== undefined) site.discount_label = String(discount_label || '').trim().slice(0, 40) || null;
+      if (discount_until !== undefined) {
+        let until = discount_until;
+        if (typeof until === 'string' && !/^\d+$/.test(until.trim())) {
+          const dt = Date.parse(until);
+          until = isFinite(dt) ? Math.floor(dt / 1000) : 0;
+        }
+        until = parseInt(until) || 0;
+        site.discount_until = until > 0 ? until : 0;
+      }
     }
 
     // 🔒 分站公告会经 public.js 下发给全部访客、前端用 v-html 渲染，

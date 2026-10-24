@@ -1,5 +1,5 @@
 import express from 'express';
-import { Service, Config, User } from '../models/index.js';
+import { Service, Config, User, SiteServicePrice } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -12,18 +12,38 @@ router.get('/public', async (req, res) => {
     // 🏬 分站：首页展示的必须是**站长定的售价**，不能用平台倍率
     const multiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
 
+    // 💰 分站的「单服务定价」与「活动折扣」也要反映到列表价上，
+    //    否则客户看到的价和下单实扣的价对不上（历史上就吃过这个亏）。
+    let overrideMap = new Map();
+    let siteDiscount = 1;
+    if (req.site) {
+      try {
+        const rows = await SiteServicePrice.findAll({ where: { site_id: req.site.id } });
+        overrideMap = new Map(rows.map(r => [Number(r.service_id), parseFloat(r.rate)]));
+      } catch (e) { overrideMap = new Map(); }
+      const dr = parseFloat(req.site.discount_rate);
+      const du = parseInt(req.site.discount_until || 0);
+      const active = isFinite(dr) && dr > 0 && dr < 1 && !(du > 0 && Math.floor(Date.now() / 1000) > du);
+      siteDiscount = active ? dr : 1;
+    }
+
     const services = await Service.findAll({ order: [['sort', 'ASC']] });
     const formatted = services.map(s => {
       // 🔌 与下单扣费口径保持一致：custom_rate 优先（订单路由本来就是这么算的，
       //    此前这里只读 rate，导致"页面显示 0.33、实际扣 0.99"这种不一致）
       const baseRate = (s.custom_rate !== null && s.custom_rate !== undefined) ? parseFloat(s.custom_rate) : parseFloat(s.rate);
+      // 站长单价优先，其次总倍率；最后统一乘活动折扣
+      const listPrice = overrideMap.has(Number(s.service_id))
+        ? overrideMap.get(Number(s.service_id))
+        : baseRate * multiplier;
+      const finalPrice = Number((listPrice * siteDiscount).toFixed(4));
       return {
         service: s.service_id, name: s.name, type: s.type, category: s.category,
         // 🔒 不再下发 `rate`（成本基价）：这是平台/站长的进货底价，
         //    公开接口把它吐出去，等于把「你赚多少」摊开给客户看。
         //    前端只用到 sell_price（已核实 Home.vue 唯一消费点）。
         min: s.min, max: s.max,
-        sell_price: parseFloat((baseRate * multiplier).toFixed(4)),
+        sell_price: finalPrice,
         description: s.description
       };
     });

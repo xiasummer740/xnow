@@ -99,6 +99,10 @@ const initDatabase = async () => {
     await sequelize.sync({ alter: false });
     // 数据库迁移：新增字段（产品 protocols）
     try { await sequelize.query("ALTER TABLE vpn_products ADD COLUMN protocols TEXT"); } catch (e) { /* 字段已存在则忽略 */ }
+    // 🎫 分站折扣促销（老库补列；sync({alter:false}) 只建表、不给已有表加列）
+    try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_rate FLOAT NOT NULL DEFAULT 1"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_label VARCHAR(40) DEFAULT NULL"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_until BIGINT NOT NULL DEFAULT 0"); } catch (e) {}
 
     const defaultConfigCount = await Config.count();
     if (defaultConfigCount === 0) {

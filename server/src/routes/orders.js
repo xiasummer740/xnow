@@ -1,6 +1,6 @@
 import express from 'express';
 import axios from 'axios';
-import { sequelize, Order, Service, Config, User, Transaction } from '../models/index.js';
+import { sequelize, Order, Service, Config, User, Transaction, SiteServicePrice } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 
@@ -165,7 +165,20 @@ router.post('/add', authenticate, async (req, res) => {
     const baseRate = (!isStaff && service.custom_rate !== null && service.custom_rate !== undefined)
       ? parseFloat(service.custom_rate)
       : parseFloat(service.rate);
-    const sellRate = baseRate * finalMultiplier;
+    let sellRate = baseRate * finalMultiplier;
+    // 💰 分站定价：① 站长给单个服务单独定的价优先 ② 再叠活动折扣（到期自动失效）③ 成本兜底在下面统一处理
+    if (req.site) {
+      try {
+        const ov = await SiteServicePrice.findOne({
+          where: { site_id: req.site.id, service_id: service.service_id }, transaction: t
+        });
+        if (ov && parseFloat(ov.rate) > 0) sellRate = parseFloat(ov.rate);
+      } catch (e) { /* 表还没建/查不到就走默认倍率，不影响下单 */ }
+      const dr = parseFloat(req.site.discount_rate);
+      const du = parseInt(req.site.discount_until || 0);
+      const discountActive = isFinite(dr) && dr > 0 && dr < 1 && !(du > 0 && Math.floor(Date.now() / 1000) > du);
+      if (discountActive) sellRate = sellRate * dr;
+    }
     // 🔑 方案 A（2026-10-24 祥哥拍板）：订阅型按"投喂次数"计价。
     //    上游会为客户的每一条新帖各投喂一次、每次单独扣上游余额；
     //    本站若只按一次收费，客户发帖越多亏得越多 → 按 posts 次数乘算。

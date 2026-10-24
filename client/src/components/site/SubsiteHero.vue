@@ -8,6 +8,9 @@
 //
 // 主站永远用 Home.vue 里原来那段 hero，本组件只在分站渲染。
 import { computed } from 'vue';
+import { useAppStore } from '../../stores/app';
+
+const appStore = useAppStore();
 
 const props = defineProps({
   variant: { type: String, default: 'center' }, // center | split | editorial | terminal
@@ -27,6 +30,9 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
   <!-- ═══════════ 版式一：居中大标题（电商落地页感）═══════════ -->
   <main v-if="variant === 'center'"
     class="subsite-hero relative z-20 mx-auto max-w-4xl px-5 pt-20 pb-14 text-center md:pt-28">
+    <div v-if="appStore.discountLabel"
+         class="mb-3 inline-block rounded-full bg-emerald-500/15 px-4 py-1.5 text-[11px] font-black tracking-[0.14em] text-emerald-300"
+         style="border: 1px solid rgba(16,185,129,0.45)">🎫 {{ appStore.discountLabel }}</div>
     <div class="inline-block mb-6 rounded-full px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.2em]"
       :style="{ background: 'var(--brand-soft)', color: 'var(--brand)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }">
       {{ hero.badge }}
@@ -54,6 +60,9 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
   <!-- ═══════════ 版式二：左文右价卡（SaaS 产品页感）═══════════ -->
   <main v-else-if="variant === 'split'"
     class="subsite-hero relative z-20 mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-5 pt-16 pb-14 md:pt-24 lg:grid-cols-[1.15fr_0.85fr]">
+    <div v-if="appStore.discountLabel"
+         class="mb-3 inline-block rounded-full bg-emerald-500/15 px-4 py-1.5 text-[11px] font-black tracking-[0.14em] text-emerald-300"
+         style="border: 1px solid rgba(16,185,129,0.45)">🎫 {{ appStore.discountLabel }}</div>
     <div class="text-left">
       <div class="mb-5 flex items-center gap-3">
         <span class="h-px w-10" :style="{ background: 'var(--brand)' }"></span>
@@ -101,6 +110,9 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
 
   <!-- ═══════════ 版式三：杂志排版（左对齐 + 细线 + 首字下沉）═══════════ -->
   <main v-else-if="variant === 'editorial'" class="subsite-hero relative z-20 mx-auto max-w-3xl px-6 pt-16 pb-12 md:pt-24">
+    <div v-if="appStore.discountLabel"
+         class="mb-3 inline-block rounded-full bg-emerald-500/15 px-4 py-1.5 text-[11px] font-black tracking-[0.14em] text-emerald-300"
+         style="border: 1px solid rgba(16,185,129,0.45)">🎫 {{ appStore.discountLabel }}</div>
     <div class="mb-6 flex items-baseline justify-between border-b pb-3" style="border-color: color-mix(in srgb, currentColor 16%, transparent)">
       <span class="text-[10px] font-black uppercase tracking-[0.3em] opacity-50">{{ siteName || 'SMM' }}</span>
       <span class="text-[10px] uppercase tracking-[0.2em] opacity-35">{{ zh ? '社媒增长服务' : 'Social Growth' }}</span>
@@ -134,6 +146,10 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
 
   <!-- ═══════════ 版式四：终端窗口（极客/自动化工具感）═══════════ -->
   <main v-else class="subsite-hero relative z-20 mx-auto max-w-4xl px-5 pt-16 pb-14 md:pt-24">
+    <div v-if="appStore.discountLabel" class="mb-3 text-center">
+      <span class="inline-block rounded-full bg-emerald-500/15 px-4 py-1.5 text-[11px] font-black tracking-[0.14em] text-emerald-300"
+            style="border: 1px solid rgba(16,185,129,0.45)">🎫 {{ appStore.discountLabel }}</span>
+    </div>
     <div class="mb-8 text-center">
       <h1 class="text-3xl font-black leading-tight tracking-tight md:text-5xl">
         <span class="site-brand-text">{{ hero.title || (zh ? '一行命令，直接开跑' : 'One Command To Run') }}</span>

@@ -10,27 +10,6 @@
 
     <!-- 📣 推荐同行开店：站长把朋友介绍来开至尊代理/充值，他拿 10% 返佣。
          只出现在主站的「我的分站」页，分站上不露痕迹。 -->
-    <div class="mb-5 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-transparent p-4 md:p-5">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0">
-          <div class="font-black text-amber-300 flex items-center gap-2">
-            <span>🤝</span> 推荐同行来开店，你拿 10% 返佣
-          </div>
-          <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-            把下面的链接发给想开分站的朋友：他在主站注册并充值，<b class="text-amber-300">他的充值金额 10% 直接进你的余额</b>，
-            不用你操作，到账自动发。目前你已带来 <b class="text-slate-200">{{ affiliate.count }}</b> 人，
-            累计拿到返佣 <b class="text-emerald-400">¥{{ affiliate.commission }}</b>。
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <input :value="inviteLink" readonly
-                 class="w-56 md:w-72 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300" />
-          <button @click="copyInvite" class="px-3 py-2 text-xs font-bold rounded-lg bg-amber-500 text-slate-900 hover:bg-amber-400">
-            {{ copied ? '已复制 ✓' : '复制' }}
-          </button>
-        </div>
-      </div>
-    </div>
 
     <div v-if="loading" class="text-center py-20 text-slate-500">加载中…</div>
 
@@ -122,6 +101,9 @@
           <textarea v-model="form.announcement" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空则不显示公告"></textarea>
         </div>
       </section>
+
+      <!-- 💰 定价体系：单服务改价 + 折扣促销（组件自取自存，保存后回读本站配置） -->
+      <SitePricing v-if="site && site.id" :site-id="site.id" @saved="load()" />
 
       <!-- 外观 -->
       <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
@@ -701,10 +683,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '../stores/user'
-import { useAppStore } from '../stores/app'
+import SitePricing from '../components/site/SitePricing.vue'
 
 const userStore = useUserStore()
-const appStore = useAppStore()
 const loading = ref(true)
 const saving = ref(false)
 const creating = ref(false)
@@ -1287,35 +1268,8 @@ const loadCustomers = async (append = false) => {
 }
 const loadMoreCustomers = () => loadCustomers(true)
 
-// 🤝 推广数据：复用已有的 /api/user/affiliate-stats（返佣比例 + 下级人数 + 累计佣金）
-const affiliate = ref({ count: 0, commission: '0.00', rate: '10%' });
-const copied = ref(false);
-const inviteLink = computed(() => {
-  const uid = userStore.userInfo?.id || '';
-  // 主站地址由服务端下发；拿不到才退回当前域名
-  const origin = (appStore.mainOrigin || window.location.origin).replace(/\/+$/, '');
-  return `${origin}/?ref=${uid}`;
-});
-async function loadAffiliate() {
-  try {
-    const r = await fetch('/api/user/affiliate-stats', { headers: { Authorization: `Bearer ${userStore.token}` } });
-    const d = await r.json();
-    const data = d.data || d;
-    affiliate.value = {
-      count: (data.invitees || []).length,
-      commission: Number(data.total_commission || data.commission || 0).toFixed(2),
-      rate: data.rate ? Math.round(Number(data.rate) * 100) + '%' : '10%',
-    };
-  } catch (e) { /* 拿不到就显示 0，不影响主功能 */ }
-}
-function copyInvite() {
-  const done = () => { copied.value = true; setTimeout(() => (copied.value = false), 1600); };
-  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(inviteLink.value).then(done).catch(done);
-  else done();
-}
 
 onMounted(async () => {
-  loadAffiliate()
   await load()
   if (site.value) { loadOrders(); loadHotPrice() }
 })
