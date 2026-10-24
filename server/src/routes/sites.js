@@ -375,6 +375,10 @@ router.put('/:id', authenticate, async (req, res) => {
       if (u && !/^(https?:\/\/|\/)/i.test(u)) {
         return res.json({ status: 'error', message: '链接必须是以 http(s):// 或 / 开头的地址' });
       }
+      // 🔒 图片/链接会被写进 CSS 的 url("...") 里，引号、括号、空白可破坏样式表结构
+      if (u && /["'()<>\s\\]/.test(u)) {
+        return res.json({ status: 'error', message: '链接里不能包含引号、括号或空格' });
+      }
       site[k] = u ? u.slice(0, 512) : null;
     }
 

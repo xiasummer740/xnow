@@ -12,7 +12,7 @@
       </div>
     </header>
 
-    <main class="relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
+    <main :style="heroBgStyle" class="relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
       <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ hero.badge }}</div>
       <h1 v-if="hero.title" class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
         <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ hero.title }}</span>
@@ -191,6 +191,20 @@ const hero = computed(() => {
     btn2Text: s.hero_btn2_text || (zh ? '🛡️ 安全节点' : '🛡️ VPN'),
     btn2Url: s.hero_btn2_url || '',
     bgUrl: s.hero_bg_url || ''
+  }
+})
+
+// 🖼 站长上传的首页背景图：压一层深色遮罩，保证文字始终看得清。
+//    不压遮罩的话，白色标题压在白底图上会直接看不见 —— 页面上最重要的字。
+const heroBgStyle = computed(() => {
+  const u = hero.value.bgUrl
+  if (!u) return {}
+  return {
+    backgroundImage: `linear-gradient(rgba(2,6,23,.82), rgba(2,6,23,.94)), url("${u}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    borderRadius: '28px'
   }
 })
 const previewServices = ref([]);
