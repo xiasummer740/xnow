@@ -573,3 +573,10 @@ html[data-template] .subsite-hero { padding-top: 2rem !important; padding-bottom
 @media (max-width: 640px) {
   html[data-template] .subsite-hero { padding-top: 1rem !important; padding-bottom: 1.2rem !important; }
 }
+
+/* 71 期（续）：手机上「编辑我的店」悬浮按钮压住了区块标题。
+   站长在手机上基本不会用可视化拖动编辑（还容易误触），入口留在
+   控制台 → 我的分站 就够了。桌面端保持不变。 */
+@media (max-width: 640px) {
+  html[data-template] .site-edit-fab { display: none !important; }
+}
