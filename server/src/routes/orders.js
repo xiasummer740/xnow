@@ -300,12 +300,15 @@ router.post('/batch', authenticate, async (req, res) => {
       const service = await Service.findByPk(serviceId, { transaction: t });
       if (!service) { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '商品不存在' }); continue; }
 
-      // 🔌 批量下单只支持 Default / Custom Comments —— 其余类型的必填字段（用户名/话题/选项…）
-      //    在"一行一条"的批量格式里根本没法表达，硬放过去就是又一批 Missing xxx
+      // 🔌 批量下单只支持 Default 类型。
+      //    - Custom Comments：必填字段是"评论内容"（每单不同），一行格式表达不了 → 上游必回 Missing comments
+      //    - Subscriptions / Invites / Mentions / Poll：必填用户名、话题、选项…一行也表达不了
+      //    这些类型请到「开始下单」逐条提交（上游的批量下单同样不支持它们）。
       const bType = normType(service.type);
-      if (bType !== 'default' && bType !== 'custom comments') {
+      if (bType !== 'default') {
         await t.rollback();
-        results.push({ serviceId, link, quantity, status: 'error', message: `该服务类型（${service.type}）不支持批量下单，请到「开始下单」单个提交` });
+        const why = bType === 'custom comments' ? '需要逐条填写评论内容' : '需要填写用户名/话题/选项等专用字段';
+        results.push({ serviceId, link, quantity, status: 'error', message: `该服务类型（${service.type}）${why}，不支持一行一条的批量下单，请到「开始下单」单个提交` });
         continue;
       }
 
