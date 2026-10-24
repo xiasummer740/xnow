@@ -1071,3 +1071,62 @@ tar xzf /var/backups/xnow/<时间戳>/nginx-sites.tgz -C /etc/nginx && nginx -t 
 主站的 JS 包里仍含 `xnow.taikon.top`、`XNOW PRO`、`t.me/Xnow001Bot` 等字符串
 （localStorage 键名、主站默认值）。分站**不会渲染**它们（已逐项确认 DOM），
 但要彻底从产物里消失需要给分站打独立 bundle，属后续可选项。
+
+---
+
+## 二十三、上线演练（83 期）：用生产库副本抓到的致命缺口
+
+### 为什么 Beta 全绿，上线仍可能全站崩
+
+Beta 的库是空的，`sites` / `orders` 表都是 `sequelize.sync` **从零建**的 —— 字段天然齐全。
+生产不一样：
+
+| 表 | 生产现状 | 新代码期望 | 后果 |
+|---|---|---|---|
+| `sites` | 11 列（早期版本） | 56 列 | 站长后台、分站配置全线 500 |
+| `orders` | **没有 `site_cost` 列** | 每单都要写 | **全站下单直接失败** |
+| `transactions` | **没有 `site_id` 列** | 充值记录要写 | 支付回调入账失败 |
+
+而 `sequelize.sync({ alter: false })` 只在**建表**时按模型建全，对**已存在的表一列都不会加**。
+此前手工写的 3 条 `ALTER TABLE sites`（折扣相关）只补了自己那 3 列。
+
+### 修法：启动时按「模型 vs 真实表」做差集，自动补列
+
+`server/src/app.js` 的 `initDatabase()` 里新增一段（只 ADD 缺失列，不删不改，可重复执行）：
+
+```
+模型定义 56 个字段  ⟶  describeTable 读出真实列  ⟶  差集逐列 addColumn
+```
+
+演练实测（xnow_rehearsal = 生产库副本）：
+
+```
+[migrate] orders.site_cost 已补上
+[migrate] transactions.site_id 已补上
+[migrate] sites.template 已补上
+... …
+[migrate] 自动补列完成：新增 44 列
+```
+
+补完后在同一份**生产数据**上验证：
+
+| 检查 | 结果 |
+|---|---|
+| `sites` 列数 | 11 → **56** ✅ |
+| `orders` 出现 `site_cost`、`transactions` 出现 `site_id` | ✅ |
+| 启动 SQL 报错 | **0 个** ✅ |
+| 公开配置接口 | 正常返回 ✅ |
+| 服务列表 | **2839 个**，且不含 `rate`（上游底价）✅ |
+| 订单历史（生产管理员，19 单） | `status=success`，返回字段里**没有** `upstream_charge` / `site_cost` ✅ |
+| 分站列表（0 个站） | `{"status":"success","data":[]}`，不是 500 ✅ |
+| Beta 上再跑一次（表已齐全） | 「新增 0 列」—— 幂等，不会误加 ✅ |
+
+### 以后怎么验：一条命令
+
+```bash
+bash /var/www/xnow/deploy/sites/rehearse.sh    # 或 scp 到 /tmp 再跑
+```
+
+它会：复制生产库 → 拉分支代码 → 3002 端口启动 → 打印补列日志与列数 →
+只读验证四个接口 → 检查 SQL 报错 → 自动停进程删库（日志留 `/tmp/rehearsal.log`）。
+**全程不碰生产。**

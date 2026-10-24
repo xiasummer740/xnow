@@ -104,6 +104,48 @@ const initDatabase = async () => {
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_label VARCHAR(40) DEFAULT NULL"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_until BIGINT NOT NULL DEFAULT 0"); } catch (e) {}
 
+    // 🔧 自动补列（83 期）：上线演练时发现的真问题 ——
+    //    生产库的 sites 表是早期版本，只有 11 列；而 sync({alter:false}) 只在**建表**时
+    //    按模型建全，对**已存在**的表一列都不会加。结果新代码一查 Site 就
+    //    Unknown column 'sites.template' → 站长后台、分站配置全线 500。
+    //    这里按「模型定义 vs 真实表结构」做差集，只 ADD 缺失的列（不删不改），
+    //    可重复执行；以后模型再加字段也不用记着写 ALTER。
+    try {
+      const qi = sequelize.getQueryInterface();
+      const skipped = [];
+      let added = 0;
+      for (const model of Object.values(sequelize.models)) {
+        const table = typeof model.getTableName() === 'string' ? model.getTableName() : model.getTableName().tableName;
+        let desc;
+        try {
+          desc = await qi.describeTable(table);
+        } catch (e) {
+          continue; // 表还不存在 —— sync 刚建好，或该模型没启用
+        }
+        for (const [name, attr] of Object.entries(model.rawAttributes)) {
+          const col = attr.field || name;
+          if (desc[col]) continue;
+          try {
+            await qi.addColumn(table, col, { ...attr, field: col });
+            added++;
+            console.log(`  [migrate] ${table}.${col} 已补上`);
+          } catch (e1) {
+            // NOT NULL 又没默认值 + 表里已有数据时会失败 → 退一步按可空加，至少不会 500
+            try {
+              await qi.addColumn(table, col, { ...attr, field: col, allowNull: true });
+              added++;
+              console.log(`  [migrate] ${table}.${col} 已补上（可空）`);
+            } catch (e2) {
+              skipped.push(`${table}.${col}(${String(e2.message).slice(0, 60)})`);
+            }
+          }
+        }
+      }
+      console.log(`[migrate] 自动补列完成：新增 ${added} 列${skipped.length ? '，跳过 ' + skipped.length + ' 个: ' + skipped.join(', ') : ''}`);
+    } catch (e) {
+      console.warn('[migrate] 自动补列跳过:', e.message);
+    }
+
     const defaultConfigCount = await Config.count();
     if (defaultConfigCount === 0) {
       await Config.bulkCreate([ 
