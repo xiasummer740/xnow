@@ -21,6 +21,28 @@
     <div class="bg-slate-800/80 p-5 md:p-10 rounded-2xl md:rounded-3xl border border-slate-700 shadow-2xl space-y-6 md:space-y-8 relative">
       <div class="space-y-5 md:space-y-6">
         
+        <!-- 🔍 全局搜索：按服务 ID / 名称 直接定位（对齐源头站的体验，2855 个服务不用翻下拉） -->
+        <div class="relative">
+          <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
+            🔍 搜索服务
+            <span class="text-[10px] text-slate-500 ml-2 font-normal">输入服务 ID 或名称关键词，全平台筛选</span>
+          </label>
+          <input type="text" v-model="searchQuery" @focus="searchOpen = true"
+            @keydown.enter="searchResults.length && selectSearchResult(searchResults[0])"
+            placeholder="例如 30190 或 自动播放"
+            class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+          <div v-if="searchOpen" @click="searchOpen = false" class="fixed inset-0 z-40"></div>
+          <div v-if="searchOpen && String(searchQuery).trim()" class="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] max-h-[60vh] overflow-y-auto custom-scrollbar">
+            <div v-if="searchResults.length === 0" class="px-4 py-3 text-xs text-slate-500">没有匹配的服务，换个关键词试试</div>
+            <div v-for="srv in searchResults" :key="'q-' + srv.service" @click="selectSearchResult(srv)"
+              class="px-3 py-2 md:py-2.5 border-b border-slate-700/50 hover:bg-slate-700 cursor-pointer transition">
+              <div class="text-[11px] md:text-xs text-slate-300 leading-snug break-words">
+                <span class="text-amber-400 font-mono">ID:{{ srv.service }}</span> | {{ srv.name }} | {{ appStore.formatMoney(srv.rate) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="relative">
           <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">{{ appStore.t('category') }}</label>
           <div @click="catOpen = !catOpen; srvOpen = false" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white cursor-pointer flex justify-between items-center hover:border-amber-400 transition min-h-[46px]">
@@ -368,7 +390,35 @@ const availableCategories = computed(() => {
 });
 
 const availableServices = computed(() => rawServices.value.filter(s => s.category === activeCategory.value));
-const activeService = computed(() => availableServices.value.find(s => String(s.service) === String(activeServiceId.value)) || null);
+// 🔎 从 rawServices 兜底查找：搜索结果跨平台/跨分类选中时也能立刻找到（否则表单会空）
+const activeService = computed(() => rawServices.value.find(s => String(s.service) === String(activeServiceId.value)) || null);
+
+// 🔍 全局搜索：按服务 ID / 名称，全平台（对齐源头站体验）
+const searchQuery = ref('');
+const searchOpen = ref(false);
+const searchResults = computed(() => {
+    const q = String(searchQuery.value || '').trim().toLowerCase();
+    if (!q) return [];
+    const hit = rawServices.value.filter(s =>
+        String(s.service).includes(q) || String(s.name || '').toLowerCase().includes(q)
+    );
+    const rank = (id) => String(id) === q ? 0 : (String(id).startsWith(q) ? 1 : 2);
+    hit.sort((a, b) => rank(a.service) - rank(b.service) || Number(a.service) - Number(b.service));
+    return hit.slice(0, 40);
+});
+const selectSearchResult = (srv) => {
+    searchQuery.value = `ID:${srv.service} ${srv.name}`;
+    searchOpen.value = false;
+    // 必须把平台 + 分类一起切到该服务所在处，否则分类下拉对不上
+    const catStr = String(srv.category || '').toLowerCase();
+    let plat = '其他';
+    for (const [p, keywords] of Object.entries(platformKeywords)) {
+        if (keywords.some(kw => catStr.includes(kw))) { plat = p; break; }
+    }
+    activePlatform.value = plat;
+    if (availableCategories.value.includes(srv.category)) activeCategory.value = srv.category;
+    selectService(srv.service);
+};
 
 const selectPlatform = (platform) => { 
   activePlatform.value = platform; 
