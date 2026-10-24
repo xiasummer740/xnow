@@ -102,6 +102,101 @@ router.get('/stats', authenticate, async (req, res) => {
   }
 });
 
+// 👥 分站的客户列表（站主与管理员可见，手机/邮箱做脱敏，只给他看自己站的客户）
+router.get('/customers', authenticate, async (req, res) => {
+  try {
+    const siteId = parseInt(req.query.site_id || 0);
+    if (!siteId) return res.json({ status: 'error', message: '缺少 site_id' });
+    const site = await Site.findByPk(siteId);
+    if (!site) return res.json({ status: 'error', message: '分站不存在' });
+    if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权查看该分站' });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit || 30) || 30, 100);
+    const offset = Math.max(parseInt(req.query.offset || 0) || 0, 0);
+    const { sequelize } = await import('../models/index.js');
+    const [rows] = await sequelize.query(
+      `SELECT u.id, u.phone, u.email, u.role, u.balance, u.created_at,
+              (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id AND o.site_id = ?) AS order_count,
+              (SELECT COALESCE(SUM(o.charge),0) FROM orders o WHERE o.user_id = u.id AND o.site_id = ?) AS total_spent
+         FROM users u WHERE u.site_id = ?
+         ORDER BY u.id DESC LIMIT ? OFFSET ?`,
+      { replacements: [siteId, siteId, siteId, limit, offset] }
+    );
+    const [cnt] = await sequelize.query('SELECT COUNT(*) AS n FROM users WHERE site_id = ?', { replacements: [siteId] });
+
+    // 🔒 脱敏：站主要联系客户，但不需要看到完整号码/邮箱
+    const maskPhone = (p) => (p ? String(p).replace(/^(\d{3})\d+(\d{2})$/, '$1****$2') : '');
+    const maskEmail = (e) => (e ? String(e).replace(/^(.{2})[^@]*@/, '$1***@') : '');
+
+    res.json({
+      status: 'success',
+      data: rows.map(r => ({
+        id: r.id,
+        phone: maskPhone(r.phone),
+        email: maskEmail(r.email),
+        role: r.role,
+        balance: parseFloat(r.balance || 0).toFixed(2),
+        orders: Number(r.order_count || 0),
+        spent: parseFloat(r.total_spent || 0).toFixed(4),
+        joined: r.created_at
+      })),
+      total: Number(cnt[0]?.n || 0)
+    });
+  } catch (e) {
+    console.error('分站客户列表失败:', e.message);
+    res.status(500).json({ status: 'error', message: '查询失败' });
+  }
+});
+
+// 🧾 分站的订单明细（含该单毛利 = charge − site_cost）
+router.get('/orders', authenticate, async (req, res) => {
+  try {
+    const siteId = parseInt(req.query.site_id || 0);
+    if (!siteId) return res.json({ status: 'error', message: '缺少 site_id' });
+    const site = await Site.findByPk(siteId);
+    if (!site) return res.json({ status: 'error', message: '分站不存在' });
+    if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权查看该分站' });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit || 30) || 30, 100);
+    const offset = Math.max(parseInt(req.query.offset || 0) || 0, 0);
+    const { sequelize } = await import('../models/index.js');
+    const [rows] = await sequelize.query(
+      `SELECT o.id, o.order_no, o.service_id, o.link, o.quantity, o.charge, o.site_cost,
+              o.status, o.created_at, s.name AS service_name
+         FROM orders o LEFT JOIN services s ON s.service_id = o.service_id
+        WHERE o.site_id = ?
+        ORDER BY o.id DESC LIMIT ? OFFSET ?`,
+      { replacements: [siteId, limit, offset] }
+    );
+    const [cnt] = await sequelize.query('SELECT COUNT(*) AS n FROM orders WHERE site_id = ?', { replacements: [siteId] });
+
+    res.json({
+      status: 'success',
+      data: rows.map(r => ({
+        id: r.id,
+        order_no: r.order_no,
+        service_id: r.service_id,
+        service_name: r.service_name,
+        link: r.link,
+        quantity: r.quantity,
+        charge: parseFloat(r.charge || 0).toFixed(4),
+        site_cost: parseFloat(r.site_cost || 0).toFixed(4),
+        profit: (parseFloat(r.charge || 0) - parseFloat(r.site_cost || 0)).toFixed(4),
+        status: r.status,
+        created_at: r.created_at
+      })),
+      total: Number(cnt[0]?.n || 0)
+    });
+  } catch (e) {
+    console.error('分站订单列表失败:', e.message);
+    res.status(500).json({ status: 'error', message: '查询失败' });
+  }
+});
+
 router.get('/', authenticate, async (req, res) => {
   try {
     let sites;

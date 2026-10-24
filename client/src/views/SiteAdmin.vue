@@ -184,6 +184,61 @@
         <div v-if="domainHint" class="bg-amber-400/10 border border-amber-500/30 rounded-lg p-3 text-[11px] text-amber-200 whitespace-pre-wrap">{{ domainHint }}</div>
       </section>
 
+      <!-- 明细 -->
+      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-sm text-amber-400">经营明细</h2>
+          <div class="flex gap-2">
+            <button @click="loadOrders()" :class="tab === 'orders' ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-300'" class="px-3 py-1 text-xs rounded-lg font-bold">订单 {{ orderTotal }}</button>
+            <button @click="loadCustomers()" :class="tab === 'customers' ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-300'" class="px-3 py-1 text-xs rounded-lg font-bold">客户 {{ customerTotal }}</button>
+          </div>
+        </div>
+
+        <div v-if="tab === 'orders'">
+          <div v-if="orders.length === 0" class="text-center py-6 text-xs text-slate-500">还没有订单</div>
+          <div v-else class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="text-slate-500 border-b border-slate-800">
+                <tr><th class="text-left py-2">订单号</th><th class="text-left">服务</th><th class="text-right">数量</th><th class="text-right">客户付</th><th class="text-right">你赚</th><th class="text-right">状态</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="o in orders" :key="o.id" class="border-b border-slate-800/50">
+                  <td class="py-2 text-slate-400">{{ String(o.order_no).slice(-8) }}</td>
+                  <td class="text-slate-300 max-w-[180px] truncate" :title="o.service_name">{{ (o.service_name || ('#' + o.service_id)).slice(0, 26) }}</td>
+                  <td class="text-right text-slate-400">{{ o.quantity }}</td>
+                  <td class="text-right text-slate-200">¥{{ o.charge }}</td>
+                  <td class="text-right" :class="parseFloat(o.profit) > 0 ? 'text-emerald-400' : 'text-slate-500'">¥{{ o.profit }}</td>
+                  <td class="text-right text-slate-400">{{ o.status }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button v-if="orders.length < orderTotal" @click="loadMoreOrders()" class="w-full mt-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">加载更多</button>
+        </div>
+
+        <div v-else>
+          <div v-if="customers.length === 0" class="text-center py-6 text-xs text-slate-500">还没有客户</div>
+          <div v-else class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="text-slate-500 border-b border-slate-800">
+                <tr><th class="text-left py-2">账号</th><th class="text-right">余额</th><th class="text-right">订单数</th><th class="text-right">累计消费</th><th class="text-right">注册时间</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in customers" :key="c.id" class="border-b border-slate-800/50">
+                  <td class="py-2 text-slate-300">{{ c.phone || c.email || ('#' + c.id) }}</td>
+                  <td class="text-right text-slate-200">¥{{ c.balance }}</td>
+                  <td class="text-right text-slate-400">{{ c.orders }}</td>
+                  <td class="text-right text-emerald-400">¥{{ c.spent }}</td>
+                  <td class="text-right text-slate-500">{{ String(c.joined || '').slice(0, 10) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button v-if="customers.length < customerTotal" @click="loadMoreCustomers()" class="w-full mt-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">加载更多</button>
+        </div>
+        <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的进货成本</p>
+      </section>
+
       <div class="flex gap-3">
         <button @click="save()" :disabled="saving" class="flex-1 py-3 rounded-xl font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
           {{ saving ? '保存中…' : '保存全部修改' }}
@@ -207,6 +262,12 @@ const site = ref(null)
 const stats = ref({})
 const bindDomain = ref('')
 const domainHint = ref('')
+const tab = ref('orders')
+const orders = ref([])
+const orderTotal = ref(0)
+const customers = ref([])
+const customerTotal = ref(0)
+const PAGE = 30
 
 const createForm = ref({ domain: '', name: '', multiplier: 2.5 })
 const form = ref({
@@ -349,5 +410,38 @@ const bindOwnDomain = async () => {
   } catch (e) { domainHint.value = '❌ 请求失败' } finally { binding.value = false }
 }
 
-onMounted(load)
+const loadOrders = async (append = false) => {
+  if (!site.value) return
+  tab.value = 'orders'
+  try {
+    const off = append ? orders.value.length : 0
+    const res = await fetch(`/api/sites/orders?site_id=${site.value.id}&limit=${PAGE}&offset=${off}`, { headers: headers() })
+    const data = await res.json()
+    if (data.status === 'success') {
+      orders.value = append ? [...orders.value, ...data.data] : data.data
+      orderTotal.value = data.total || 0
+    }
+  } catch (e) {}
+}
+const loadMoreOrders = () => loadOrders(true)
+
+const loadCustomers = async (append = false) => {
+  if (!site.value) return
+  tab.value = 'customers'
+  try {
+    const off = append ? customers.value.length : 0
+    const res = await fetch(`/api/sites/customers?site_id=${site.value.id}&limit=${PAGE}&offset=${off}`, { headers: headers() })
+    const data = await res.json()
+    if (data.status === 'success') {
+      customers.value = append ? [...customers.value, ...data.data] : data.data
+      customerTotal.value = data.total || 0
+    }
+  } catch (e) {}
+}
+const loadMoreCustomers = () => loadCustomers(true)
+
+onMounted(async () => {
+  await load()
+  if (site.value) loadOrders()
+})
 </script>
