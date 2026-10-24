@@ -504,7 +504,13 @@
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">BufPay 密钥</label>
-            <input v-model="form.bufpay_key" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空/****** 表示不修改" />
+            <div class="relative">
+            <input v-model="form.bufpay_key" :type="pwdShow.bufpay_key ? 'text' : 'password'" class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-3 pr-10 py-2 text-sm" placeholder="留空/****** 表示不修改" />
+            <button type="button" @click="pwdShow.bufpay_key = !pwdShow.bufpay_key" :title="pwdShow.bufpay_key ? '隐藏' : '显示'" class="absolute inset-y-0 right-0 w-9 grid place-items-center text-slate-400 hover:text-amber-400 transition">
+              <svg v-if="!pwdShow.bufpay_key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 012.665-3.943m3.19-2.314A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.03 10.03 0 01-4.293 5.5M3 3l18 18"/></svg>
+            </button>
+          </div>
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">Cryptomus 商户 UUID</label>
@@ -512,7 +518,13 @@
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">Cryptomus API Key</label>
-            <input v-model="form.cryptomus_key" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空/****** 表示不修改" />
+            <div class="relative">
+            <input v-model="form.cryptomus_key" :type="pwdShow.cryptomus_key ? 'text' : 'password'" class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-3 pr-10 py-2 text-sm" placeholder="留空/****** 表示不修改" />
+            <button type="button" @click="pwdShow.cryptomus_key = !pwdShow.cryptomus_key" :title="pwdShow.cryptomus_key ? '隐藏' : '显示'" class="absolute inset-y-0 right-0 w-9 grid place-items-center text-slate-400 hover:text-amber-400 transition">
+              <svg v-if="!pwdShow.cryptomus_key" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 012.665-3.943m3.19-2.314A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.03 10.03 0 01-4.293 5.5M3 3l18 18"/></svg>
+            </button>
+          </div>
           </div>
         </div>
       </section>
@@ -536,7 +548,13 @@
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">授权码 / 密码</label>
-            <input v-model="form.smtp_pass" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空/****** 表示不修改" />
+            <div class="relative">
+            <input v-model="form.smtp_pass" :type="pwdShow.smtp_pass ? 'text' : 'password'" class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-3 pr-10 py-2 text-sm" placeholder="留空/****** 表示不修改" />
+            <button type="button" @click="pwdShow.smtp_pass = !pwdShow.smtp_pass" :title="pwdShow.smtp_pass ? '隐藏' : '显示'" class="absolute inset-y-0 right-0 w-9 grid place-items-center text-slate-400 hover:text-amber-400 transition">
+              <svg v-if="!pwdShow.smtp_pass" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 012.665-3.943m3.19-2.314A9.96 9.96 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.03 10.03 0 01-4.293 5.5M3 3l18 18"/></svg>
+            </button>
+          </div>
           </div>
         </div>
         <div class="pt-1 space-y-2">
@@ -872,6 +890,8 @@ const testSmtp = async () => {
 }
 
 const createForm = ref({ domain: '', name: '', multiplier: 3 })
+// 👁 密钥/密码框的可视开关（站长填错密钥很常见，让他能看一眼）
+const pwdShow = ref({ bufpay_key: false, cryptomus_key: false, smtp_pass: false });
 const form = ref({
   name: '', multiplier: 2.5, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
