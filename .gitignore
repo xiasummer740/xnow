@@ -119,3 +119,5 @@ server/src/.mcp.json
 # 问题清单：含可执行的攻击路径，本仓库是 PUBLIC，修复部署前不公开
 # 门禁 xnow release 读本地文件即可，不受影响
 ISSUES.md
+
+.tmpbuild/
