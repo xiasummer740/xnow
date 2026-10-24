@@ -70,7 +70,7 @@
           
           <div class="p-3 md:p-4 text-[11px] md:text-xs text-blue-200 font-mono leading-snug max-h-48 overflow-y-auto custom-scrollbar">
             <div class="space-y-1.5 break-all">
-              <p>✔️ {{ appStore.lang === 'zh' ? '示例链接' : 'Example Link' }} : <span class="text-white bg-blue-900/50 px-1.5 py-0.5 rounded">{{ dynamicGuideLink }}</span></p>
+              <p>✔️ {{ needsUsername ? (appStore.lang === 'zh' ? '示例用户名' : 'Example Username') : (appStore.lang === 'zh' ? '示例链接' : 'Example Link') }} : <span class="text-white bg-blue-900/50 px-1.5 py-0.5 rounded">{{ needsUsername ? '@tiktokuser' : dynamicGuideLink }}</span></p>
               <div class="h-px bg-blue-500/30 my-2 w-full"></div>
               
               <div v-if="activeService && activeService.description" class="text-slate-300 font-sans whitespace-pre-wrap leading-tight">{{ activeService.description }}</div>
@@ -112,7 +112,7 @@
               用户名 <span class="text-red-400">*</span>
               <span class="text-[10px] text-slate-500 ml-2 font-normal">只需要用户名，不要带 @ 或整条链接</span>
             </label>
-            <input type="text" v-model="form.username" placeholder="例如 qirinkvpv7h" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+            <input type="text" v-model="form.username" placeholder="例如 tiktokuser" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
           </div>
 
           <div v-if="isMentions">
