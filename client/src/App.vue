@@ -10,7 +10,10 @@
       <div class="bg-slate-900/90 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center relative overflow-hidden transform transition-all scale-100"><div class="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/20 rounded-full blur-[40px] pointer-events-none"></div><h3 class="text-xl font-black text-white mb-3 tracking-wider relative z-10">{{ uiStore.modal.title }}</h3><p class="text-slate-300 text-sm leading-relaxed mb-8 relative z-10">{{ uiStore.modal.message }}</p><div class="flex justify-center space-x-4 relative z-10"><button v-if="uiStore.modal.isConfirm" @click="uiStore.closeModal(false)" class="cursor-pointer px-6 py-2.5 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-white transition">取消</button><button @click="uiStore.closeModal(true)" class="cursor-pointer px-8 py-2.5 rounded-xl font-black text-slate-900 bg-gradient-to-r from-amber-400 to-yellow-500 hover:scale-105 transition shadow-[0_0_15px_rgba(251,191,36,0.3)]">确认</button></div></div>
     </div>
 
-    <div class="fixed bottom-6 right-6 z-[9999] flex flex-col items-center justify-end pointer-events-none" style="gap: 6px;">
+    <!-- 🏬 分站：站长没填客服链接就整块不显示。
+         否则这里会挂平台自己的 Telegram 机器人（t.me/Xnow001Bot），
+         客户点进去直接进了平台的群 —— 等于当面告诉客户"这店是二道贩子"。 -->
+    <div v-if="!appStore?.isSubsite || appStore.supportUrl" class="fixed bottom-6 right-6 z-[9999] flex flex-col items-center justify-end pointer-events-none" style="gap: 6px;">
       
       <div class="x-3d-character-stage pointer-events-auto cursor-pointer" @click="doRandomAction" title="戳我互动呀~">
         <div class="x-character" :class="currentAction">
@@ -34,7 +37,7 @@
         </svg>
       </div>
 
-      <a :href="appStore?.tgBotLink || 'https://t.me/Xnow001Bot'" target="_blank" class="pointer-events-auto relative group flex items-center justify-center w-14 h-14 mt-1" title="联系在线客服机器人">
+      <a :href="appStore?.isSubsite ? appStore.supportUrl : (appStore?.tgBotLink || 'https://t.me/Xnow001Bot')" target="_blank" class="pointer-events-auto relative group flex items-center justify-center w-14 h-14 mt-1" title="联系在线客服">
         <div class="relative z-10 bg-gradient-to-tr from-blue-600 to-blue-400 w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.6)] group-hover:scale-110 transition-transform duration-300">
           <svg viewBox="0 0 24 24" class="w-7 h-7 fill-white transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15.15-.31.3-.46.45-1.5 1.5-3 3-4.5 4.5-.15.15-.3.3-.45.46-.3.3-.6.6-.9.9-.15.15-.3.3-.46.45l-1.5 1.5c-.15.15-.31.3-.46.46-.15.15-.31.3-.46.45-.15.15-.31.3-.46.45-.15.15-.31.3-.46.46l-1.5 1.5c-.3.3-.6.6-.91.9-.15.15-.3.3-.45.45zM21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9zM12 4.5l-8.5 7.5L12 19.5l8.5-7.5L12 4.5z"/></svg>
           <span class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-slate-900 animate-pulse">LIVE</span>
