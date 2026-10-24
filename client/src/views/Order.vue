@@ -101,16 +101,66 @@
         </transition>
 
         <div class="space-y-5 md:space-y-6">
-          <div>
+          <!-- 🔌 按上游类型动态渲染。Subscriptions / Invites 上游不收链接，要的是用户名 -->
+          <div v-if="usesLink">
             <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">{{ appStore.t('link') }}</label>
             <input type="text" v-model="form.link" placeholder="..." class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
           </div>
+
+          <div v-if="needsUsername">
+            <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
+              用户名 <span class="text-red-400">*</span>
+              <span class="text-[10px] text-slate-500 ml-2 font-normal">只需要用户名，不要带 @ 或整条链接</span>
+            </label>
+            <input type="text" v-model="form.username" placeholder="例如 qirinkvpv7h" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+          </div>
+
+          <div v-if="isMentions">
+            <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">话题标签 <span class="text-red-400">*</span></label>
+            <input type="text" v-model="form.hashtag" placeholder="例如 fyp 或 #fyp" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+          </div>
+
+          <div v-if="isPoll">
+            <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">选项编号 <span class="text-red-400">*</span></label>
+            <input type="number" v-model="form.answerNumber" placeholder="投票选项的序号，例如 1" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+          </div>
+
+          <div v-if="isPackage" class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            <div>
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">执行次数 runs <span class="text-slate-500 font-normal">（可选）</span></label>
+              <input type="number" v-model="form.runs" placeholder="留空 = 1 次" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+            </div>
+            <div>
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">间隔分钟 interval <span class="text-slate-500 font-normal">（可选）</span></label>
+              <input type="number" v-model="form.interval" placeholder="留空 = 0" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+            </div>
+          </div>
+
+          <div v-if="isSubscriptions" class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            <div>
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">延迟</label>
+              <select v-model="form.delay" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+                <option v-for="d in delayOptions" :key="d" :value="d">{{ d === 0 ? '无延迟' : d + ' 分钟' }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">新帖子 posts <span class="text-slate-500 font-normal">（可选）</span></label>
+              <input type="number" v-model="form.posts" placeholder="留空 = 不限（跟随账号以后每一条新帖）" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">到期日期 expiry <span class="text-slate-500 font-normal">（可选，格式 日/月/年）</span></label>
+              <input type="text" v-model="form.expiry" placeholder="例如 31/12/2026；留空 = 不过期" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+            </div>
+          </div>
+
           <div class="flex flex-col md:flex-row space-y-5 md:space-y-0 md:space-x-8">
             <div class="flex-1">
               <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
-                {{ appStore.t('quantity') }} 
+                {{ appStore.t('quantity') }}
                 <span v-if="activeService" class="text-[10px] md:text-xs text-amber-500 ml-1 font-normal">({{ activeService.min }} ~ {{ activeService.max }})</span>
                 <span v-if="isCustomComments" class="text-[10px] ml-2 px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded font-normal">受评论行数锁定</span>
+                <span v-if="isSubscriptions" class="text-[10px] ml-2 px-1.5 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded font-normal">每帖数量（= 上游 min = max）</span>
+                <span v-if="isInvites" class="text-[10px] ml-2 px-1.5 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded font-normal">仅本站计费用，上游不收</span>
               </label>
               <input type="number" v-model="form.quantity" :readonly="isCustomComments" :class="['w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none transition text-lg md:text-xl font-mono', isCustomComments ? 'opacity-50 cursor-not-allowed border-slate-700' : 'focus:border-amber-400']">
             </div>
@@ -179,8 +229,27 @@ const servicesErrorText = computed(() => {
 });
 const sysAnnouncement = ref(''); const activePlatform = ref('TikTok');
 const activeCategory = ref(''); const activeServiceId = ref('');
-const form = ref({ link: '', quantity: 1000, comments: '' });
+const form = ref({
+  link: '', quantity: 1000, comments: '',
+  // 🔌 2026-10-24 特殊类型字段（Subscriptions / Package / Mentions / Invites / Poll）
+  username: '', hashtag: '', answerNumber: '', runs: '', interval: '',
+  posts: '', expiry: '', delay: 0
+});
 const isSubmitting = ref(false); const catOpen = ref(false); const srvOpen = ref(false);
+
+// 上游文档里 delay 只允许这几档
+const delayOptions = [0, 5, 10, 15, 20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240, 270, 300, 360, 420, 480, 540, 600];
+
+// 🔌 上游类型判定（DB 里是大写开头，如 Default / Custom Comments / Subscriptions）
+const sType = computed(() => String(activeService.value?.type || '').toLowerCase());
+const isSubscriptions = computed(() => sType.value.includes('subscriptions'));
+const isPackage = computed(() => sType.value.includes('package'));
+const isMentions = computed(() => sType.value.includes('mentions'));
+const isInvites = computed(() => sType.value.includes('invites'));
+const isPoll = computed(() => sType.value.includes('poll'));
+const needsUsername = computed(() => isSubscriptions.value || isInvites.value);
+// Subscriptions / Invites 上游不收 link
+const usesLink = computed(() => !isSubscriptions.value && !isInvites.value);
 
 const dynamicGuideLink = computed(() => platformGuideLinks[activePlatform.value] || atob('aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20vbGluaw=='));
 const rawTotalPrice = computed(() => {
@@ -191,6 +260,8 @@ const rawTotalPrice = computed(() => {
 // 排他性正则过滤引擎
 const isCustomComments = computed(() => {
     if (!activeService.value) return false;
+    // 🔌 特殊类型优先判定：否则名字里带"自定义"的订阅型会同时显示评论框
+    if (isSubscriptions.value || isInvites.value || isMentions.value || isPoll.value) return false;
     const sType = String(activeService.value.type || '').toLowerCase();
     const sName = String(activeService.value.name || '').toLowerCase();
 
@@ -303,7 +374,18 @@ const selectCategory = (cat) => {
 const selectService = (id) => { 
     activeServiceId.value = String(id); 
     srvOpen.value = false; 
-    
+
+    // 换服务就清空输入：否则上一单的链接/用户名会被带到这一单（历史上真踩过）
+    form.value.link = '';
+    form.value.username = '';
+    form.value.hashtag = '';
+    form.value.answerNumber = '';
+    form.value.runs = '';
+    form.value.interval = '';
+    form.value.posts = '';
+    form.value.expiry = '';
+    form.value.delay = 0;
+
     if (isCustomComments.value) {
         updateQuantityFromComments();
     } else {
@@ -313,8 +395,12 @@ const selectService = (id) => {
 };
 
 const submitOrder = async () => {
-  if(!form.value.link) return uiStore.showToast('请输入目标链接！', 'error');
   if(!activeServiceId.value) return uiStore.showToast('请选择服务！', 'error');
+  // 🔌 按类型校验必填项（Subscriptions/Invites 没有链接，校验用户名）
+  if (usesLink.value && !form.value.link) return uiStore.showToast('请输入目标链接！', 'error');
+  if (needsUsername.value && !String(form.value.username).trim()) return uiStore.showToast('请输入用户名（不要带 @ 或链接）！', 'error');
+  if (isMentions.value && !String(form.value.hashtag).trim()) return uiStore.showToast('请输入话题标签！', 'error');
+  if (isPoll.value && !String(form.value.answerNumber).trim()) return uiStore.showToast('请输入选项编号！', 'error');
   
   const currentQty = Number(form.value.quantity);
   const minQty = Number(activeService.value?.min || 1);
@@ -325,6 +411,9 @@ const submitOrder = async () => {
   }
 
   // 💡 强力前端防呆：提交前严格拦截数量边界，节省无效网络请求
+  if (!Number.isInteger(currentQty) || currentQty <= 0) {
+      return uiStore.showToast('数量必须是正整数', 'error');
+  }
   if (currentQty < minQty) {
       return uiStore.showToast(`拦截：当前数量 ${currentQty} 低于服务要求最低限制 ${minQty}`, 'error');
   }
@@ -337,14 +426,22 @@ const submitOrder = async () => {
   
   isSubmitting.value = true;
   try {
-      // 💡 冗余双轨载荷：同时发送 comments 和 custom_comments
+      // 🔌 按类型组装载荷：只发当前类型需要的字段（服务端还会再校验一次）
       const payload = { 
           serviceId: activeServiceId.value, 
           serviceName: activeService.value.name, 
-          link: form.value.link, 
+          link: usesLink.value ? form.value.link : undefined,
+          username: needsUsername.value ? String(form.value.username).trim() : undefined,
           quantity: currentQty,
           comments: isCustomComments.value ? form.value.comments : undefined,
-          custom_comments: isCustomComments.value ? form.value.comments : undefined
+          custom_comments: isCustomComments.value ? form.value.comments : undefined,
+          hashtag: isMentions.value ? String(form.value.hashtag).trim() : undefined,
+          answerNumber: isPoll.value ? form.value.answerNumber : undefined,
+          runs: isPackage.value && form.value.runs !== '' ? form.value.runs : undefined,
+          interval: isPackage.value && form.value.interval !== '' ? form.value.interval : undefined,
+          delay: isSubscriptions.value ? form.value.delay : undefined,
+          posts: isSubscriptions.value && form.value.posts !== '' ? form.value.posts : undefined,
+          expiry: isSubscriptions.value && form.value.expiry ? String(form.value.expiry).trim() : undefined
       };
       
       const res = await fetch('/api/orders/add', { 
@@ -359,6 +456,14 @@ const submitOrder = async () => {
           uiStore.showToast(data.message || '订单提交成功', 'success');
           form.value.link = '';
           form.value.comments = '';
+          form.value.username = '';
+          form.value.hashtag = '';
+          form.value.answerNumber = '';
+          form.value.posts = '';
+          form.value.expiry = '';
+          form.value.runs = '';
+          form.value.interval = '';
+          form.value.delay = 0;
           if (isCustomComments.value) updateQuantityFromComments();
           
           const uRes = await fetch('/api/user/status', {headers: { 'Authorization': `Bearer ${userStore.token}` }});

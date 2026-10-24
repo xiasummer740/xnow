@@ -6,17 +6,115 @@ import { sendTgMessage } from '../utils/tgBot.js';
 
 const router = express.Router();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔌 上游类型契约（2026-10-24 照上游公开 API 文档 /api 逐字抄录）
+//   Default             : key, action, service, link, quantity
+//   Package             : key, action, service, link, quantity, runs?, interval?
+//   Custom Comments     : key, action, service, link, comments
+//   Mentions Hashtag    : key, action, service, link, quantity, hashtag
+//   Invites from Groups : key, action, service, username          ← 没有 link、没有 quantity
+//   Subscriptions       : key, action, service, username, min, max, delay, posts?, old_posts?, expiry?(d/m/Y)
+//   Poll                : key, action, service, link, quantity, answer_number
+//
+// 📕 事故复盘：此前这里无条件只发 {link, quantity} —— 订阅型服务（全站 42 个）每次都被上游
+// 回 `Missing username`，用户看到"下单失败"；Package/Mentions/Invites/Poll 共 45 个同理。
+// 根因不是"参数写错"，是**从来没按类型组装过载荷**。改动见 buildUpstreamPayload()。
+// ─────────────────────────────────────────────────────────────────────────────
+const normType = (t) => String(t || '').toLowerCase().replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+
+// 这些类型的计费基准是"数量"；Invites 上游不收 quantity，但本站仍需一个数量来算钱
+const BILLED_BY_QUANTITY = new Set(['default', 'custom comments', 'package', 'mentions hashtag', 'poll', 'subscriptions']);
+
+const FIELD_LABELS = {
+  link: '目标链接', quantity: '数量', comments: '评论内容',
+  username: '用户名', delay: '延迟', hashtag: '话题标签', answerNumber: '选项编号'
+};
+
+const TYPE_REQUIRED = {
+  'default': ['link', 'quantity'],
+  'custom comments': ['link', 'comments'],
+  'package': ['link', 'quantity'],
+  'mentions hashtag': ['link', 'quantity', 'hashtag'],
+  'invites from groups': ['username', 'quantity'],
+  'subscriptions': ['username', 'quantity', 'delay'],
+  'poll': ['link', 'quantity', 'answerNumber']
+};
+
+// 返回中文错误文案；null = 通过
+const validateForType = (type, f) => {
+  const t = normType(type);
+  const req = TYPE_REQUIRED[t];
+  if (!req) return `该服务类型（${type || '未知'}）暂不支持下单，请联系客服`;
+  for (const k of req) {
+    const v = f[k];
+    if (v === undefined || v === null || String(v).trim() === '') return `请填写${FIELD_LABELS[k] || k}`;
+  }
+  if (BILLED_BY_QUANTITY.has(t)) {
+    const n = Number(f.quantity);
+    if (!Number.isInteger(n) || n <= 0) return '数量必须是正整数';
+  }
+  if (t === 'poll' && !/^\d+$/.test(String(f.answerNumber))) return '选项编号必须是数字';
+  return null;
+};
+
+// 按类型组装上游载荷。字段名必须与上游文档逐字一致，少一个就是 Missing xxx
+const buildUpstreamPayload = (service, b) => {
+  const t = normType(service.type);
+  const p = { key: b.key, action: 'add', service: b.serviceId };
+
+  if (t === 'subscriptions') {
+    p.username = b.username;
+    p.min = b.quantity;
+    p.max = b.quantity;
+    p.delay = (b.delay === undefined || b.delay === null || b.delay === '') ? 0 : b.delay;
+    const posts = Number(b.posts);
+    if (b.posts !== undefined && b.posts !== null && b.posts !== '' && posts > 0) p.posts = posts;
+    const oldPosts = Number(b.oldPosts);
+    if (b.oldPosts !== undefined && b.oldPosts !== null && b.oldPosts !== '' && oldPosts > 0) p.old_posts = oldPosts;
+    if (b.expiry) p.expiry = b.expiry;
+    return p;
+  }
+  if (t === 'invites from groups') { p.username = b.username; return p; }
+
+  p.link = b.link;
+  p.quantity = b.quantity;
+  if (t === 'custom comments') p.comments = b.comments;
+  else if (t === 'mentions hashtag') p.hashtag = b.hashtag;
+  else if (t === 'poll') p.answer_number = b.answerNumber;
+  else if (t === 'package') {
+    if (b.runs !== undefined && b.runs !== null && b.runs !== '') p.runs = b.runs;
+    if (b.interval !== undefined && b.interval !== null && b.interval !== '') p.interval = b.interval;
+  }
+  return p;
+};
+
+
 router.post('/add', authenticate, async (req, res) => {
-  // 💡 核心修复 1：解除参数封锁，放行 comments 和 custom_comments
-  const { serviceId, link, quantity, comments, custom_comments } = req.body;
-  if (!serviceId || !link || !quantity || quantity <= 0) return res.json({ status: 'error', message: '参数非法' });
+  // 💡 解除参数封锁：除 comments / custom_comments 外，再放行特殊类型所需字段
+  const {
+    serviceId, link, quantity, comments, custom_comments,
+    username, posts, delay, expiry, hashtag, runs, interval
+  } = req.body;
+  const oldPosts = req.body.old_posts !== undefined ? req.body.old_posts : req.body.oldPosts;
+  const answerNumber = req.body.answer_number !== undefined ? req.body.answer_number : req.body.answerNumber;
+  // ⚠️ 不能在这里就要求 link —— Subscriptions / Invites 类型上游根本不收 link
+  if (!serviceId) return res.json({ status: 'error', message: '参数非法' });
 
   const t = await sequelize.transaction();
   try {
     const service = await Service.findByPk(serviceId, { transaction: t });
     if (!service) { await t.rollback(); return res.json({ status: 'error', message: '商品不存在或已下架' }); }
 
-    if (quantity < service.min || quantity > service.max) {
+    // 🔌 先按上游类型校验必填字段，再校验数量边界
+    const orderType = normType(service.type);
+    const qty = (quantity === undefined || quantity === null || quantity === '') ? undefined : parseInt(quantity);
+    const fieldErr = validateForType(service.type, {
+      link, quantity: qty, comments: comments || custom_comments,
+      username, delay, hashtag, answerNumber
+    });
+    if (fieldErr) { await t.rollback(); return res.json({ status: 'error', message: fieldErr }); }
+
+    if (qty < service.min || qty > service.max) {
       await t.rollback(); return res.json({ status: 'error', message: `数量限制: ${service.min} - ${service.max}` });
     }
 
@@ -47,8 +145,8 @@ router.post('/add', authenticate, async (req, res) => {
       ? parseFloat(service.custom_rate)
       : parseFloat(service.rate);
     const sellRate = baseRate * finalMultiplier;
-    const charge = ((parseInt(quantity) / 1000) * sellRate).toFixed(4);
-    const upstream_charge = ((parseInt(quantity) / 1000) * parseFloat(service.rate)).toFixed(4);
+    const charge = ((qty / 1000) * sellRate).toFixed(4);
+    const upstream_charge = ((qty / 1000) * parseFloat(service.rate)).toFixed(4);
 
     // 🔒 价格护栏：倍率被写成负数/0/NaN 时 charge 非法，拒绝下单（防负扣款刷余额）
     if (!isFinite(parseFloat(charge)) || parseFloat(charge) <= 0) {
@@ -71,10 +169,12 @@ router.post('/add', authenticate, async (req, res) => {
       await t.rollback(); return res.json({ status: 'error', message: '服务配置异常，请联系管理员' });
     }
 
-    // 💡 核心修复 2：动态组装上游 API 载荷，绝不漏掉评论数据
-    const payloadObj = { key: keyConf.value, action: 'add', service: serviceId, link, quantity };
-    if (comments) payloadObj.comments = comments;
-    if (custom_comments) payloadObj.custom_comments = custom_comments;
+    // 🔌 按类型组装上游载荷（字段名逐字对齐上游文档；见文件顶部契约表）
+    const payloadObj = buildUpstreamPayload(service, {
+      key: keyConf.value, serviceId, link, quantity: qty,
+      comments: comments || custom_comments,
+      username, posts, oldPosts, delay, expiry, hashtag, runs, interval, answerNumber
+    });
     const payload = new URLSearchParams(payloadObj);
     
     let upRes;
@@ -90,7 +190,8 @@ router.post('/add', authenticate, async (req, res) => {
       const newOrder = await Order.create({
         order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
         upstream_order_id: String(upRes.data.order), service_id: serviceId,
-        service_name: service.name, link, quantity, charge, upstream_charge, status: '排队中'
+        // 🔌 订阅型/邀请型没有 link，用 username 落到 link 列：历史订单里才看得出"下给谁"
+        service_name: service.name, link: link || username, quantity: qty, charge, upstream_charge, status: '排队中'
       }, { transaction: t });
       
       if (user) {
@@ -106,7 +207,7 @@ router.post('/add', authenticate, async (req, res) => {
       const roleName = user ? (user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户') : '系统神权';
       const commentMark = comments ? `\n💬 <b>评论:</b> 包含 ${comments.split('\n').length} 行自定义内容` : '';
       
-      sendTgMessage(`🛒 <b>用户新订单提交</b>\n🆔 <b>UID:</b> <code>${user ? user.id : '0'}</code>\n📱 <b>账号:</b> <code>${user ? user.phone : '最高管理'}</code>\n📧 <b>邮箱:</b> ${user ? (user.email || '未绑定') : '系统'}\n🔰 <b>等级:</b> ${roleName}\n📦 <b>商品:</b> [ID:${serviceId}] ${service.name}\n🔢 <b>数量:</b> ${quantity}\n💸 <b>扣费:</b> ￥${charge}\n🔗 <b>目标:</b> <code>${link}</code>${commentMark}\n🔖 <b>系统单号:</b> <code>${newOrder.order_no}</code>\n📡 <b>上游单号:</b> <code>${upRes.data.order}</code>`);
+      sendTgMessage(`🛒 <b>用户新订单提交</b>\n🆔 <b>UID:</b> <code>${user ? user.id : '0'}</code>\n📱 <b>账号:</b> <code>${user ? user.phone : '最高管理'}</code>\n📧 <b>邮箱:</b> ${user ? (user.email || '未绑定') : '系统'}\n🔰 <b>等级:</b> ${roleName}\n📦 <b>商品:</b> [ID:${serviceId}] ${service.name}\n🔢 <b>数量:</b> ${quantity}\n💸 <b>扣费:</b> ￥${charge}\n🔗 <b>目标:</b> <code>${link || username}</code>${commentMark}\n🔖 <b>系统单号:</b> <code>${newOrder.order_no}</code>\n📡 <b>上游单号:</b> <code>${upRes.data.order}</code>`);
 
       res.json({ status: 'success', message: '✅ 订单已秒级提交至全网', order_id: newOrder.order_no });
     } else {
@@ -121,6 +222,20 @@ router.post('/add', authenticate, async (req, res) => {
         'max_quantity': '数量超过该服务最高限制',
         'duplicate': '请勿重复提交相同链接的订单',
         'comments': '自定义评论内容不符合规范，请修改后重试',
+        // 🔌 特殊类型（2026-10-24 补）：上游这些报错以前原样抛给用户，等于没提示
+        'missing username': '缺少用户名：该服务需要填社交平台用户名（不要带 @ 或链接）',
+        'invalid username': '用户名无效：请检查用户名是否正确',
+        'username': '用户名无效：请不要带 @、空格或链接',
+        'missing min': '缺少数量下限',
+        'missing max': '缺少数量上限',
+        'missing delay': '缺少延迟参数',
+        'missing posts': '缺少新帖子数量',
+        'missing hashtag': '缺少话题标签',
+        'missing answer': '缺少选项编号',
+        'hashtag': '话题标签无效，请检查格式',
+        'answer_number': '选项编号无效',
+        'expiry': '到期日期格式不对（应形如 31/12/2026）',
+        'exists': '该账号不存在或为私密账号，无法下单'
       };
       let friendlyMsg = rawErr;
       for (const [key, val] of Object.entries(errMap)) {
@@ -168,6 +283,15 @@ router.post('/batch', authenticate, async (req, res) => {
     try {
       const service = await Service.findByPk(serviceId, { transaction: t });
       if (!service) { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '商品不存在' }); continue; }
+
+      // 🔌 批量下单只支持 Default / Custom Comments —— 其余类型的必填字段（用户名/话题/选项…）
+      //    在"一行一条"的批量格式里根本没法表达，硬放过去就是又一批 Missing xxx
+      const bType = normType(service.type);
+      if (bType !== 'default' && bType !== 'custom comments') {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: `该服务类型（${service.type}）不支持批量下单，请到「开始下单」单个提交` });
+        continue;
+      }
 
       const qty = parseInt(quantity);
       if (qty < service.min || qty > service.max) {

@@ -1419,3 +1419,54 @@ POST /api/login {admin, admin123} → 200 + 真 JWT（id=1, role=super_admin）
 （页面静态资源不受影响，提交账号信息即被挡）。留给下次：手机 4G/5G 流量重试，或换
 BetterStack / healthchecks.io。**探针基线已记：`grep -c -i uptimerobot` = 0**，建成后应 > 0 且打在
 `/api/public/config`（若打在首页说明地址填错，等于没监控）。
+
+---
+
+## [2026-10-24] 特殊类型服务「下单失败」根治（影响 85 个服务）
+
+祥哥反馈：**同一个服务，他的站和上游表单不一样**（上游要"用户名/新帖子/数量/延迟/到期日期"，
+他的站只有一个"目标链接"），下单直接报 `Missing username`。
+
+**根因**：`routes/orders.js` 无条件只发 `{ key, action, service, link, quantity }` ——
+**从来没有按上游类型组装过载荷**。`Subscriptions` 类服务上游要 `username/min/max/delay`，
+所以每个订阅型服务（42 个）都是点了就报错；Package(35)/Mentions(5)/Invites(3)/Poll(2) 同理。
+
+**契约依据**：上游公开 API 文档 `/api` 的参数表（逐字抄录进 `orders.js` 顶部注释）：
+| 类型 | 参数 |
+|---|---|
+| Default | link, quantity |
+| Custom Comments | link, comments |
+| Package | link, quantity, runs?, interval? |
+| Mentions Hashtag | link, quantity, hashtag |
+| Invites from Groups | **仅 username**（无 link、无 quantity） |
+| Subscriptions | username, min, max, delay, posts?, old_posts?, expiry?(d/m/Y) |
+| Poll | link, quantity, answer_number |
+
+**改动**
+- `server/src/routes/orders.js`：新增 `normType()` / `TYPE_REQUIRED` / `validateForType()` /
+  `buildUpstreamPayload()`；`/add` 改为**先取服务、再按类型校验**（此前第一行就要求 `link`，
+  订阅型/邀请型根本没有 link，必然被拦）；订阅型落库时 `link` 列写 `username`；
+  错误映射补 12 条（`missing username` / `incorrect delay` / `missing hashtag` …）
+- `server/src/routes/orders.js` `/batch`：只放行 Default / Custom Comments，其余明确拒绝
+- `server/src/routes/services.js`：两个查询改用 `custom_rate ?? rate` —— 此前**扣费读 custom_rate、
+  页面只读 rate**，一旦设了自定义价就是"显示 0.33、实扣 0.99"，本次顺带消除
+- `client/src/views/Order.vue`：按 `type` 渲染 用户名 / 话题标签 / 选项编号 / runs+interval /
+  延迟+新帖子+到期日期；Subscriptions 与 Invites 隐藏链接框；换服务清空所有输入
+- `tools/subscriptions-markup.sql`（新增）：订阅型加价脚本（方案 C，默认 3 倍，已执行，42 个服务全设）
+
+**方案 C 说明**：订阅型在**上游会持续下单**（用户每发一条新帖→上游自动建单扣费），
+而本站是一次性扣费 → 用 `custom_rate` 把 42 个订阅型服务统一加价 3 倍（30190：0.3262→0.9786）。
+
+**验证（三层）**
+1. `curl` 不带 username → 上游回 `Missing username`（与祥哥截图一致，基线复核）
+2. 带 username + **非法 `delay=7`** → 上游回 `Incorrect delay` → 证明 `username/min/max` **已被接受**
+3. 带合法参数 + 假用户名 → 上游返回 `{"order":5792590}` → **契约 100% 正确**
+   ⚠️ 这一笔是真实建单（假用户名 `xnow_probe_zzz9f3a`），复查 `status:Active, posts:"0", orders:[]`
+   = **一笔投喂都没产生**，未实际扣费；`action=cancel` 两次均回 `Cancel unavailable. Try again later.`
+   → **遗留一笔空订阅订单待清理**（建议祥哥在上游后台手动取消）
+
+**部署**（2026-10-24 11:36）
+- 备份：`/root/xnow-deploy-backups/dist-20261024-113649.tgz`、`routes-20261024-113649.tgz`
+- 前端**叠加式**覆盖（不删旧文件）：129 → 140 个文件，旧 hash 保留 → 打开中的页面不 404
+- `index.html` 指纹 `9be6ea84…` → `5317601a…`；入口 `assets/index-hUZt6bG3.js`
+- 重启后：本地 200、经 nginx 首页 200、新 bundle 200、外网 `/` + `/api/public/config` + `/login` 均 200

@@ -12,12 +12,17 @@ router.get('/public', async (req, res) => {
     const multiplier = parseFloat(conf.global_multiplier || 2.0);
 
     const services = await Service.findAll({ order: [['sort', 'ASC']] });
-    const formatted = services.map(s => ({
-      service: s.service_id, name: s.name, type: s.type, category: s.category,
-      rate: parseFloat(s.rate), min: s.min, max: s.max,
-      sell_price: parseFloat((parseFloat(s.rate) * multiplier).toFixed(4)),
-      description: s.description
-    }));
+    const formatted = services.map(s => {
+      // 🔌 与下单扣费口径保持一致：custom_rate 优先（订单路由本来就是这么算的，
+      //    此前这里只读 rate，导致"页面显示 0.33、实际扣 0.99"这种不一致）
+      const baseRate = (s.custom_rate !== null && s.custom_rate !== undefined) ? parseFloat(s.custom_rate) : parseFloat(s.rate);
+      return {
+        service: s.service_id, name: s.name, type: s.type, category: s.category,
+        rate: baseRate, min: s.min, max: s.max,
+        sell_price: parseFloat((baseRate * multiplier).toFixed(4)),
+        description: s.description
+      };
+    });
     res.json({ status: 'success', data: formatted });
   } catch (err) {
     res.status(500).json({ status: 'error', message: '加载失败' });
@@ -48,18 +53,22 @@ router.get('/', authenticate, async (req, res) => {
 
     const services = await Service.findAll({ order: [['sort', 'ASC']] });
     
-    const formatted = services.map(s => ({
-      service: s.service_id,
-      name: s.name,
-      type: s.type,
-      category: s.category,
-      rate: (parseFloat(s.rate) * finalMultiplier).toFixed(4),
-      min: s.min,
-      max: s.max,
-      refill: s.refill,
-      cancel: s.cancel,
-      description: s.description
-    }));
+    const formatted = services.map(s => {
+      // 🔌 与 orders.js 的扣费口径一致：custom_rate 优先，再乘用户倍率
+      const baseRate = (s.custom_rate !== null && s.custom_rate !== undefined) ? parseFloat(s.custom_rate) : parseFloat(s.rate);
+      return {
+        service: s.service_id,
+        name: s.name,
+        type: s.type,
+        category: s.category,
+        rate: (baseRate * finalMultiplier).toFixed(4),
+        min: s.min,
+        max: s.max,
+        refill: s.refill,
+        cancel: s.cancel,
+        description: s.description
+      };
+    });
 
     res.json({ status: 'success', data: formatted });
   } catch (err) {
