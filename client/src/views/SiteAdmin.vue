@@ -270,6 +270,24 @@
               </div>
             </div>
 
+            <label class="block text-[10px] text-slate-500 mb-2">
+              「优势」三张卡片的内容（图标 + 标题 + 说明；留空用系统默认文案）
+            </label>
+            <div class="space-y-2 mb-4">
+              <div v-for="(a, i) in form.advantages" :key="'adv' + i" class="grid grid-cols-[46px_1fr] gap-2 items-start">
+                <input v-model="a.icon" maxlength="4" :placeholder="['⚡','💎','🔒'][i]"
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-center text-sm" />
+                <div class="space-y-1.5">
+                  <input v-model="a.title" maxlength="30" :placeholder="['秒级自动交付','超值价格','安全无需密码'][i]"
+                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
+                  <input v-model="a.body" maxlength="80"
+                    :placeholder="['系统全自动对接，下单即处理。','价格以下单页为准，透明可查。','只需目标链接，无需账号密码。'][i]"
+                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
+                </div>
+              </div>
+              <p class="text-[10px] text-slate-600">图标最多 2 个字符（emoji 即可），标题最多 30 字，说明最多 80 字。</p>
+            </div>
+
             <div class="mb-3">
               <label class="block text-[10px] text-slate-500 mb-1">
                 <span>站点图标（浏览器标签上的小图标）</span>
@@ -808,7 +826,9 @@ const form = ref({
   bufpay_id: '', bufpay_key: '', cryptomus_id: '', cryptomus_key: '',
   smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '',
   logo: '', hero_badge: '', hero_title: '', hero_subtitle: '', hero_desc: '',
-  hero_btn1_text: '', hero_btn1_url: '', hero_btn2_text: '', hero_btn2_url: '', hero_bg_url: ''
+  hero_btn1_text: '', hero_btn1_url: '', hero_btn2_text: '', hero_btn2_url: '', hero_bg_url: '',
+  // 🧱 五十一期：优势三卡片（站长可改图标/标题/正文）
+  advantages: [ { icon: '', title: '', body: '' }, { icon: '', title: '', body: '' }, { icon: '', title: '', body: '' } ]
 })
 
 const templates = [
@@ -973,7 +993,18 @@ const load = async () => {
         hero_subtitle: s.hero_subtitle || '', hero_desc: s.hero_desc || '',
         hero_btn1_text: s.hero_btn1_text || '', hero_btn1_url: s.hero_btn1_url || '',
         hero_btn2_text: s.hero_btn2_text || '', hero_btn2_url: s.hero_btn2_url || '',
-        hero_bg_url: s.hero_bg_url || ''
+        hero_bg_url: s.hero_bg_url || '',
+        // 🧱 五十一期：优势三卡片（库里为空 → 三个空行，前端会回落到平台默认文案）
+        advantages: (() => {
+          let saved = []
+          try { saved = s.advantages ? JSON.parse(s.advantages) : [] } catch (e) { saved = [] }
+          const out = []
+          for (let i = 0; i < 3; i++) {
+            const it = (Array.isArray(saved) && saved[i]) || {}
+            out.push({ icon: it.icon || '', title: it.title || '', body: it.body || '' })
+          }
+          return out
+        })()
       }
       const r2 = await fetch(`/api/sites/stats?site_id=${s.id}`, { headers: headers() })
       const d2 = await r2.json()
@@ -1038,7 +1069,11 @@ const save = async (silent = false) => {
       services_variant: form.value.services_variant || '',
       section_titles: JSON.stringify(form.value.section_titles || {}),
       custom_css: form.value.custom_css || '',
-      favicon_url: form.value.favicon_url || ''
+      favicon_url: form.value.favicon_url || '',
+      // 🧱 五十一期：优势三卡片（全空则后端存 null → 前端回落平台默认文案）
+      advantages: JSON.stringify((form.value.advantages || []).map(a => ({
+        icon: (a.icon || '').trim(), title: (a.title || '').trim(), body: (a.body || '').trim()
+      })))
     }
     const res = await fetch(`/api/sites/${site.value.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) })
     const data = await res.json()

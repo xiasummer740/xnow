@@ -34,6 +34,8 @@ router.get('/config', async (req, res) => {
       data.footer_text = req.site.footer_text || '';
       data.support_url = req.site.support_url || '';
       data.home_modules = req.site.home_modules || '';
+      // 🧱 五十一期：优势三卡片（站长可改图标/标题/正文；空则回落平台默认文案）
+      data.advantages = req.site.advantages || '';
       // 🎨 二十七期：风格细分维度（圆角/间距/卡片/字体/按钮/英雄布局）
       data.ui_radius = req.site.ui_radius || '';
       data.ui_density = req.site.ui_density || '';

@@ -34,6 +34,7 @@ const Site = sequelize.define('Site', {
   favicon_url: { type: DataTypes.STRING(512), allowNull: true },
   support_url: { type: DataTypes.STRING(255), allowNull: true },       // 客服链接（TG 等）
   home_modules: { type: DataTypes.TEXT, allowNull: true },             // 首页模块 JSON:[{key,enabled,order}]
+  advantages: { type: DataTypes.TEXT, allowNull: true },               // 优势三卡片 JSON:[{icon,title,body}]
   // ✍️ 首页文案自定义（十九期·祥哥："选好模板之后在哪设计自己的网站？"）
   //    模板决定"骨架长什么样"，这些字段决定"上面写什么话" —— 两者合起来才是"自己的站"。
   //    留空则用主站默认文案，所以主站行为完全不受影响。

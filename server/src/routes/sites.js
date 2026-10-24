@@ -491,6 +491,28 @@ router.put('/:id', authenticate, async (req, res) => {
       site.home_modules = JSON.stringify(clean.slice(0, 12));
     }
 
+    // 🧱 五十一期：优势三卡片内容（站长可改图标/标题/正文）
+    //    祥哥定调「站长要能全方位 DIY」→ 原来这三张卡只有标题能改，正文是平台写死的。
+    //    限制：固定 3 张、图标最多 2 个字符（emoji）、标题 30、正文 80，防止把版面撑爆。
+    if (req.body.advantages !== undefined) {
+      let adv = req.body.advantages;
+      if (typeof adv === 'string') {
+        try { adv = adv ? JSON.parse(adv) : []; } catch { return res.json({ status: 'error', message: '优势卡片格式错误' }); }
+      }
+      if (adv && !Array.isArray(adv)) return res.json({ status: 'error', message: '优势卡片必须是数组' });
+      const cleanAdv = (Array.isArray(adv) ? adv : [])
+        .slice(0, 3)
+        .map((it) => ({
+          // 图标只保留可见字符：尖括号/引号一律清掉，
+          // 否则填 <img 会被截成半截标签，在卡片上显示成 "<img" 很奇怪
+          icon: String((it && it.icon) || '').replace(/[<>"'`]/g, '').trim().slice(0, 4),
+          title: String((it && it.title) || '').trim().slice(0, 30),
+          body: String((it && it.body) || '').trim().slice(0, 80)
+        }))
+        .filter((it) => it.title || it.body);
+      site.advantages = cleanAdv.length ? JSON.stringify(cleanAdv) : null;
+    }
+
     // 📝 四十一期：每个首页区块的标题/副标题（站长逐块改文案）
     //    只接受已知区块键，长度截断，防止把超长 HTML 塞进标题把版面撑爆。
     if (req.body.section_titles !== undefined) {

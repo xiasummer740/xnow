@@ -11,6 +11,8 @@ export const useAppStore = defineStore('app', {
   state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', isSubsite: false, siteId: 0, tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0,
     // 🎨 分站主题（主站为空 → 外观与改造前一致）
     themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[],
+    // 🧱 五十一期：优势三卡片（站长可自定义图标/标题/正文；空 = 用平台默认文案）
+    advantages: [] as { icon?: string; title?: string; body?: string }[],
     // 🎨 二十七期：风格细分维度（空 = 用模板默认）
     uiRadius: '', uiDensity: '', cardStyle: '', fontStyle: '', btnShape: '', heroLayout: '',
     // 🎨 四十一期：全方位 DIY
@@ -34,6 +36,8 @@ export const useAppStore = defineStore('app', {
       this.supportUrl = d.support_url || '';
       this.announcement = d.announcement || '';
       if (d.home_modules) { try { const m = JSON.parse(d.home_modules); if (Array.isArray(m)) this.homeModules = m; } catch(e) {} }
+      // 🧱 五十一期：优势三卡片（分站自定义；空则前端回落平台默认文案）
+      if (d.advantages) { try { const a = JSON.parse(d.advantages); if (Array.isArray(a)) this.advantages = a; } catch(e) {} }
       // 🎨 二十七期：风格细分维度
       this.uiRadius = d.ui_radius || '';
       this.uiDensity = d.ui_density || '';

@@ -125,6 +125,15 @@
     <!-- Why us -->
     <section v-if="appStore.moduleEnabled('advantages')" :style="{ order: appStore.moduleOrder('advantages') }" class="site-section relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
       <div class="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- 🧱 分站自定义的三张卡（站长在后台改图标/标题/正文；没填就用下面的默认文案） -->
+        <template v-if="appStore.isSubsite && appStore.advantages.length">
+          <div v-for="(a, i) in appStore.advantages" :key="i" class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
+            <div class="w-14 h-14 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">{{ a.icon || advFallbackIcon(i) }}</div>
+            <h3 class="text-xl font-bold text-white mb-3">{{ a.title }}</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">{{ a.body }}</p>
+          </div>
+        </template>
+        <template v-else>
         <div class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">⚡</div>
           <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? '秒级自动交付' : 'Instant Auto-Delivery' }}</h3>
@@ -140,6 +149,7 @@
           <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? '安全无需密码' : 'No Password Needed' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '只要目标链接，不需要提供账号密码，100%保障你的隐私安全。' : 'Only need the target link. No account password required. 100% privacy.' }}</p>
         </div>
+        </template>
       </div>
     </section>
 
@@ -218,6 +228,10 @@ const vpnShopEnabled = ref(true);
 //   祥哥反馈「分站还是跟我的一模一样」—— 根因是以前 6 套模板只换 CSS 变量，
 //   DOM 结构完全相同。这里按模板给出**不同的首屏结构与服务列表结构**，
 //   让分站从骨架上就不是同一个站。
+// 🧱 优势卡没填图标时给个默认（与平台默认三张卡一致的符号顺序）
+const ADV_ICONS = ['⚡', '💎', '🔒']
+const advFallbackIcon = (i) => ADV_ICONS[i % ADV_ICONS.length]
+
 const TEMPLATE_LAYOUT = {
   classic:  { hero: 'center',    services: 'cards' },
   saas:     { hero: 'split',     services: 'cards' },

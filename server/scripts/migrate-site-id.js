@@ -105,6 +105,7 @@ const run = async () => {
     ['footer_text',   'VARCHAR(255) NULL'],
     ['support_url',   'VARCHAR(255) NULL'],
     ['home_modules',  'TEXT NULL'],
+  ['advantages',    'TEXT NULL'],
     ['smtp_host',     'VARCHAR(128) NULL'],
     ['smtp_port',     'INT NULL'],
     ['smtp_user',     'VARCHAR(128) NULL'],
