@@ -5,7 +5,7 @@ import { Site, User } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, isBindForbidden, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
 import { clearSiteCache } from '../middleware/site.js';
 
@@ -328,9 +328,33 @@ router.post('/', authenticate, async (req, res) => {
     });
     bustSiteCache();
 
+    // 🏬 二十九期：免费子域名也走「各自独立 vhost」，不用泛域名。
+    //    原因（2026-10-24 实测）：Cloudflare 免费通用证书只覆盖一级子域名，
+    //    *.xnow.taikon.top 这种两级域名会证书失败；而 *.taikon.top 又是通配，
+    //    会把同机其它项目的子域名一起抢过来。所以给每个分站单独写一个 server 块。
+    let publishNote = '';
+    if (isFreeSubdomain(cleanDomain)) {
+      try {
+        const cert = await ensureCert(cleanDomain);
+        const backendPort = parseInt(process.env.PORT) || 3000;
+        const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+        writeVhost({ siteId: site.id, domain: cleanDomain, backendPort, distRoot, cert });
+        reloadNginx();
+        site.domain_status = 'active';
+        site.cert_mode = cert.mode;
+        await site.save();
+        bustSiteCache();
+        publishNote = cert.mode === 'le' ? '（已签发正式证书）' : '（当前为自签证书，浏览器可能提示不安全）';
+      } catch (e) {
+        // 建站本身不能因为"域名没发出去"而失败 —— 站长可稍后点「修复域名」
+        publishNote = '（域名尚未生效，可稍后点「修复域名」重试）';
+        console.error(`[site] 免费子域名 vhost 生成失败 ${cleanDomain}: ${e.message}`);
+      }
+    }
+
     sendTgMessage(`🏗️ <b>新分站创建</b>\n🌐 <b>域名:</b> <code>${cleanDomain}</code>\n📛 <b>名称:</b> ${name}\n👤 <b>站长UID:</b> <code>${ownerId}</code>\n💹 <b>倍率:</b> ${multiplierValue}`);
 
-    res.json({ status: 'success', message: '分站创建成功', data: site });
+    res.json({ status: 'success', message: `分站创建成功${publishNote}`, data: site });
   } catch (e) {
     res.status(500).json({ status: 'error', message: `创建失败: ${e.message}` });
   }
@@ -594,6 +618,35 @@ router.delete('/:id/domain', authenticate, async (req, res) => {
 
 // 🧪 站长自查发信：只用他自己的 SMTP，不回退。
 //    站长在正式开卖前应该点一下这个按钮 —— 否则等客户注册收不到验证码才发现就晚了。
+// 🔧 「修复域名」：重新生成 vhost + 重载 nginx。
+//    典型场景：建站时 nginx 恰好不可用、或站长改过 DNS 后要重试。
+router.post('/:id/publish', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    const isStaff = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaff && site.owner_id !== req.user.id) return res.status(403).json({ status: 'error', message: '无权操作' });
+    if (!isFreeSubdomain(site.domain)) {
+      return res.json({ status: 'error', message: '自有域名请用「绑定域名」功能' });
+    }
+    const cert = await ensureCert(site.domain);
+    const backendPort = parseInt(process.env.PORT) || 3000;
+    const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+    writeVhost({ siteId: site.id, domain: site.domain, backendPort, distRoot, cert });
+    reloadNginx();
+    site.domain_status = 'active';
+    site.cert_mode = cert.mode;
+    await site.save();
+    bustSiteCache();
+    res.json({
+      status: 'success',
+      message: cert.mode === 'le' ? '域名已生效（正式证书）' : '域名已生效（自签证书，浏览器可能提示不安全）',
+      data: { domain: site.domain, cert_mode: cert.mode }
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '发布失败: ' + e.message });
+  }
+});
 router.post('/:id/smtp-test', authenticate, async (req, res) => {
   try {
     const site = await Site.findByPk(req.params.id);

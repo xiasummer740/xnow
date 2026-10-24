@@ -122,6 +122,53 @@ html[data-template] .rounded-3xl { border-radius: var(--site-radius) !important;
 html[data-template] .rounded-2xl { border-radius: calc(var(--site-radius) * 0.8) !important; }
 html[data-template] .rounded-xl  { border-radius: calc(var(--site-radius) * 0.6) !important; }
 
+/* ==========================================================================
+   模板自带的「结构性差异」
+   --------------------------------------------------------------------------
+   祥哥的原话是"你这站跟我的一模一样"。只换颜色救不了这个问题 ——
+   所以每个模板除了配色，还要有**不同的首屏结构和卡片密度**。
+   站长如果自己选了 hero_layout（data-hero 存在），以站长的选择为准。
+   ========================================================================== */
+
+/* SaaS：左文右图的商务首屏 + 紧凑四列 */
+html[data-template="saas"]:not([data-hero]) .hero-wrap {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+  text-align: left;
+  gap: 44px;
+  min-height: 62vh;
+}
+html[data-template="saas"]:not([data-hero]) .hero-wrap .hero-copy { align-items: flex-start; text-align: left; }
+html[data-template="saas"]:not([data-hero]) .hero-wrap .hero-actions { justify-content: flex-start; }
+html[data-template="saas"]:not([data-hero]) .hero-wrap .hero-visual { display: block; }
+html[data-template="saas"] .site-card { border-radius: 6px; }
+
+/* 极简：把装饰全去掉，靠留白和字号撑住 */
+html[data-template="minimal"]:not([data-hero]) .hero-wrap { min-height: 56vh; }
+html[data-template="minimal"] .site-card { background: transparent !important; box-shadow: none !important; }
+html[data-template="minimal"] .site-card:hover { transform: none; }
+
+/* 杂志：整屏大图 + 衬线大字，像一张封面 */
+html[data-template="magazine"]:not([data-hero]) .hero-wrap { min-height: 76vh; }
+html[data-template="magazine"] .site-card { border-radius: 2px; }
+html[data-template="magazine"] .site-card:hover { transform: translateY(-1px); }
+
+/* 霓虹：居中 + 强光晕，主打氛围 */
+html[data-template="neon"]:not([data-hero]) .hero-wrap { min-height: 68vh; }
+
+/* 玻璃：居中 + 重度模糊 */
+html[data-template="glass"]:not([data-hero]) .hero-wrap { min-height: 66vh; }
+
+@media (max-width: 900px) {
+  html[data-template="saas"]:not([data-hero]) .hero-wrap {
+    grid-template-columns: 1fr; text-align: center;
+  }
+  html[data-template="saas"]:not([data-hero]) .hero-wrap .hero-copy { align-items: center; text-align: center; }
+  html[data-template="saas"]:not([data-hero]) .hero-wrap .hero-actions { justify-content: center; }
+  html[data-template="saas"]:not([data-hero]) .hero-wrap .hero-visual { display: none; }
+}
+
 /* 页脚（分站自定义版权） */
 .site-footer { color: rgb(100 116 139); font-size: 11px; text-align: center; padding: 28px 16px 18px; letter-spacing: 0.04em; }
 .site-footer a { color: var(--brand); text-decoration: none; }
