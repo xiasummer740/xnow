@@ -200,10 +200,66 @@ xnow.taikon.top / beta.xnow.taikon.top / t1.xnow.taikon.top   全部 200（互�
 
 站长侧配套新增接口 `POST /api/sites/:id/publish`（「修复域名」自助重发 vhost）。
 
-## 十、仍需你本人决定/操作的三件事
+## 十一、上线当天操作手册（我执行，你只需点头）
+
+前置：`deploy/sites/deploy-sites.sh` 已预检通过；迁移已在生产真实表结构上演练通过；
+回滚脚本就绪。以下每一步都有"看到什么算通过"。
+
+### 上线前 5 分钟（只读）
+
+| # | 动作 | 通过标准 |
+|---|---|---|
+| 1 | 记录基线：`users / orders / services / sites / transactions` 行数 | 记下数字（预期 5 / 31 / 2839 / 0 / 39）|
+| 2 | `curl` 首页与 `/api/public/config` | 均 200，且 config 里**不含** `global_multiplier` |
+| 3 | 备份：代码目录打包 + DB 全量 dump | 两个文件都生成且大小合理 |
+| 4 | `bash deploy-sites.sh --env prod --check` | 退出码 0、输出"仅检查模式" |
+
+### 正式上线（约 3~5 分钟）
+
+| # | 动作 | 通过标准 | 失败怎么办 |
+|---|---|---|---|
+| 5 | `bash deploy-sites.sh --env prod` | 备份目录生成、迁移输出 36 项变更、代码替换完成、pm2 重启成功 | 脚本自身会 die，**不会**进入下一步；此时生产仍是旧版 |
+| 6 | `bash deploy-sites.sh --env prod --verify` | 首页 200 / 接口 200 / 数据行数不变 | 立刻走「回滚」 |
+| 7 | 手工抽查：主站首页外观与价格 | 与上线前**完全一致** | 立刻回滚 |
+| 8 | 抽查：主站注册/登录/下单各一次 | 三步都通 | 立刻回滚 |
+
+### 回滚（约 2 分钟）
+
+```bash
+bash deploy/deploy-sites.sh --env prod --rollback
+```
+
+- 代码：从 `$BACKUP_DIR/<stamp>/` 还原 `server/src` 与 `client/dist`
+- nginx：从 `$BACKUP_DIR/prod-<stamp>-nginx/` 还原（本次会新增 wildcard，回滚即还原旧文件）
+- 数据库：**不需要回滚**。本次迁移只加列、不改既有列、不动数据；
+  旧代码不认识新列，忽略即可。这是刻意选的"可安全回滚"的迁移方式。
+
+### 上线后 24 小时观察点
+
+| 观察项 | 为什么 |
+|---|---|
+| 主站订单量是否正常 | 上线第一优先是**别影响主站卖货** |
+| 有没有 `No Config` 报错 | 分站充值未配商户时的预期行为，但主站不该出现 |
+| 数据行数是否只增不减 | 排除误删 |
+| `pm2 logs xnow-backend --err` 是否出现 `site` 相关异常 | 多租户识别出错会在这里暴露 |
+
+## 十二、正式证书（可选，不影响上架）
+
+现在自有域名用自签证书：走 Cloudflare 代理时客户访问**正常**，
+只有绕过 CF 直连才会看到"不安全"。要绿锁需装 certbot：
+
+```bash
+sudo bash deploy/sites/install-certbot.sh --check   # 先看现状（只读）
+sudo bash deploy/sites/install-certbot.sh           # 安装 + 给所有域名签发
+```
+
+脚本幂等、逐个域名独立处理（单个失败不影响其它）、失败时现有自签证书继续可用。
+⚠️ 这是系统级 `apt install`，需祥哥批准后执行。
+
+## 十三、仍需你本人决定/操作的三件事
 
 | # | 事项 | 谁来做 | 影响 |
 |---|---|---|---|
 | 1 | 看一眼 Beta 并确认"能拿去卖" | 你 | 上线唯一真正前置条件 |
-| 2 | `apt install certbot python3-certbot-nginx` | 你批准我装 | 自有域名从"能用但警告"变成"浏览器绿锁" |
+| 2 | 批准装 certbot（`install-certbot.sh` 已就绪）| 你批准我装 | 自有域名从"能用但警告"变成"浏览器绿锁" |
 | 3 | 说一句"部署到生产" | 你 | 我来执行，已备好一键脚本与回滚 |
