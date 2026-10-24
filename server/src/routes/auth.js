@@ -162,7 +162,16 @@ router.post('/send-code', async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
     try {
-        const result = await sendEmailCode(email, code);
+        // 🏬 分站自有 SMTP：客户收到的验证码用站长自己的品牌发出，
+        //    且不带平台的"升级至尊代理"招商内容（否则等于当面告诉客户站长是中间商）
+        const siteCfg = req.site ? {
+          name: req.site.name,
+          smtp_host: req.site.smtp_host,
+          smtp_port: req.site.smtp_port,
+          smtp_user: req.site.smtp_user,
+          smtp_pass: req.site.smtp_pass
+        } : null;
+        const result = await sendEmailCode(email, code, siteCfg);
         if (result.success) {
             global.verificationCodes.set(email, { code, expires: Date.now() + 10 * 60 * 1000 });
             res.json({ status: 'success', message: '验证码已发送，请注意查收邮件(含垃圾箱)' });

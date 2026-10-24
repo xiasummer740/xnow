@@ -1,22 +1,29 @@
 import nodemailer from 'nodemailer';
 import { Config } from '../models/index.js';
 
-export const sendEmailCode = async (toEmail, code) => {
+// 🏬 支持分站自有 SMTP（三期）
+//   siteCfg = { name, smtp_host, smtp_port, smtp_user, smtp_pass } 或 null
+//   - 有分站 SMTP → 用分站的账号发，发件人/标题/页脚全部是分站品牌，
+//     并且**不带平台招商内容**（"升级至尊代理"那段是平台自己的广告，
+//     出现在分站客户的邮箱里等于当面告诉客户"你的站长是二道贩子"）
+//   - 没有 → 回退到主站 SMTP 与原模板（行为与改造前一致）
+export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
     try {
         const allConfigs = await Config.findAll();
         const cm = {};
-        
+
         allConfigs.forEach(c => {
             if (c.key) {
                 cm[String(c.key).toLowerCase().trim()] = c.value;
             }
         });
 
-        // 精准绑定数据库真实的 smtp_email 键名
-        const smtp_host = cm['smtp_host'] || 'smtp.qq.com';
-        const smtp_port = parseInt(cm['smtp_port']) || 465;
-        const smtp_user = cm['smtp_email'] || cm['smtp_user'] || cm['email_user'];
-        const smtp_pass = cm['smtp_pass'];
+        const useSite = !!(siteCfg && siteCfg.smtp_user && siteCfg.smtp_pass);
+        const smtp_host = useSite ? siteCfg.smtp_host : (cm['smtp_host'] || 'smtp.qq.com');
+        const smtp_port = parseInt(useSite ? siteCfg.smtp_port : cm['smtp_port']) || 465;
+        const smtp_user = useSite ? siteCfg.smtp_user : (cm['smtp_email'] || cm['smtp_user'] || cm['email_user']);
+        const smtp_pass = useSite ? siteCfg.smtp_pass : cm['smtp_pass'];
+        const brand = (useSite && siteCfg.name) ? String(siteCfg.name) : 'XNOW PRO';
 
         if (!smtp_host || !smtp_user || !smtp_pass) {
             throw new Error(`SMTP配置缺失: host=${!!smtp_host}, user=${!!smtp_user}, pass=${!!smtp_pass}`);
@@ -32,11 +39,36 @@ export const sendEmailCode = async (toEmail, code) => {
             }
         });
 
-        const mailOptions = {
-            from: `"XNOW PRO 验证中心" <${smtp_user}>`,
-            to: toEmail,
-            subject: '【XNOW PRO】安全身份验证',
-            html: `
+        const mailOptions = useSite
+          ? {
+              from: `"${brand} 验证中心" <${smtp_user}>`,
+              to: toEmail,
+              subject: `【${brand}】安全身份验证`,
+              html: `
+              <div style="background:#f1f5f9;padding:36px 0;font-family:'PingFang SC','Microsoft YaHei',sans-serif;">
+                <div style="max-width:560px;margin:0 auto;background:#0f172a;border-radius:14px;overflow:hidden;border:1px solid #1e293b;">
+                  <div style="text-align:center;padding:34px 20px 16px;">
+                    <h1 style="color:#f8fafc;margin:0;font-size:24px;font-weight:800;letter-spacing:1px;">${brand}</h1>
+                    <p style="color:#94a3b8;font-size:13px;margin-top:14px;">您正在注册或登录，本次验证码为：</p>
+                  </div>
+                  <div style="padding:0 32px;">
+                    <div style="background:#1e293b;border-radius:10px;padding:22px;text-align:center;border:1px solid #334155;">
+                      <span style="font-size:42px;font-weight:900;color:#fbbf24;letter-spacing:14px;font-family:'Courier New',monospace;">${code}</span>
+                    </div>
+                    <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:18px;">验证码 10 分钟内有效，请勿泄露给任何人。</p>
+                  </div>
+                  <div style="text-align:center;padding:22px;border-top:1px solid #1e293b;margin-top:26px;">
+                    <p style="color:#475569;font-size:11px;margin:0;">此邮件由系统自动发送，请勿直接回复。</p>
+                    <p style="color:#475569;font-size:11px;margin:6px 0 0 0;">© ${new Date().getFullYear()} ${brand}</p>
+                  </div>
+                </div>
+              </div>`
+            }
+          : {
+              from: `"${brand} 验证中心" <${smtp_user}>`,
+              to: toEmail,
+              subject: `【${brand}】安全身份验证`,
+              html: `
             <div style="background-color: #f8fafc; padding: 40px 0; font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #e2e8f0;">
                 <div style="max-width: 600px; margin: 0 auto; background-color: #0f172a; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #1e293b;">
                     
@@ -84,7 +116,7 @@ export const sendEmailCode = async (toEmail, code) => {
                 </div>
             </div>
             `
-        };
+            };
 
         await transporter.sendMail(mailOptions);
         return { success: true };

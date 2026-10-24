@@ -103,7 +103,13 @@ router.get('/', authenticate, async (req, res) => {
     } else {
       sites = await Site.findAll({ where: { owner_id: req.user.id }, order: [['created_at', 'DESC']] });
     }
-    res.json({ status: 'success', data: sites });
+    // 🔒 不把 SMTP 密码吐给前端：只回一个占位符，站长要改才填新的
+    const safe = (rows) => rows.map(r => {
+      const o = r.toJSON();
+      o.smtp_pass = o.smtp_pass ? '******' : null;
+      return o;
+    });
+    res.json({ status: 'success', data: safe(sites) });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '查询分站失败' });
   }
@@ -135,7 +141,7 @@ router.post('/', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) {
     // 代理也可以创建，但需要是 agent 角色
     if (req.user.role !== 'agent') {
-      return res.status(403).json({ status: 'error', message: '仅管理员和代理可创建分站' });
+      return res.status(403).json({ status: 'error', message: '仅至尊代理可创建分站，请先升级为至尊代理' });
     }
   }
 
@@ -191,7 +197,8 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const { name, logo, multiplier, agent_discount, announcement, status,
-            template, color, accent, footer_text, support_url, home_modules } = req.body;
+            template, color, accent, footer_text, support_url, home_modules,
+            smtp_host, smtp_port, smtp_user, smtp_pass } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
 
@@ -247,6 +254,18 @@ router.put('/:id', authenticate, async (req, res) => {
     // 必须和主站公告一样过白名单净化，否则站长可写入 onerror 窃取访客 Token。
     if (announcement !== undefined) site.announcement = sanitizeAnnouncement(announcement);
     if (status !== undefined && ['admin', 'super_admin'].includes(req.user.role)) site.status = status;
+
+    // 📧 分站自有 SMTP（客户收到的验证码用站长自己的品牌发出）
+    if (smtp_host !== undefined) site.smtp_host = String(smtp_host || '').trim() || null;
+    if (smtp_port !== undefined) {
+      const p = parseInt(smtp_port);
+      site.smtp_port = (Number.isFinite(p) && p > 0 && p < 65536) ? p : null;
+    }
+    if (smtp_user !== undefined) site.smtp_user = String(smtp_user || '').trim() || null;
+    if (smtp_pass !== undefined && smtp_pass !== '******') {
+      // 前端回传脱敏占位符时保留原值，避免「只改别的字段却把密码清空」
+      site.smtp_pass = String(smtp_pass || '') || null;
+    }
 
     await site.save();
     res.json({ status: 'success', message: '分站更新成功', data: site });

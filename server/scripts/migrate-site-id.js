@@ -87,6 +87,10 @@ const run = async () => {
     ['footer_text',   'VARCHAR(255) NULL'],
     ['support_url',   'VARCHAR(255) NULL'],
     ['home_modules',  'TEXT NULL'],
+    ['smtp_host',     'VARCHAR(128) NULL'],
+    ['smtp_port',     'INT NULL'],
+    ['smtp_user',     'VARCHAR(128) NULL'],
+    ['smtp_pass',     'VARCHAR(255) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {
