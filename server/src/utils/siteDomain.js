@@ -19,13 +19,30 @@ import { Site } from '../models/index.js';
 const NGINX_DIR = '/etc/nginx/sites-enabled';
 const SSL_DIR = '/etc/nginx/ssl';
 
-// 绝不允许分站绑定的域名（主站 + 上游）
-const FORBIDDEN = ['xnow.taikon.top', 'taikon.top', 'tk7188.com'];
+// 我们的主域名（免费子域名的母域）与上游域名
+const OUR_APEX = ['xnow.taikon.top', 'taikon.top'];
+const UPSTREAM = ['tk7188.com'];
 
-export const isDomainForbidden = (domain) => {
+// 免费子域名：xxx.xnow.taikon.top —— 这是**合法且鼓励**的建站域名
+export const isFreeSubdomain = (domain) => {
   const d = String(domain || '').toLowerCase();
-  if (!d) return true;
-  return FORBIDDEN.some(f => d === f || d.endsWith('.' + f));
+  return OUR_APEX.some(a => d.endsWith('.' + a));
+};
+
+// 主站/上游域名本体及其子域：任何情况下都不许被分站占用
+export const isForbiddenApex = (domain) => {
+  const d = String(domain || '').toLowerCase();
+  if (OUR_APEX.includes(d) || UPSTREAM.includes(d)) return true;
+  return UPSTREAM.some(u => d.endsWith('.' + u));
+};
+
+// 建站时用：允许免费子域名、允许自己的域名、禁止主站与上游
+export const isDomainForbidden = (domain) => isForbiddenApex(domain);
+
+// 绑定自有域名时用：主站/上游禁止；免费子域名也没必要绑（本来就有）
+export const isBindForbidden = (domain) => {
+  const d = String(domain || '').toLowerCase();
+  return isForbiddenApex(d) || isFreeSubdomain(d);
 };
 
 export const isValidDomain = (domain) => {
@@ -33,6 +50,8 @@ export const isValidDomain = (domain) => {
   // 只允许标准主机名：标签 1~63、总长 ≤253，且必须至少两级
   if (d.length > 253 || d.length < 4) return false;
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d)) return false;
+  // 纯 IPv4 不算域名（曾经漏判，导致 192.129.210.52 能建成站）
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(d)) return false;
   return d.includes('.');
 };
 

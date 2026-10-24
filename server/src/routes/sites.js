@@ -5,7 +5,7 @@ import { Site, User } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
 import { clearSiteCache } from '../middleware/site.js';
 
 // 站点数据一变就让 Host→站点 的缓存失效，避免「新绑域名 60 秒内仍显示主站」
@@ -254,7 +254,17 @@ router.post('/', authenticate, async (req, res) => {
     return res.json({ status: 'error', message: '域名和站点名称不能为空' });
   }
 
-  const cleanDomain = String(domain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const cleanDomain = String(domain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/\/.*$/, '');
+
+  // 🔒 建站时也必须过域名校验 —— 这条以前漏了（只有"绑定域名"那条走了校验）。
+  //    漏掉的后果极严重：代理开站时把域名填成 xnow.taikon.top，
+  //    主站域名就会被识别成他的分站身份 → 主站价格被改、用户被错误隔离。
+  if (!isValidDomain(cleanDomain)) {
+    return res.json({ status: 'error', message: '域名格式不正确（不要带 http:// 和路径）' });
+  }
+  if (isDomainForbidden(cleanDomain)) {
+    return res.json({ status: 'error', message: '该域名不可使用' });
+  }
 
   const multiplierValue = (multiplier === undefined || multiplier === null || multiplier === '') ? 2.0 : parseFloat(multiplier);
   const priceErr = pricingError(multiplierValue, null);
@@ -263,8 +273,10 @@ router.post('/', authenticate, async (req, res) => {
   }
 
   try {
+    // 子域名与自有域名两个字段都要查重，避免两个站抢同一个域名
     const exists = await Site.findOne({ where: { domain: cleanDomain } });
-    if (exists) {
+    const existsCustom = await Site.findOne({ where: { custom_domain: cleanDomain } });
+    if (exists || existsCustom) {
       return res.json({ status: 'error', message: '该域名已被占用' });
     }
 
@@ -402,7 +414,12 @@ router.post('/:id/domain', authenticate, async (req, res) => {
     const domain = String(req.body?.domain || '').trim().toLowerCase();
     if (!isValidDomain(domain)) return res.json({ status: 'error', message: '域名格式不正确' });
     // 🔒 黑名单：主站域名与上游域名绝不允许被分站接管
-    if (isDomainForbidden(domain)) return res.json({ status: 'error', message: '该域名不可绑定' });
+    if (isBindForbidden(domain)) {
+      return res.json({
+        status: 'error',
+        message: isDomainForbidden(domain) ? '该域名不可绑定' : '免费子域名无需绑定，请填写你自己的域名'
+      });
+    }
 
     // 已被别的分站占用（子域名与自有域名都要查，否则会出现两个站抢同一个域名）
     const other = await Site.findOne({ where: { domain } });
