@@ -28,7 +28,7 @@ case "$ENV" in
   prod) APP_DIR=/var/www/xnow;      DB_NAME_T=xnow_db;   PM2_APP=xnow-backend ;;
   *) echo "必须指定 --env beta 或 --env prod"; exit 1 ;;
 esac
-BACKUP_DIR=/root/backups
+BACKUP_DIR=${XNOW_BACKUP_DIR:-/var/backups/xnow}   # 别写 /root/：仓库是公开的
 # ⚠️ 口令与"回滚后自检"的目标都必须跟着 --env 走。
 #    原来写死生产路径/主站域名/3000 端口：--env beta 演练时会去读生产口令，
 #    回滚完还会用主站域名去探活 —— 演练看起来"通过"，其实探的根本不是这台环境。

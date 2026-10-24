@@ -44,7 +44,7 @@ case "$ENV" in
 esac
 
 SRC_DIR="${SRC_DIR:-/tmp/sites-deploy}"      # 代码已上传到这里
-BACKUP_DIR=/root/backups
+BACKUP_DIR=${XNOW_BACKUP_DIR:-/var/backups/xnow}   # 别写 /root/：仓库是公开的
 STAMP=$(date +%Y%m%d-%H%M%S)
 # ⚠️ 数据库口令必须跟着 --env 走：写死生产路径的话，--env beta 演练时
 #    读到的是生产的账号口令 —— 眼下两边同机同实例碰巧一样，换机或分库就会直接失败。
