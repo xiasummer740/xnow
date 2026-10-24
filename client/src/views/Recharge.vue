@@ -277,7 +277,25 @@ const cleanDescription = (t) => {
 
         <div class="bg-slate-800/80 border border-slate-700 rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
             <h3 class="text-xl font-bold text-white mb-6 flex items-center"><span class="text-blue-400 mr-2">🧾</span> 资金明细追踪表</h3>
-            <div class="overflow-x-auto custom-scrollbar">
+            <!-- 手机：卡片列表（表格在 390px 上会把金额挤到屏外） -->
+            <div class="md:hidden space-y-2">
+                <div v-for="t in txs" :key="'m' + t.id" class="rounded-2xl bg-slate-900/60 border border-slate-700/70 px-4 py-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <span v-if="t.type === '后台调账' && t.amount > 0" class="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-[10px] font-bold">{{ t.type }}</span>
+                        <span v-else-if="t.amount > 0" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] font-bold">{{ t.type || '入账' }}</span>
+                        <span v-else class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">{{ t.type || '资金扣除' }}</span>
+                        <span class="font-mono font-bold text-base" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ Number(t.amount) }}</span>
+                    </div>
+                    <div v-if="cleanDescription(t)" class="mt-1.5 text-xs text-slate-300 leading-relaxed break-all">{{ cleanDescription(t) }}</div>
+                    <div class="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+                        <span class="font-mono">{{ formatTime(t.createdAt || t.created_at) }}</span>
+                        <span v-if="t.balance !== null" class="font-mono text-amber-400/80">余额 {{ app.formatMoney(t.balance) }}</span>
+                    </div>
+                </div>
+                <div v-if="txs.length === 0" class="text-center py-10 text-slate-500 text-sm">暂无资金变动记录</div>
+            </div>
+
+            <div class="hidden md:block overflow-x-auto custom-scrollbar">
                 <table class="w-full text-left text-sm whitespace-nowrap">
                     <thead class="bg-slate-900/50 text-xs uppercase text-slate-400">
                         <tr><th class="px-6 py-4">时间</th><th class="px-6 py-4">类型</th><th class="px-6 py-4">变动金额</th><th class="px-6 py-4">当前余额</th><th class="px-6 py-4">摘要</th></tr>
@@ -291,7 +309,7 @@ const cleanDescription = (t) => {
                                 <span v-else-if="t.amount > 0" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] font-bold">{{ t.type && t.type.includes('充值') ? t.type : '资金入账' }}</span>
                                 <span v-else class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">{{ t.type || '资金扣除' }}</span>
                             </td>
-                            <td class="px-6 py-4 font-mono font-bold" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ t.amount }}</td>
+                            <td class="px-6 py-4 font-mono font-bold" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ Number(t.amount) }}</td>
                             <td class="px-6 py-4 font-mono text-amber-400 font-bold">{{ t.balance !== null ? app.formatMoney(t.balance) : '--' }}</td>
                             <td class="px-6 py-4 text-xs text-slate-300 max-w-[300px] truncate" :title="cleanDescription(t)">{{ cleanDescription(t) }}</td>
                         </tr>
