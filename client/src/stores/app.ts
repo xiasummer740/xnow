@@ -108,6 +108,9 @@ export const useAppStore = defineStore('app', {
       if (!this.themeTemplate) return;
       const el = document.documentElement;
       el.dataset.template = this.themeTemplate;
+    // 🧱 四十一期：把"首屏版式"也挂到 html 上，让**整页**的区块风格跟着变
+    //    （原来只有首屏结构变了，下面几块还是主站那套居中卡片 —— 一眼就露馅）
+    el.dataset.block = this.heroVariant || this.themeTemplate || 'classic';
       if (this.themeColor) el.dataset.color = this.themeColor;
       if (this.themeAccent && /^#[0-9a-fA-F]{6}$/.test(this.themeAccent)) {
         el.style.setProperty('--brand', this.themeAccent);

@@ -3,32 +3,32 @@
   <div v-if="isSubsite" class="relative z-20 max-w-5xl mx-auto px-6">
     <template v-for="m in ordered" :key="m.key">
       <!-- 公告条 -->
-      <div v-if="m.key === 'announce' && announcement" class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
+      <div v-if="m.key === 'announce' && announcement" class="site-card mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
         <p class="text-amber-200 text-sm leading-relaxed" v-html="announcement"></p>
       </div>
 
       <!-- 数据统计 -->
       <div v-else-if="m.key === 'stats'" class="mb-10 grid grid-cols-3 gap-3">
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
+        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
           <p class="text-xl font-black text-white">{{ number(stats.services) }}</p>
           <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '在售服务' : 'Services' }}</p>
         </div>
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
+        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
           <p class="text-xl font-black text-white">{{ number(stats.orders) }}</p>
           <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '累计订单' : 'Orders' }}</p>
         </div>
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
+        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
           <p class="text-xl font-black text-white">{{ number(stats.users) }}</p>
           <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '服务用户' : 'Users' }}</p>
         </div>
       </div>
 
       <!-- 热门服务 -->
-      <div v-else-if="m.key === 'hot_services' && hot.length" class="mb-12">
+      <div v-else-if="m.key === 'hot_services' && hot.length" class="site-section mb-12">
         <h2 class="text-center text-xl font-black text-white mb-6 tracking-wider">{{ zh ? '🔥 热门服务' : '🔥 Popular' }}</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <router-link v-for="s in hot" :key="s.id" to="/order"
-            class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-amber-500/40 transition block">
+            class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 hover:border-amber-500/40 transition block">
             <p class="text-white text-sm font-bold line-clamp-2">{{ s.name }}</p>
             <div class="flex items-baseline justify-between mt-3">
               <span class="text-amber-400 font-black">¥{{ s.pricePerK }}<span class="text-[10px] text-slate-500 font-normal">/千</span></span>
@@ -39,10 +39,10 @@
       </div>
 
       <!-- 教程 FAQ -->
-      <div v-else-if="m.key === 'faq'" class="mb-12">
+      <div v-else-if="m.key === 'faq'" class="site-section mb-12">
         <h2 class="text-center text-xl font-black text-white mb-6 tracking-wider">{{ zh ? '❓ 常见问题' : '❓ FAQ' }}</h2>
         <div class="space-y-2">
-          <details v-for="(f, i) in faqs" :key="i" class="bg-slate-800/40 border border-slate-700/50 rounded-xl px-4 py-3">
+          <details v-for="(f, i) in faqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-xl px-4 py-3">
             <summary class="text-white text-sm font-bold cursor-pointer">{{ f.q }}</summary>
             <p class="text-slate-400 text-xs leading-relaxed mt-2">{{ f.a }}</p>
           </details>
@@ -51,13 +51,13 @@
 
       <!-- VIP 入口 -->
       <router-link v-else-if="m.key === 'vip'" to="/vip"
-        class="mb-6 block rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 hover:border-emerald-400/60 transition">
+        class="site-card mb-6 block rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 hover:border-emerald-400/60 transition">
         <p class="text-emerald-300 font-black text-sm">{{ zh ? '💎 开通 VIP，享受专属折扣与优先队列' : '💎 Go VIP for discounts & priority' }}</p>
       </router-link>
 
       <!-- 返佣横幅 -->
       <router-link v-else-if="m.key === 'affiliate'" to="/affiliate"
-        class="mb-10 block rounded-2xl border border-sky-500/30 bg-sky-500/10 px-5 py-4 hover:border-sky-400/60 transition">
+        class="site-card mb-10 block rounded-2xl border border-sky-500/30 bg-sky-500/10 px-5 py-4 hover:border-sky-400/60 transition">
         <p class="text-sky-300 font-black text-sm">{{ zh ? '💰 推荐好友下单，赚取持续返佣' : '💰 Refer friends and earn ongoing commission' }}</p>
       </router-link>
     </template>
