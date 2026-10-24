@@ -939,3 +939,90 @@ server 层 `return` 在 rewrite 阶段就执行，location 里的例外轮不到
 | 分站侧边栏 | 「我的分站」「推广赚钱」「管理」组 | 上一轮已按 isSubsite 隐藏 ✅ |
 
 > 残留（无害但记录在案）：主站 SPA 的 JS bundle 里仍含 `XNOW`、`xnow.taikon.top` 等字符串（如 localStorage 键名 `xnow_token`、默认客服 `t.me/Xnow001Bot`）。这些**不会被渲染**，但懂技术的人翻 devtools 能看到。要彻底消除需要给分站打独立 bundle，属于后续可选项。
+
+---
+
+## 二十一、上线操作手册（81 期实测演练通过）
+
+### 1. 为什么不能"直接跑部署脚本"
+
+生产在 `main` 分支，`deploy/` 目录是 `feat/sites` 才有的 ——
+所以「ssh 上去跑 `deploy-prod.sh`」这个计划本身**跑不起来**（文件不存在）。
+新增 `deploy/sites/go-live.sh` 解决自举：先从分支把部署脚本取出来，再交给它执行。
+
+### 2. 两条命令
+
+```bash
+# ① 演练（只读：不改应用目录一个字节，只新增一份备份）
+ssh xnow-vps 'cd /var/www/xnow && git fetch origin feat/sites -q && \
+  git show origin/feat/sites:deploy/sites/go-live.sh > /tmp/go-live.sh && \
+  bash /tmp/go-live.sh --dry-run'
+
+# ② 正式上线（祥哥说「可以上」之后）
+ssh xnow-vps 'bash /tmp/go-live.sh'
+```
+
+### 3. 演练实测输出（2026-10-25，生产真实环境）
+
+```
+──── 0. 前置检查 ────
+  当前分支: main
+  当前提交: 3d57a90f fix(backup): 修异步回调里的抛错会让 Promise 永不 settle
+  生产分站数: 0
+  生产用户/订单: 6 / 31
+  pm2 状态: xnow-backend=online  xnow-beta=online
+
+──── 1. 备份（数据库 + 前端 + nginx + 代码快照）────
+  ✅ 数据库 → /var/backups/xnow/<时间戳>/xnow_db.sql
+  ✅ 回滚脚本可用 → /var/backups/xnow/prod-<时间戳>.sql.gz（锚点 3d57a90f）
+  ✅ 前端 dist / nginx 配置 / server/.env 全部备份
+
+──── 2. 拉代码（feat/sites）────
+  ⚠️ 生产有 6 个已跟踪文件被手工改过（备份后还原）：dist/index.html + 5 个路由
+     [dry-run] 不执行 git checkout
+     [dry-run] 会删除未跟踪文件 client/public/usdt-guide.jpg（与分支同内容，无损）
+```
+
+### 4. 两个会让上线当场卡死的地雷（已排查并处理）
+
+| 地雷 | 现象 | 处理 |
+|---|---|---|
+| 5 个路由 + `dist/index.html` 被手工改过、从未提交 | `git checkout` 直接拒绝：Your local changes would be overwritten | 先原样备份到 `$BAK/preflight/tracked/`，再 `git checkout -- .` |
+| 未跟踪的 `client/public/usdt-guide.jpg` 与分支同名 | `git pull` 报：untracked working tree files would be overwritten | 先备份，再删除；**两侧 sha1 完全一致（`a5ffe2bc…`、57186 字节），删除无损** |
+
+**那 6 个手工改过的文件里到底有什么？会不会覆盖掉线上正在生效的修复？**
+逐项核对过，`feat/sites` 全都包含：
+
+| 修复 | 生产 | feat/sites |
+|---|---|---|
+| `buildUpstreamPayload`（按上游类型组装下单载荷） | 有 | ✅ 3 处 |
+| `validateForType`（按类型校验必填字段） | 有 | ✅ 2 处 |
+| `reportUser`（TG 播报用真实下单用户，修块级作用域） | 有 | ✅ 5 处 |
+| `failAge`（超时补单：USDT 65 分钟 / BufPay 30 分钟） | 有 | ✅ 2 处 |
+| `markCompleted`（补单完成标记） | 有 | ✅ 9 处 |
+| Cryptomus 主动查证（防伪造回调） | 有 | ✅ |
+| BufPay 主动查单 | 有 | ✅ 2 处 |
+
+唯一**有意**的差异：生产的 `public.js` 会把 `global_multiplier`（平台全局倍率）发给前端，
+`feat/sites` 里删掉了 —— 这正是"不让站长看到平台成本基数"的设计，是修复不是回退。
+
+### 5. 回滚
+
+```bash
+# 代码
+cd /var/www/xnow && git checkout 3d57a90f && pm2 restart xnow-backend
+# 数据库（如需）
+gunzip -c /var/backups/xnow/prod-<时间戳>.sql.gz | MYSQL_PWD=... mysql -u root xnow_db
+# 前端
+tar xzf /var/backups/xnow/<时间戳>/client-dist.tgz -C /var/www/xnow
+# nginx
+tar xzf /var/backups/xnow/<时间戳>/nginx-sites.tgz -C /etc/nginx && nginx -t && systemctl reload nginx
+```
+
+### 6. 上线前的最后状态（2026-10-25 03:00）
+
+| | |
+|---|---|
+| 生产 | `main@3d57a90f`，用户 6 / 订单 31 / 分站 0，主页 200 —— **整个开发期一行没动** |
+| Beta | 演示站 `demostore.taikon.top`，全部功能实测通过 |
+| 分支 | `feat/sites` 领先生产 130+ 提交，生产 HEAD 是其祖先（可快进，无生产独有提交） |

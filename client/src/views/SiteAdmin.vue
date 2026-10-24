@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-black">我的分站</h1>
         <p class="text-xs text-slate-500 mt-1">改名字、换模板、填收款、绑域名、看收益 —— 都在这里</p>
       </div>
-      <button @click="load()" class="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">刷新</button>
+      <button @click="load()" class="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">刷新</button>
     </div>
 
     <!-- 📣 推荐同行开店：站长把朋友介绍来开至尊代理/充值，他拿 10% 返佣。
@@ -152,7 +152,7 @@
                   :style="{ background: c.hex }" :title="c.label"></button>
               </div>
               <div class="mt-2 flex items-center gap-2">
-                <input v-model="form.accent" placeholder="#RRGGBB 自定义" class="w-32 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs" />
+                <input v-model="form.accent" placeholder="#RRGGBB 自定义" class="w-32 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs" />
                 <span class="text-[10px] text-slate-500">填了就覆盖上面的色系</span>
               </div>
             </div>
@@ -160,7 +160,7 @@
               <label class="block text-xs text-slate-400 mb-2">首页模块（开关 + 排序）</label>
               <div class="space-y-1.5">
                 <div v-for="(m, i) in form.modules" :key="m.key" class="flex items-center gap-2 bg-slate-950/60 rounded-lg px-3 py-2">
-                  <input type="checkbox" v-model="m.enabled" class="accent-amber-400" />
+                  <input type="checkbox" v-model="m.enabled" class="w-[18px] h-[18px] shrink-0 accent-amber-400" />
                   <span class="text-xs flex-1">{{ moduleLabel(m.key) }}</span>
                   <button @click="moveModule(i, -1)" :disabled="i === 0" title="上移" class="w-9 h-9 md:w-7 md:h-7 grid place-items-center rounded-lg bg-slate-800/70 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800/70">↑</button>
                   <button @click="moveModule(i, 1)" :disabled="i === form.modules.length - 1" title="下移" class="w-9 h-9 md:w-7 md:h-7 grid place-items-center rounded-lg bg-slate-800/70 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800/70">↓</button>
@@ -172,12 +172,12 @@
             <div class="pt-3 border-t border-slate-700/50">
               <div class="flex items-center justify-between mb-2">
                 <label class="block text-xs text-slate-400">细节风格（可自由叠加在模板之上）</label>
-                <button @click="resetStyles()" class="text-[10px] text-slate-500 hover:text-amber-400">跟随模板</button>
+                <button @click="resetStyles()" class="px-2 py-1.5 -my-1 rounded-lg text-[10px] text-slate-500 hover:text-amber-400 hover:bg-slate-800/60">跟随模板</button>
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-[10px] text-slate-500 mb-1">圆角</label>
-                  <select v-model="form.ui_radius" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                  <select v-model="form.ui_radius" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs">
                     <option value="">跟随模板</option>
                     <option value="square">直角（硬朗）</option>
                     <option value="soft">小圆角（干净）</option>
@@ -187,7 +187,7 @@
                 </div>
                 <div>
                   <label class="block text-[10px] text-slate-500 mb-1">页面节奏</label>
-                  <select v-model="form.ui_density" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                  <select v-model="form.ui_density" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs">
                     <option value="">跟随模板</option>
                     <option value="compact">紧凑（信息多）</option>
                     <option value="normal">标准</option>

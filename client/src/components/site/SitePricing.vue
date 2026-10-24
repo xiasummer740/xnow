@@ -209,7 +209,7 @@ onMounted(load);
       <div v-if="loading" class="text-xs text-slate-500 py-6 text-center">读取中…</div>
       <div v-else-if="!items.length" class="text-xs text-slate-500 py-6 text-center">没搜到服务，换个关键词试试</div>
 
-      <div v-else class="space-y-2 max-h-[26rem] overflow-y-auto custom-scrollbar pr-1">
+      <div v-else class="space-y-2 max-h-[26rem] overflow-y-auto custom-scrollbar pr-1 pb-14">
         <div v-for="it in items" :key="it.service_id"
              class="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
           <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -222,16 +222,18 @@ onMounted(load);
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <input v-model="draft[it.service_id]" type="number" step="0.0001" min="0"
+              <input v-model="draft[it.service_id]" type="number" step="0.0001" min="0" inputmode="decimal"
                      :placeholder="(it.list_price * 1).toFixed(4)"
-                     class="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-right" />
+                     class="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-xs text-right" />
               <button v-if="it.override !== null && it.override !== undefined" @click="resetRow(it)"
-                      class="text-[10px] text-slate-500 hover:text-amber-400 whitespace-nowrap">恢复默认</button>
+                      class="px-2 py-2 text-[10px] text-slate-500 hover:text-amber-400 whitespace-nowrap">恢复默认</button>
             </div>
           </div>
-          <div v-if="marginOf(it)" class="text-[10px] mt-1" :class="marginOf(it).lose ? 'text-red-400' : 'text-emerald-400/80'">
-            客户实付 ¥{{ marginOf(it).sell }} / 千 · 你赚 ¥{{ marginOf(it).profit }} / 千（毛利 {{ marginOf(it).pct }}%）
-            <span v-if="marginOf(it).lose">· 低于进货价，保存会被拒</span>
+          <div v-if="marginOf(it)" class="mt-1 pr-12 sm:pr-0 text-[10px] leading-relaxed"
+               :class="marginOf(it).lose ? 'text-red-400' : 'text-emerald-400/80'">
+            <span class="block sm:inline">客户实付 ¥{{ marginOf(it).sell }} / 千</span>
+            <span class="block sm:inline sm:ml-1">· 你赚 ¥{{ marginOf(it).profit }} / 千（毛利 {{ marginOf(it).pct }}%）</span>
+            <span v-if="marginOf(it).lose" class="block mt-0.5">· 低于进货价，保存会被拒</span>
           </div>
         </div>
       </div>
