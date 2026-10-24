@@ -115,6 +115,20 @@ export const useAppStore = defineStore('app', {
     //    站长把链接发给客户，标签栏写着「XNOW PRO」等于当场告诉客户他在哪进货。
     if (typeof document !== 'undefined' && this.isSubsite && this.siteName) {
       document.title = this.siteName;
+      // 描述 / og 也一并换掉：静态入口是中性文案，JS 跑起来后换成站长自己的。
+      // 分享预览（微信/Telegram）走静态中性版，不会出现平台品牌。
+      try {
+        const desc = `${this.siteName} —— TikTok / Instagram / YouTube / Telegram 等平台的粉丝、播放与成员增长服务，自动交付，注册即用。`;
+        const setMeta = (sel, attr, val) => {
+          let el = document.querySelector(sel);
+          if (!el) { el = document.createElement('meta'); if (sel.includes('property')) el.setAttribute('property', sel.match(/"([^"]+)"/)?.[1] || ''); else el.setAttribute('name', sel.match(/"([^"]+)"/)?.[1] || ''); document.head.appendChild(el); }
+          el.setAttribute(attr, val);
+        };
+        setMeta('meta[name="description"]', 'content', desc);
+        setMeta('meta[property="og:title"]', 'content', this.siteName);
+        setMeta('meta[property="og:description"]', 'content', desc);
+        setMeta('meta[property="og:site_name"]', 'content', this.siteName);
+      } catch (e) {}
     }
       // 只在分站生效：主站不设置 data-template，保持原样
       if (!this.themeTemplate) return;

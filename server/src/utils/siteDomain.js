@@ -148,7 +148,10 @@ server {
     ssl_protocols       TLSv1.2 TLSv1.3;
 
     root ${distRoot};
-    index index.html;
+    # ⚠️ 分站的默认首页必须是 site.html（构建时生成的中性入口）。
+    #    用 index.html 的话，首页源码里带着平台的 title / description / og 图，
+    #    分享出去的预览卡片和爬虫看到的第一屏全是 XNOW。
+    index site.html;
 
     location /api/ {
         proxy_pass http://127.0.0.1:${backendPort};
@@ -171,8 +174,19 @@ server {
         try_files $uri =404;
     }
 
+    # 🚫 平台的营销页 / SEO 文件在分站上一律 404。
+    #    三十八期实测：分站的回退规则里带上 $uri.html 后，访问 /vpn 会直接
+    #    命中 dist/vpn.html —— 站长的顾客在涨粉店里看到「XNOW 全球安全节点」，
+    #    /finance 看到「XNOW 财务大盘预览」，/en 看到 XNOW PRO 英文站。
+    #    这些文件属于平台自己的业务线，绝不能在分站露出。
+    location ~* ^/(en|finance|vpn|404|google[0-9a-f]+)(\.html)?$ {
+        return 404;
+    }
+
     location / {
-        try_files $uri $uri.html $uri/ /index.html;
+        # ⚠️ 不能用 /index.html：那份带平台 SEO 元信息（title/description/og 全是 XNOW）。
+        #    /site.html 是构建时生成的中性入口（同一份 JS，只是元信息中性）。
+        try_files $uri $uri/ /site.html;
     }
 }
 `;
