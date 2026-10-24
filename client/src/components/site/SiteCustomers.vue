@@ -154,6 +154,38 @@ const sheetPreview = computed(() => {
   return { text: '原价', from: '不打折' };
 });
 
+// 💳 102 期：手动加余额（客户线下转账给站长时用 —— 方案② 商户没配好也能开张）
+const balAmount = ref('');
+const balNote = ref('');
+const balBusy = ref(false);
+const QUICK_AMOUNTS = [10, 50, 100, 200];
+
+async function adjustBalance(sign) {
+  if (!sheetC.value || balBusy.value) return;
+  const amt = Math.round(Number(balAmount.value) * 100) / 100;
+  if (!isFinite(amt) || amt <= 0) { flash('先填金额', false); return; }
+  balBusy.value = true;
+  try {
+    const url = `/api/sites/${props.siteId}/customers/${sheetC.value.id}/balance` + (sign < 0 ? '/deduct' : '');
+    const r = await fetch(url, {
+      method: 'POST', headers: auth(),
+      body: JSON.stringify({ amount: amt, note: balNote.value }),
+    });
+    const d = await r.json();
+    if (d.status !== 'success') { flash(d.message || '操作失败', false); return; }
+    flash(d.message || '已处理');
+    balAmount.value = ''; balNote.value = '';
+    await load(); emit('saved');
+    // 面板里的余额跟着刷新
+    const fresh = customers.value.find((x) => Number(x.id) === Number(sheetC.value.id));
+    if (fresh) sheetC.value = fresh;
+  } catch (e) {
+    flash('操作失败：' + e.message, false);
+  } finally {
+    balBusy.value = false;
+  }
+}
+
 async function saveCustomerSheet() {
   if (!sheetC.value || saving.value) return;
   const c = sheetC.value;
@@ -379,6 +411,38 @@ onMounted(load);
         <div class="rounded-xl bg-slate-950/70 border border-slate-800 p-3 text-[11px] text-emerald-400/85">
           这位客户看到的价：<b>{{ sheetPreview.text }}</b>
           <span class="text-slate-500">（{{ sheetPreview.from }}）</span>
+        </div>
+
+        <!-- 💳 手动加余额：客户线下转账给站长后，把这笔钱记到客户账上 -->
+        <div class="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-slate-300">💳 手动加余额</span>
+            <span class="text-[11px] text-amber-400">当前 ¥{{ Number(sheetC.balance).toFixed(2) }}</span>
+          </div>
+          <p class="text-[10px] text-slate-500 leading-relaxed mb-2">
+            客户线下转账给你（微信/支付宝直接转），就在这里把钱记到他账上，他马上就能下单。会写进流水，随时可查。
+          </p>
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            <button v-for="q in QUICK_AMOUNTS" :key="'q' + q" type="button" @click="balAmount = String(q)"
+                    class="px-3 py-1.5 rounded-lg text-[11px] border"
+                    :class="Number(balAmount) === q ? 'bg-amber-500 text-slate-900 border-amber-400 font-bold' : 'bg-slate-900 text-slate-300 border-slate-700'">
+              ¥{{ q }}
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <input v-model="balAmount" type="text" inputmode="decimal" placeholder="金额"
+                   class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-lg font-bold text-right" />
+            <button type="button" @click="adjustBalance(1)" :disabled="balBusy"
+                    class="flex-1 py-2.5 rounded-lg bg-emerald-500 text-slate-900 text-sm font-bold disabled:opacity-50">
+              {{ balBusy ? '处理中…' : '加余额' }}
+            </button>
+          </div>
+          <div class="flex items-center gap-2 mt-2">
+            <input v-model="balNote" placeholder="备注（可留空，例：微信转账）"
+                   class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-[11px]" />
+            <button type="button" @click="adjustBalance(-1)" :disabled="balBusy"
+                    class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 text-[11px] disabled:opacity-50">扣回</button>
+          </div>
         </div>
 
         <div class="flex gap-2 mt-4">

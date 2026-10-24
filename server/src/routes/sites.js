@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
-import { sequelize, Site, User, Config, Service, SiteServicePrice, SiteCustomerGroup, Order } from '../models/index.js';
+import { sequelize, Site, User, Config, Service, SiteServicePrice, SiteCustomerGroup, Order, Transaction } from '../models/index.js';
 import { getBillingConfig, chargeBalance, genSubdomain, renewSite } from '../utils/siteBilling.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -380,7 +380,9 @@ router.post('/', authenticate, async (req, res) => {
   // 🔀 100 期：免费子域名还要查「本机 nginx 里有没有别人占着这个域名」。
   //    Beta 与生产同机、共用 *.taikon.top 泛解析但库是分开的 —— 只查自己的 sites 表挡不住冲突，
   //    两份 vhost 抢一个 server_name 时 nginx 只认先加载的，客户可能被送进另一个环境的库。
-  if (isFreeSubdomain(cleanDomain)) {
+  {
+    // 免费子域名和自有域名都要查：本机 nginx 里若有同名 vhost（另一环境 / 已过期被 park 的站），
+    // 再建一个就是两份配置抢同一个 server_name。
     const taken = domainVhostOwner(cleanDomain);
     if (taken) {
       return res.json({ status: 'error', message: '这个域名已经被占用了，请换一个' });
@@ -1083,6 +1085,13 @@ router.post('/:id/domain', authenticate, async (req, res) => {
     if ((other && other.id !== site.id) || (otherCustom && otherCustom.id !== site.id)) {
       return res.json({ status: 'error', message: '该域名已被其他分站使用' });
     }
+    // 🔀 101 期：自有域名同样要查 nginx 目录。
+    //    Beta 与生产同机共用 sites-enabled，但库是分开的 —— 只看自己的库挡不住
+    //    「同一个 shop.xxx.com 在两个环境各绑一次」，两份 vhost 抢一个 server_name，
+    //    nginx 只认先加载的那份，客户可能被送进另一个环境的库。
+    if (domainVhostOwner(domain, site.id)) {
+      return res.json({ status: 'error', message: '这个域名已经被占用了，请换一个' });
+    }
 
     // 防刷：60 秒内不允许重复尝试（每次都会打 DNS / 可能触发 certbot 申请）
     if (site.domain_status !== 'active' && site.updatedAt && Date.now() - new Date(site.updatedAt).getTime() < 60000) {
@@ -1509,6 +1518,102 @@ router.get('/:id/customers', authenticate, async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '读取客户失败：' + (e.message || e) });
+  }
+});
+
+// 💰 102 期：站长给自己的客户手动加/扣余额（「手动加余额兜底」）
+//    场景：客户线下转账（微信/支付宝直接转给站长），但站长还没配自己的支付商户、
+//    或者网关临时不通 —— 这时候站长必须能手动把这笔钱记到客户账上，否则客户下不了单。
+//    约束：
+//      · 只能操作**自己分站**的客户（User.site_id 必须等于本站）
+//      · 单笔金额有上限，不能填负数（扣款要显式扣）
+//      · 必须落一条流水（type=站长手动充值，site_id=本分站），站长和客户都能查到
+router.post('/:id/customers/:uid/balance', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const u = await User.findOne({ where: { id: req.params.uid, site_id: site.id } });
+    if (!u) return res.status(404).json({ status: 'error', message: '这个客户不属于本分站' });
+
+    const amount = Math.round(Number(req.body?.amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount === 0) {
+      return res.status(400).json({ status: 'error', message: '请填写金额（大于 0）' });
+    }
+    if (amount < 0) {
+      return res.status(400).json({ status: 'error', message: '扣款请用「扣减余额」' });
+    }
+    if (amount > 100000) {
+      return res.status(400).json({ status: 'error', message: '单笔上限 ¥100000，超过请分几次' });
+    }
+    const note = String(req.body?.note || '').trim().slice(0, 60);
+
+    const before = parseFloat(u.balance || 0);
+    const after = Math.round((before + amount) * 1000000) / 1000000;
+    // 🔒 余额与流水必须同时成功 —— 以前分两步写，流水一旦抛错就成了「钱到账、没凭据」，
+    //    对账时查无此事（实测踩过：Transaction 未导入 → 余额改了、流水没落）。
+    await sequelize.transaction(async (t) => {
+      u.balance = after.toFixed(6);
+      await u.save({ transaction: t });
+      await Transaction.create({
+        user_id: u.id,
+        phone: u.phone,
+        amount: amount,
+        balance: u.balance,
+        type: '站长手动充值',
+        description: note ? `站长手动加余额（${note}）` : '站长手动加余额',
+        site_id: Number(site.id),   // 🔴 必须记分站，否则平台营收会被算多
+      }, { transaction: t });
+    });
+
+    // 站长看得到痕迹，客户对账也有据可查（不含任何平台信息）
+    res.json({
+      status: 'success',
+      message: `已加 ¥${amount.toFixed(2)}，当前余额 ¥${after.toFixed(2)}`,
+      data: { user_id: u.id, balance: after, before },
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '加余额失败：' + (e.message || e) });
+  }
+});
+
+// 站长手动扣减（加错了/退款给客户自己承担），同样落流水
+router.post('/:id/customers/:uid/balance/deduct', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const u = await User.findOne({ where: { id: req.params.uid, site_id: site.id } });
+    if (!u) return res.status(404).json({ status: 'error', message: '这个客户不属于本分站' });
+
+    const amount = Math.round(Number(req.body?.amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ status: 'error', message: '请填写大于 0 的金额' });
+    }
+    const before = parseFloat(u.balance || 0);
+    if (amount > before) {
+      return res.status(400).json({ status: 'error', message: `扣减不能超过客户余额 ¥${before.toFixed(2)}` });
+    }
+    const after = Math.round((before - amount) * 1000000) / 1000000;
+    await sequelize.transaction(async (t) => {
+      u.balance = after.toFixed(6);
+      await u.save({ transaction: t });
+      await Transaction.create({
+        user_id: u.id,
+        phone: u.phone,
+        amount: -amount,
+        balance: u.balance,
+        type: '站长手动扣款',
+        description: String(req.body?.note || '').trim().slice(0, 60) || '站长手动扣减余额',
+        site_id: Number(site.id),
+      }, { transaction: t });
+    });
+
+    res.json({
+      status: 'success',
+      message: `已扣 ¥${amount.toFixed(2)}，当前余额 ¥${after.toFixed(2)}`,
+      data: { user_id: u.id, balance: after, before },
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '扣减失败：' + (e.message || e) });
   }
 });
 
