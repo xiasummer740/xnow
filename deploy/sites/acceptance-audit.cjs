@@ -127,17 +127,24 @@ const login = async (cred, origin = BASE) => {
     skip("④ 真实下单链路", "只读模式；用 AUDIT_WRITE=1 在 Beta 验证");
   }
 
-  // ── ⑤ 售价倍率 1~100x，低于成本被拦 ────────────────────────────────────
-  const putMult = (v) => j(`${BASE}/api/sites/${SITE_ID}`, {
-    method: "PUT", headers: A, body: JSON.stringify({ multiplier: v }),
+  // ── ⑤ 加价率（97 期：站长侧只谈「在进货价上加价 %」，倍率不对外）──────
+  const putMarkup = (v) => j(`${BASE}/api/sites/${SITE_ID}`, {
+    method: "PUT", headers: A, body: JSON.stringify({ markup_pct: v }),
   });
-  const tooHigh = await putMult(101);
-  const tooLow = await putMult(0.2);
-  rec("⑤ 倍率越界（101 / 0.2）被拒绝",
+  const tooHigh = await putMarkup(100000);
+  const tooLow = await putMarkup(-5);
+  rec("⑤ 加价率越界（100000 / -5）被拒绝",
       /error/i.test(JSON.stringify(tooHigh.body)) && /error/i.test(JSON.stringify(tooLow.body)),
-      `101→${msg(tooHigh).slice(0, 34)} | 0.2→${msg(tooLow).slice(0, 34)}`);
-  rec("⑤ 当前倍率在合法区间", Number(site.multiplier) >= 1 && Number(site.multiplier) <= 100,
-      `倍率 ${site.multiplier}`);
+      `100000→${msg(tooHigh).slice(0, 30)} | -5→${msg(tooLow).slice(0, 30)}`);
+  rec("⑤ 当前加价率合法（≥ 0%）",
+      Number.isFinite(Number(site.markup_pct)) && Number(site.markup_pct) >= 0,
+      `加价 ${site.markup_pct}%`);
+
+  // 🔒 97 期红线：对外接口不得出现任何倍率字段（否则站长可反推平台加价）
+  const priceMeta = (await j(`${BASE}/api/sites/${SITE_ID}/prices`, { headers: A })).body?.data || {};
+  const leakKeys = ["multiplier", "cost_multiplier", "min_multiplier"]
+    .filter((k) => priceMeta[k] !== undefined || site[k] !== undefined);
+  rec("⑤ 接口未泄露倍率字段", leakKeys.length === 0, leakKeys.length ? "泄露: " + leakKeys.join(",") : "干净");
 
   // ── ⑥ 6 套模板 + 6 色系 ────────────────────────────────────────────────
   const TPL = ["classic", "saas", "minimal", "neon", "magazine", "glass"];

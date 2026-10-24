@@ -72,18 +72,42 @@ const pricingError = (multiplier, agentDiscount, globalMult) => {
   }
   // 平台侧：成交价不能低于上游成本
   if (m * discount < 1) {
-    const floor = (1 / discount).toFixed(2);
-    return `定价过低：你的代理折扣是 ${discount}，最低要卖 ${floor} 倍才不亏（你填的是 ${m} 倍）`;
+    return '定价过低：这个价格卖出去会亏本，请调高加价率';
   }
   // 站长侧：自己的售价不能低于自己的进价，否则每单赔钱，还会被 orders.js 的
   // 安全网"抬平"到成本价 —— 客户看到的价和实际扣的钱对不上，是最伤的体验。
   const costMult = siteCostMultiplier(discount, globalMult);
   if (m < costMult) {
-    return `定价过低：你从平台的进价是 ${costMult} 倍（全局 ${(parseFloat(globalMult) > 0 ? parseFloat(globalMult) : DEFAULT_GLOBAL_MULTIPLIER)} × 你的折扣 ${discount}），卖 ${m} 倍每单会亏 ${(costMult - m).toFixed(2)} 倍。最低请设 ${costMult} 倍，建议 ${Math.max(costMult + 0.5, costMult * 1.5).toFixed(2)} 倍起。`;
+    // 🔒 不再回传任何倍率数字（那等于告诉站长我们在基础价上加了多少）
+    return '定价过低：售价不能低于你的进货价，那样每单都亏。请把加价率设为 0% 或更高。';
   }
   return null;
 };
 
+
+// 🔒 97 期：对外只用「加价率（%）」，绝不暴露倍率。
+//    加价率 = 售价 ÷ 进货价 − 1，只用站长自己的两个数字，
+//    他再怎么反推也推不出「平台在基础价上加了多少」。
+const multToMarkupPct = (mult, costMult) => {
+  const m = parseFloat(mult) || 0;
+  const c = parseFloat(costMult) || 1;
+  return Math.max(-100, Math.round(((m / c) - 1) * 10000) / 100);
+};
+const markupPctToMult = (pct, costMult) => {
+  const p = parseFloat(pct);
+  const c = parseFloat(costMult) || 1;
+  if (!isFinite(p)) return NaN;
+  return Math.round(c * (1 + p / 100) * 10000) / 10000;
+};
+const markupPricingError = (pct, agentDiscount, globalMult) => {
+  const p = parseFloat(pct);
+  if (!isFinite(p)) return '加价率请填数字';
+  if (p < 0) return '加价率不能低于 0%（0% = 按进货价卖，不赚不亏；再低就亏本了）';
+  const costMult = siteCostMultiplier(agentDiscount, globalMult);
+  const m = markupPctToMult(p, costMult);
+  if (!isFinite(m) || m > 100) return '加价率太高了，客户不会买，请调低';
+  return null;
+};
 // 该站当前允许的最低售价倍率（= 站长的进价倍率），供前端提示用
 const minMultiplier = siteCostMultiplier;
 
@@ -141,7 +165,7 @@ router.get('/stats', authenticate, async (req, res) => {
         site_id: siteId,
         site_name: site.name,
         domain: site.domain,
-        multiplier: site.multiplier,
+        // 97 期：倍率不外泄（站长用/price 页里的加价率与进货价即可）
         total_users: Number(userRows[0]?.total_users || 0),
         total_orders: Number(r.total_orders || 0),
         revenue: revenue.toFixed(4),
@@ -277,8 +301,12 @@ router.get('/', authenticate, async (req, res) => {
       o.smtp_pass = o.smtp_pass ? '******' : null;
       o.bufpay_key = o.bufpay_key ? '******' : null;
       o.cryptomus_key = o.cryptomus_key ? '******' : null;
-      // 前端据此提示「最低可售价」（= 站长的真实进价倍率，不是 1/折扣）
-      o.min_multiplier = minMultiplier(o.agent_discount, gMult);
+      // 🔒 97 期：不再输出 multiplier / min_multiplier。
+      //    这三个数一旦到前端，站长就能反推出平台在基础价上加价的倍数。
+      //    前端只需要「加价率（%）」—— 这是他自己的售价与进货价之比。
+      o.markup_pct = multToMarkupPct(o.multiplier, minMultiplier(o.agent_discount, gMult));
+      delete o.multiplier;
+      delete o.min_multiplier;
       // 🧭 六十五期：自有域名要填的 A 记录目标地址。
       //    这个值来自环境变量 SERVER_PUBLIC_IP（不进代码库，仓库是 PUBLIC）。
       //    没配就留空 —— 前端会变成"问平台要地址"，不会指一个错的 IP 让站长白折腾。
@@ -349,10 +377,22 @@ router.post('/', authenticate, async (req, res) => {
     return res.json({ status: 'error', message: '该域名不可使用' });
   }
 
-  const multiplierValue = (multiplier === undefined || multiplier === null || multiplier === '') ? 3.0 : parseFloat(multiplier);
-  const priceErr = pricingError(multiplierValue, null, await getGlobalMultiplier());
-  if (priceErr) {
-    return res.json({ status: 'error', message: priceErr });
+  // 💰 97 期：前端只说「在进货价上加价 %」。倍率由后端换算，不对外暴露。
+  const gMultCreate = await getGlobalMultiplier();
+  const costMultCreate = siteCostMultiplier(null, gMultCreate);
+  let multiplierValue;
+  if (req.body.markup_pct !== undefined && req.body.markup_pct !== '' && req.body.markup_pct !== null) {
+    const mkErr = markupPricingError(req.body.markup_pct, null, gMultCreate);
+    if (mkErr) return res.json({ status: 'error', message: mkErr });
+    multiplierValue = markupPctToMult(req.body.markup_pct, costMultCreate);
+  } else {
+    multiplierValue = (multiplier === undefined || multiplier === null || multiplier === '')
+      ? markupPctToMult(50, costMultCreate)   // 默认 +50%（等于原来的 3 倍）
+      : parseFloat(multiplier);
+    const priceErr = pricingError(multiplierValue, null, gMultCreate);
+    if (priceErr) {
+      return res.json({ status: 'error', message: priceErr });
+    }
   }
 
   try {
@@ -503,6 +543,9 @@ router.post('/', authenticate, async (req, res) => {
       message: `分站创建成功${publishNote}${planNote}`,
       data: {
         ...site.toJSON(),
+        // 🔒 97 期：建站响应同样不吐倍率，只给加价率
+        markup_pct: multToMarkupPct(site.multiplier, siteCostMultiplier(site.agent_discount, gMultCreate)),
+        multiplier: undefined,
         billing: { plan, expire_at: expireAt, trial_hours: billing.trialHours, monthly: billing.siteMonthly, paid: paidAmount, balance: newBalance },
       },
     });
@@ -651,11 +694,13 @@ router.get('/:id/prices', authenticate, async (req, res) => {
       status: 'success',
       data: {
         site_id: site.id,
-        multiplier: siteMult,
+        markup_pct: multToMarkupPct(siteMult, costMult),
         discount_rate: discount,
         discount_label: site.discount_label || '',
         discount_until: parseInt(site.discount_until || 0),
-        cost_multiplier: costMult,
+        // 🔒 97 期：cost_multiplier 不再回传。
+        //    它是「平台在基础价上加价的倍数」，站长拿到它就能反推出我们的成本结构。
+        //    站长只需要知道自己的进货价（items[].cost_per_1k），足够安全定价。
         categories,
         platforms,
         category: cat,
@@ -710,7 +755,8 @@ router.put('/:id/prices', authenticate, async (req, res) => {
       if (rate < floor - 0.000001) {
         return res.json({
           status: 'error',
-          message: `「${sv.name}」定价过低：${rate} 低于成本线 ${floor}（每 1000 个你的成本是 ${(baseRate * costMult).toFixed(4)}）。价格由你自己定，但不能亏本卖。`
+          // 🔒 97 期：只说「进货价」，不提任何倍率（倍率会暴露平台加价）
+        message: `「${sv.name}」定价过低：${rate} 低于你的进货价底线 ${floor}（每 1000 个你的进货价是 ${(baseRate * costMult).toFixed(4)}）。价格由你自己定，但不能亏本卖。`
         });
       }
       toUpsert.push({ site_id: site.id, service_id: sid, rate });
@@ -926,6 +972,15 @@ router.put('/:id', authenticate, async (req, res) => {
       }
       if (multiplier !== undefined) site.multiplier = nextMultiplier;
       if (agent_discount !== undefined) site.agent_discount = nextDiscount;
+    }
+
+    // 💰 97 期：加价率入参 → 换算倍率落库。站长永远看不到倍率本身。
+    if (req.body.markup_pct !== undefined && req.body.markup_pct !== null && req.body.markup_pct !== '') {
+      const gMultPut = await getGlobalMultiplier();
+      const adPut = site.agent_discount;
+      const mkErr = markupPricingError(req.body.markup_pct, adPut, gMultPut);
+      if (mkErr) return res.json({ status: 'error', message: mkErr });
+      site.multiplier = markupPctToMult(req.body.markup_pct, siteCostMultiplier(adPut, gMultPut));
     }
 
     // 🎫 折扣促销：站长给自己的客户打折（限时/长期）

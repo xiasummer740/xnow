@@ -1,7 +1,7 @@
 <script setup>
 // 💰 站长自己的价格体系：单服务定价 + 活动折扣
 //    后端：GET/PUT /api/sites/:id/prices、PUT /api/sites/:id（折扣三字段）
-//    红线：任何价格乘上折扣都不得低于站长的成本价，后端会拦（这里只负责把话说清楚）。
+//    红线：任何价格乘上折扣都不得低于站长的进货价，后端会拦（这里只负责把话说清楚）。
 import { ref, computed, onMounted } from 'vue';
 import { useUserStore } from '../../stores/user';
 
@@ -44,8 +44,75 @@ const pickPlatform = (p) => {
   load();
 };
 
-const draft = ref({});            // service_id -> 输入框里的价格（字符串）
-const meta = ref({ multiplier: 0, cost_multiplier: 0, discount_rate: 1, discount_label: '', discount_until: 0 });
+const draft = ref({});            // service_id -> 面板里填的价格（字符串）
+
+// ✏️ 改价面板 + 批量（97 期）
+const sheet = ref(null);
+const sheetPrice = ref('');
+const batchMargin = ref(30);
+
+const isOverride = (it) => it.override !== null && it.override !== undefined;
+const dirty = (it) => (draft.value[it.service_id] ?? '').trim() !== (isOverride(it) ? String(it.override) : '');
+const priceText = (it) => {
+  const raw = (draft.value[it.service_id] ?? '').trim();
+  const v = raw === '' ? it.list_price : parseFloat(raw);
+  return isFinite(v) ? v.toFixed(2) : '—';
+};
+
+function openSheet(it) {
+  sheet.value = it;
+  sheetPrice.value = (draft.value[it.service_id] ?? '').trim();
+}
+function closeSheet() { sheet.value = null; sheetPrice.value = ''; }
+function applySheet() {
+  if (!sheet.value) return;
+  draft.value[sheet.value.service_id] = String(sheetPrice.value || '').trim();
+  closeSheet();
+}
+
+// 面板里的实时收益
+const sheetMargin = computed(() => {
+  if (!sheet.value) return null;
+  const raw = (sheetPrice.value || '').trim();
+  const price = raw === '' ? sheet.value.list_price : parseFloat(raw);
+  if (!isFinite(price) || price <= 0) return null;
+  const sell = price * (dRate.value || 1);
+  const cost = sheet.value.cost_per_1k;
+  return {
+    sell: sell.toFixed(4),
+    profit: (sell - cost).toFixed(4),
+    pct: sell > 0 ? (((sell - cost) / sell) * 100).toFixed(1) : '0',
+    lose: sell < cost - 1e-6,
+  };
+});
+
+// 常用价位：以进货价为基准，避免站长自己算错
+function quickPresets(it) {
+  const c = Number(it.cost_per_1k) || 0;
+  const f = (x) => String(Number((c * x).toFixed(4)));
+  return [
+    { t: `进货价 ¥${c.toFixed(2)}`, v: f(1) },
+    { t: '+20%', v: f(1.2) },
+    { t: '+50%', v: f(1.5) },
+    { t: '×2', v: f(2) },
+  ];
+}
+
+// 整类一键：进货价 × (1 + 毛利%)
+function applyBatch() {
+  const m = Number(batchMargin.value);
+  if (!isFinite(m) || m < 0) return;
+  for (const it of items.value) {
+    draft.value[it.service_id] = String(Number((Number(it.cost_per_1k) * (1 + m / 100)).toFixed(4)));
+  }
+  flash(`已按「进货价 +${m}%」填好 ${items.value.length} 条，确认后点「保存定价」`, true);
+}
+function clearDrafts() {
+  for (const it of items.value) {
+    draft.value[it.service_id] = isOverride(it) ? String(it.override) : '';
+  }
+}
+const meta = ref({ markup_pct: 0, discount_rate: 1, discount_label: '', discount_until: 0 });
 const itemsAllCount = computed(() =>
   categories.value.reduce((n, c) => n + (c.count || 0), 0) || items.value.length);
 
@@ -154,10 +221,6 @@ async function savePrices() {
   }
 }
 
-function resetRow(it) {
-  draft.value[it.service_id] = '';
-}
-
 async function saveDiscount() {
   saving.value = true;
   try {
@@ -200,7 +263,7 @@ onMounted(load);
       </div>
 
       <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
-        打折只影响你的客户看到的价格，你的成本不变。系统有底线：打完折也不许低于你的成本价，填太狠会直接拦下。
+        打折只影响你的客户看到的价格，你的进货价不变。系统有底线：打完折也不许低于你的进货价，填太狠会直接拦下。
       </p>
 
       <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
@@ -241,15 +304,34 @@ onMounted(load);
     <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <h2 class="font-bold text-sm text-amber-400">单个服务改价（可选）</h2>
-        <span class="text-[10px] text-slate-500">
-          成本保护线 {{ meta.cost_multiplier }} 倍 · 当前全场 {{ meta.multiplier }} 倍
-        </span>
+        <span class="text-[10px] text-slate-500">你的进货价就是底线 · 当前全场加价 {{ meta.markup_pct ?? 0 }}%</span>
       </div>
 
       <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
-        想把某个爆款压低价引流、或把冷门服务标高，就在这里单独填。留空 = 跟随全场倍率。
-        价格单位是「每 1000 个」。
+        点任意一条服务就能改价，不用一个个敲小方框。留空 = 跟随全场倍率；价格单位是「每 1000 个」。
       </p>
+
+      <!-- ⚡ 批量：整类一键定价（97 期新增，省掉逐条改的麻烦） -->
+      <div class="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 mb-3">
+        <div class="flex items-center justify-between flex-wrap gap-1 mb-2">
+          <span class="text-[11px] font-bold text-amber-300">整类一键定价</span>
+          <span class="text-[10px] text-slate-500">按「进货价 + 毛利」一次算好，之后还能单条微调</span>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-[11px] text-slate-400">在进货价上加</span>
+          <input v-model.number="batchMargin" type="number" step="5" min="0" max="300" inputmode="numeric"
+                 class="w-16 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
+          <span class="text-[11px] text-slate-400">%</span>
+          <button @click="applyBatch" :disabled="!items.length"
+                  class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-900 text-[11px] font-bold disabled:opacity-40">
+            应用到当前 {{ items.length }} 条
+          </button>
+          <button @click="clearDrafts" :disabled="!changed.length"
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[11px] disabled:opacity-40">
+            撤销未保存
+          </button>
+        </div>
+      </div>
 
       <div class="flex gap-2 mb-2">
         <input v-model="query" @keyup.enter="load" placeholder="搜服务名 / 分类，例如 TikTok 粉丝"
@@ -296,32 +378,29 @@ onMounted(load);
             <span :title="g.name">{{ shortCat(g.name) }}</span>
             <span class="text-slate-500 font-normal">{{ g.items.length }} 条</span>
           </div>
-          <div v-for="it in g.items" :key="it.service_id"
-             class="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-2">
-          <div class="flex items-start justify-between gap-3 flex-wrap">
-            <div class="min-w-0 flex-grow">
-              <div class="text-xs text-slate-200 line-clamp-2">{{ it.name }}</div>
-              <div class="text-[10px] text-slate-500 mt-0.5">
-                成本 ¥{{ it.cost_per_1k.toFixed(4) }} / 千 ·
-                默认售价 ¥{{ (it.list_price * (1)).toFixed(4) }} / 千
-                <span v-if="it.override !== null && it.override !== undefined" class="text-amber-400">· 已单独定价</span>
+          <button v-for="it in g.items" :key="it.service_id" type="button" @click="openSheet(it)"
+                  class="w-full text-left rounded-xl border p-3 mb-2 transition active:scale-[0.995]"
+                  :class="dirty(it) ? 'border-amber-500/60 bg-amber-500/5' : 'border-slate-800 bg-slate-950/60'">
+            <div class="flex items-start gap-3">
+              <div class="min-w-0 flex-grow">
+                <div class="text-xs text-slate-200 line-clamp-2">{{ it.name }}</div>
+                <div class="text-[10px] text-slate-500 mt-1">
+                  进货价 ¥{{ it.cost_per_1k.toFixed(2) }} / 千
+                  <span v-if="it.override !== null && it.override !== undefined" class="text-amber-400">· 已单独定价</span>
+                  <span v-else-if="dirty(it)" class="text-amber-400">· 待保存</span>
+                </div>
+                <div v-if="marginOf(it)" class="text-[11px] mt-1"
+                     :class="marginOf(it).lose ? 'text-red-400' : 'text-emerald-400/85'">
+                  客户付 ¥{{ marginOf(it).sell }} · 你赚 ¥{{ marginOf(it).profit }}（{{ marginOf(it).pct }}%）
+                  <span v-if="marginOf(it).lose">· 太低，会被拒</span>
+                </div>
+              </div>
+              <div class="shrink-0 text-right pt-0.5">
+                <div class="text-sm font-bold text-slate-100">¥{{ priceText(it) }}</div>
+                <div class="text-[10px] text-amber-400 mt-1.5 px-2 py-1 rounded-md bg-amber-500/10">改价 ›</div>
               </div>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <input v-model="draft[it.service_id]" type="number" step="0.0001" min="0" inputmode="decimal"
-                     :placeholder="(it.list_price * 1).toFixed(4)"
-                     class="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-xs text-right" />
-              <button v-if="it.override !== null && it.override !== undefined" @click="resetRow(it)"
-                      class="px-2 py-2 text-[10px] text-slate-500 hover:text-amber-400 whitespace-nowrap">恢复默认</button>
-            </div>
-          </div>
-          <div v-if="marginOf(it)" class="mt-1 pr-12 sm:pr-0 text-[10px] leading-relaxed"
-               :class="marginOf(it).lose ? 'text-red-400' : 'text-emerald-400/80'">
-            <span class="block sm:inline">客户实付 ¥{{ marginOf(it).sell }} / 千</span>
-            <span class="block sm:inline sm:ml-1">· 你赚 ¥{{ marginOf(it).profit }} / 千（毛利 {{ marginOf(it).pct }}%）</span>
-            <span v-if="marginOf(it).lose" class="block mt-0.5">· 低于成本价，保存会被拒</span>
-          </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -337,5 +416,51 @@ onMounted(load);
         </button>
       </div>
     </section>
+
+    <!-- ✏️ 改价面板：手机端从底部弹出，输入框又大又好按（97 期） -->
+    <div v-if="sheet" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div class="absolute inset-0 bg-black/70" @click="closeSheet"></div>
+      <div class="relative w-full sm:max-w-md bg-slate-900 border-t sm:border border-slate-700
+                  rounded-t-2xl sm:rounded-2xl p-4 pb-6 max-h-[88vh] overflow-y-auto custom-scrollbar">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div class="min-w-0">
+            <div class="text-xs text-slate-200 line-clamp-2">{{ sheet.name }}</div>
+            <div class="text-[10px] text-slate-500 mt-1">
+              进货价 ¥{{ sheet.cost_per_1k.toFixed(2) }} / 千 · {{ shortCat(sheet.category) }}
+            </div>
+          </div>
+          <button @click="closeSheet" class="text-slate-500 text-lg leading-none px-2 py-1 shrink-0">✕</button>
+        </div>
+
+        <label class="block text-[11px] text-slate-400 mb-1">你的售价（每 1000 个）</label>
+        <input v-model="sheetPrice" type="text" inputmode="decimal" autocomplete="off"
+               class="w-full bg-slate-950 border-2 border-amber-500/50 focus:border-amber-400 rounded-xl
+                      px-3 py-3 text-2xl font-bold text-right outline-none"
+               :placeholder="sheet.list_price.toFixed(2)" />
+        <p class="text-[10px] text-slate-500 mt-1">留空 = 跟随全场（¥{{ sheet.list_price.toFixed(2) }}）</p>
+
+        <div class="flex flex-wrap gap-2 mt-3">
+          <button v-for="p in quickPresets(sheet)" :key="p.t" @click="sheetPrice = p.v"
+                  class="px-3 py-2 rounded-lg bg-slate-800 text-[11px] text-slate-200 border border-slate-700">
+            {{ p.t }}
+          </button>
+        </div>
+
+        <div class="mt-3 rounded-xl bg-slate-950/70 border border-slate-800 p-3 text-[11px]"
+             :class="sheetMargin && sheetMargin.lose ? 'text-red-400' : 'text-emerald-400/85'">
+          <template v-if="sheetMargin">
+            客户实付 ¥{{ sheetMargin.sell }} / 千 · 你赚 ¥{{ sheetMargin.profit }} / 千（毛利 {{ sheetMargin.pct }}%）
+            <span v-if="sheetMargin.lose" class="block text-red-400 mt-1">低于进货价，保存会被拒</span>
+          </template>
+          <template v-else><span class="text-slate-500">填个价格，这里实时显示你能赚多少</span></template>
+        </div>
+
+        <div class="flex gap-2 mt-4">
+          <button @click="sheetPrice = ''" class="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 text-sm">跟随全场</button>
+          <button @click="applySheet" class="flex-[2] py-3 rounded-xl bg-amber-500 text-slate-900 text-sm font-bold">确定</button>
+        </div>
+        <p class="text-[10px] text-slate-600 mt-2 text-center">改完点列表下方的「保存定价」，一次提交所有改动</p>
+      </div>
+    </div>
   </div>
 </template>

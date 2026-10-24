@@ -57,11 +57,11 @@
         </div>
         <div>
           <label class="block text-xs text-slate-400 mb-1">
-            售价倍率（3 倍 = 客户看到的价格是平台基础价的 3 倍；数字越大客户越贵、你赚得越多）
+            加价率（在进货价上加多少 %，越高客户付得越多、你赚得越多）
           </label>
-          <input v-model.number="createForm.multiplier" type="number" step="0.1" min="1" max="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+          <input v-model.number="createForm.markup_pct" type="number" step="10" min="0" max="2000" inputmode="numeric" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
           <p class="text-[10px] text-amber-500/80 mt-1">
-            你的进价是平台基础价的 <b>2 倍</b>左右，所以<b>低于 2 倍就是亏本卖，系统会直接拦住</b>。开站后用 3 倍：客户付 3 份，你付 2 份，每单赚 1 份。
+            例：填 <b>50</b> = 客户看到的价格是你的进货价 × 1.5。系统会拦住亏本设置（低于 0% 不许保存）。
           </p>
         </div>
         <button @click="createSite()" :disabled="creating" class="w-full py-2.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
@@ -138,15 +138,15 @@
 
       <!-- 💰 售价页：倍率 + 单服务改价 + 折扣促销 -->
       <section v-if="page === 'pricing'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
-        <h2 class="font-bold text-sm text-amber-400">售价倍率</h2>
+        <h2 class="font-bold text-sm text-amber-400">加价率</h2>
         <div class="grid md:grid-cols-2 gap-3 items-start">
           <div>
-            <input v-model.number="form.multiplier" type="number" step="0.1" :min="minMul" max="100"
+            <input v-model.number="form.markup_pct" type="number" step="10" min="0" max="2000" inputmode="numeric"
               class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-            <p class="text-[10px] text-slate-500 mt-1">可填 {{ minMul }} ~ 100 倍；低于 {{ minMul }} 倍就亏本了，系统不让填。</p>
+            <p class="text-[10px] text-slate-500 mt-1">可填 0 ~ 2000；0 = 按进货价卖（不赚不亏），低于 0 就是亏本，系统不让填。</p>
           </div>
           <p class="text-[11px] text-slate-400 leading-relaxed bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2">
-            3 倍 = 客户看到的价格是平台基础价的 3 倍。你的进价约是基础价的 2 倍，客户付 3 份、你付 2 份，每单赚 1 份。
+            加价率越高，客户看到的价格越高、你每单赚得越多。系统有底线：售价低于你的进货价会直接拦住。
             <span class="block text-slate-500 mt-1">下面还能给单个服务单独定价、或做全站折扣。</span>
           </p>
         </div>
@@ -429,20 +429,21 @@ const smtpTestMsg = ref('')
 const smtpTestOk = ref(false)
 
 // 🚦 开站清单：把"开完站还差什么"算出来，别让新手盯着 6 个表单猜
-const minMul = computed(() => {
-  const m = parseFloat(site.value?.min_multiplier)
-  return isFinite(m) && m > 0 ? m : 1
+// 🔒 97 期：这里也只用「加价率」——不再出现「不低于 N 倍」这种会泄露平台加价的提示。
+const markupPct = computed(() => {
+  const v = Number(site.value?.markup_pct)
+  return isFinite(v) ? v : null
 })
 const steps = computed(() => {
   const s = site.value || {}
-  const mul = parseFloat(s.multiplier)
+  const mk = markupPct.value
   return [
     {
       key: 'price',
         go: 'pricing',
-      title: `设置售价（不低于 ${minMul.value} 倍才不亏）`,
-      done: isFinite(mul) && mul >= minMul.value,
-      hint: `现在是 ${isFinite(mul) ? mul : '未设置'} 倍。低于 ${minMul.value} 倍等于亏本卖。`
+      title: '设置售价（不低于你的进货价）',
+      done: mk !== null && mk >= 0,
+      hint: mk === null ? '还没设置加价率' : `当前加价 ${mk}%（0% = 按进货价卖，不赚不亏）`
     },
     {
       key: 'pay',
@@ -631,11 +632,11 @@ const testSmtp = async () => {
   } finally { smtpTesting.value = false }
 }
 
-const createForm = ref({ domain: '', name: '', multiplier: 3 })
+const createForm = ref({ domain: '', name: '', markup_pct: 50 })
 // 👁 密钥/密码框的可视开关（站长填错密钥很常见，让他能看一眼）
 const pwdShow = ref({ bufpay_key: false, cryptomus_key: false, smtp_pass: false });
 const form = ref({
-  name: '', multiplier: 2.5, footer_text: '', support_url: '', announcement: '',
+  name: '', markup_pct: 50, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
   ui_radius: '', ui_density: '', card_style: '', font_style: '', btn_shape: '', hero_layout: '',
   // 71期：背景色 / 背景图 / 字号 —— 之前只有首页悬浮编辑器能改，
@@ -799,7 +800,7 @@ const load = async () => {
     if (site.value) {
       const s = site.value
       form.value = {
-        name: s.name || '', multiplier: s.multiplier ?? 2.5,
+        name: s.name || '', markup_pct: Number(s.markup_pct ?? 50),
         footer_text: s.footer_text || '', support_url: s.support_url || '',
         announcement: s.announcement || '',
         template: s.template || 'classic', color: s.color || 'cyan', accent: s.accent || '',
@@ -882,7 +883,7 @@ const save = async (silent = false) => {
   saving.value = true
   try {
     const payload = {
-      name: form.value.name, multiplier: form.value.multiplier,
+      name: form.value.name, markup_pct: form.value.markup_pct,
       footer_text: form.value.footer_text, support_url: form.value.support_url,
       announcement: form.value.announcement,
       template: form.value.template, color: form.value.color, accent: form.value.accent,
@@ -925,7 +926,7 @@ const createSite = async () => {
   try {
     const payload = {
       name: createForm.value.name,
-      multiplier: createForm.value.multiplier
+      markup_pct: createForm.value.markup_pct
     }
     // 域名留空 = 让后端自动分配免费子域名
     const d = String(createForm.value.domain || '').trim()
