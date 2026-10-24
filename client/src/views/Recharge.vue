@@ -240,9 +240,6 @@ const cleanDescription = (t) => {
                 <div v-else class="bg-slate-800/80 border border-amber-500/30 rounded-3xl p-6 shadow-[0_0_30px_rgba(251,191,36,0.1)] backdrop-blur-sm">
                     <h3 class="text-white font-bold mb-4 flex items-center"><span class="text-amber-400 mr-2">⚡</span> {{ app.t('usd_desc_title') }}</h3>
                     <p class="text-xs leading-relaxed text-slate-300 mb-2">
-                        {{ app.t('usd_desc_1') }}<strong class="text-amber-400">{{ app.t('usd_desc_2') }}</strong>{{ app.t('usd_desc_3') }}
-                    </p>
-                    <p class="text-xs leading-relaxed text-slate-300 mb-2">
                         {{ app.t('usd_desc_4') }}<strong class="text-amber-400">{{ app.t('usd_desc_5') }}</strong>{{ app.t('usd_desc_6') }}
                     </p>
                     <!-- 网址直接用可点文字露出来（对齐源头站写法），点击新窗口打开 -->
