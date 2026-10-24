@@ -14,6 +14,8 @@ const DEFAULT_AGENT_DISCOUNT = 0.8;
 const pricingError = (multiplier, agentDiscount) => {
   const m = parseFloat(multiplier);
   if (!isFinite(m) || m <= 0) return '分站倍率必须为大于 0 的数字';
+  // 祥哥定调：站主可自定义 1~100 倍
+  if (m > 100) return `分站倍率上限 100 倍（当前 ${m}）`;
   // 🔒 倍率下界必须单独拦：普通/黄金用户成交价 = 倍率本身（orders.js 里只有 agent 才乘折扣），
   // 所以倍率 < 1 时这些用户每单都让平台倒贴。
   // 不独立拦的话，可拿「倍率 0.05 + 折扣 100」凑出 0.05×100=5 骗过下面的乘积校验。
@@ -35,6 +37,64 @@ const pricingError = (multiplier, agentDiscount) => {
 };
 
 // 获取所有分站（管理员看全部，代理看自己的）
+router.get('/stats', authenticate, async (req, res) => {
+  // 📊 分站收益报表：营收 / 成本 / 毛利，站主与管理员可见
+  try {
+    const siteId = parseInt(req.query.site_id || 0);
+    if (!siteId) return res.json({ status: 'error', message: '缺少 site_id' });
+
+    const site = await Site.findByPk(siteId);
+    if (!site) return res.json({ status: 'error', message: '分站不存在' });
+    const isStaff2 = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaff2 && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权查看该分站' });
+    }
+
+    const { sequelize } = await import('../models/index.js');
+    const [rows] = await sequelize.query(
+      `SELECT COUNT(*) AS total_orders,
+              COALESCE(SUM(charge), 0) AS revenue,
+              COALESCE(SUM(site_cost), 0) AS cost,
+              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END), 0) AS today_orders,
+              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN charge ELSE 0 END), 0) AS today_revenue,
+              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN site_cost ELSE 0 END), 0) AS today_cost
+       FROM orders WHERE site_id = ?`,
+      { replacements: [siteId] }
+    );
+    const [userRows] = await sequelize.query(
+      'SELECT COUNT(*) AS total_users FROM users WHERE site_id = ?',
+      { replacements: [siteId] }
+    );
+
+    const r = rows[0] || {};
+    const revenue = parseFloat(r.revenue || 0);
+    const cost = parseFloat(r.cost || 0);
+    const todayRevenue = parseFloat(r.today_revenue || 0);
+    const todayCost = parseFloat(r.today_cost || 0);
+    res.json({
+      status: 'success',
+      data: {
+        site_id: siteId,
+        site_name: site.name,
+        domain: site.domain,
+        multiplier: site.multiplier,
+        total_users: Number(userRows[0]?.total_users || 0),
+        total_orders: Number(r.total_orders || 0),
+        revenue: revenue.toFixed(4),
+        cost: cost.toFixed(4),
+        profit: (revenue - cost).toFixed(4),
+        today_orders: Number(r.today_orders || 0),
+        today_revenue: todayRevenue.toFixed(4),
+        today_cost: todayCost.toFixed(4),
+        today_profit: (todayRevenue - todayCost).toFixed(4)
+      }
+    });
+  } catch (e) {
+    console.error('分站报表失败:', e.message);
+    res.status(500).json({ status: 'error', message: '查询报表失败' });
+  }
+});
+
 router.get('/', authenticate, async (req, res) => {
   try {
     let sites;

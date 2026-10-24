@@ -173,9 +173,40 @@ router.post('/add', authenticate, async (req, res) => {
       await t.rollback(); return res.json({ status: 'error', message: `余额不足，该订单需要 ¥${charge}` });
     }
 
+    // 🏬 分站结算（预存制）：客户按站主定的售价付款，站主按「代理价」付成本。
+    //    平台收入 = 代理价 − 上游成本（与主站代理卖货同一口径）；
+    //    站主收入 = 售价 − 代理价，钱先进站主余额，不需要平台垫资或分账。
+    let siteCost = 0;
+    let siteOwner = null;
+    if (req.site) {
+      const platformMult = parseFloat(conf.global_multiplier || 2.0) * parseFloat(conf.agent_discount || 0.8);
+      siteCost = parseFloat(((qty / 1000) * parseFloat(baseRate) * platformMult * billUnits).toFixed(6));
+      if (!isFinite(siteCost) || siteCost < 0) {
+        await t.rollback(); return res.json({ status: 'error', message: '价格异常，请联系站长' });
+      }
+      siteOwner = await User.findByPk(req.site.owner_id, { transaction: t });
+      if (!siteOwner) {
+        await t.rollback(); return res.json({ status: 'error', message: '本站暂未开放，请联系客服' });
+      }
+      if (parseFloat(siteOwner.balance) < siteCost) {
+        // 客户可见文案：不提平台/上游，只给可执行的动作
+        await t.rollback(); return res.json({ status: 'error', message: '本站当前无法接单，请联系客服补充库存' });
+      }
+    }
+
     if (user) {
       user.balance = (parseFloat(user.balance) - parseFloat(charge)).toFixed(6);
       await user.save({ transaction: t });
+    }
+
+    // 站主成本扣减（与客户扣款同一事务：上游失败会一起回滚）
+    if (siteOwner) {
+      siteOwner.balance = (parseFloat(siteOwner.balance) - siteCost).toFixed(6);
+      await siteOwner.save({ transaction: t });
+      await Transaction.create({
+        user_id: siteOwner.id, phone: siteOwner.phone, amount: -siteCost, balance: siteOwner.balance,
+        type: '分站成本扣款', description: `分站订单成本 服务[ID:${serviceId}] 数量:${qty}`
+      }, { transaction: t });
     }
 
     const urlConf = await Config.findOne({where:{key:'upstream_url'}, transaction: t});
@@ -205,6 +236,9 @@ router.post('/add', authenticate, async (req, res) => {
       const orderNo = 'XN' + Date.now() + Math.floor(Math.random()*100);
       const newOrder = await Order.create({
         order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
+        // 🏬 分站归属与站主成本（主站订单固定为 0）
+        site_id: req.site ? Number(req.site.id) : 0,
+        site_cost: siteCost,
         upstream_order_id: String(upRes.data.order), service_id: serviceId,
         // 🔌 订阅型/邀请型没有 link，用 username 落到 link 列：历史订单里才看得出"下给谁"
         service_name: service.name, link: link || username, quantity: qty, charge, upstream_charge, status: '排队中'
@@ -355,6 +389,30 @@ router.post('/batch', authenticate, async (req, res) => {
         continue;
       }
 
+      // 🏬 分站结算（批量同口径）：客户按站主售价付，站主按代理价付成本
+      let siteCost = 0;
+      let siteOwner = null;
+      if (req.site) {
+        const platformMult = parseFloat(conf.global_multiplier || 2.0) * parseFloat(conf.agent_discount || 0.8);
+        siteCost = parseFloat(((qty / 1000) * parseFloat(baseRate) * platformMult).toFixed(6));
+        if (!isFinite(siteCost) || siteCost < 0) {
+          await t.rollback();
+          results.push({ serviceId, link, quantity, status: 'error', message: '价格异常，请联系站长' });
+          continue;
+        }
+        siteOwner = await User.findByPk(req.site.owner_id, { transaction: t });
+        if (!siteOwner) {
+          await t.rollback();
+          results.push({ serviceId, link, quantity, status: 'error', message: '本站暂未开放，请联系客服' });
+          continue;
+        }
+        if (parseFloat(siteOwner.balance) < siteCost) {
+          await t.rollback();
+          results.push({ serviceId, link, quantity, status: 'error', message: '本站当前无法接单，请联系客服补充库存' });
+          continue;
+        }
+      }
+
       const payloadObj = { key: conf.upstream_key, action: 'add', service: serviceId, link, quantity: qty };
       const payload = new URLSearchParams(payloadObj);
       const upRes = await axios.post(conf.upstream_url, payload.toString(), {
@@ -366,6 +424,7 @@ router.post('/batch', authenticate, async (req, res) => {
         const newOrder = await Order.create({
           order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
           site_id: req.site ? Number(req.site.id) : 0,
+          site_cost: siteCost,
           upstream_order_id: String(upRes.data.order), service_id: serviceId,
           service_name: service.name, link, quantity: qty, charge, upstream_charge, status: '排队中'
         }, { transaction: t });
@@ -378,6 +437,16 @@ router.post('/batch', authenticate, async (req, res) => {
           await Transaction.create({
             user_id: user.id, phone: user.phone, amount: -charge, balance: user.balance,
             type: '批量订单扣款', description: `批量购买 [ID:${serviceId}] ${service.name} 数量:${qty}`
+          }, { transaction: t });
+        }
+
+        // 🏬 分站主成本扣减（与客户扣款同事务）
+        if (siteOwner) {
+          siteOwner.balance = (parseFloat(siteOwner.balance) - siteCost).toFixed(6);
+          await siteOwner.save({ transaction: t });
+          await Transaction.create({
+            user_id: siteOwner.id, phone: siteOwner.phone, amount: -siteCost, balance: siteOwner.balance,
+            type: '分站成本扣款', description: `分站批量订单成本 ${orderNo} [ID:${serviceId}] 数量:${qty}`
           }, { transaction: t });
         }
 

@@ -15,6 +15,8 @@ const Order = sequelize.define('Order', {
   quantity: { type: DataTypes.INTEGER, allowNull: false },
   charge: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 }, 
   upstream_charge: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 }, 
+  // 🏬 分站主这单付给平台的成本（0 = 主站订单）。站主毛利 = charge − site_cost。
+  site_cost: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
   start_count: { type: DataTypes.STRING(50), defaultValue: '0' },
   status: { type: DataTypes.STRING(50), defaultValue: '排队中' },
   remains: { type: DataTypes.STRING(50), defaultValue: '0' },

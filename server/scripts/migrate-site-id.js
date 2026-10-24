@@ -68,6 +68,17 @@ const run = async () => {
     }
   }
 
+  // 二期：订单上记录站主成本（站主毛利 = charge − site_cost）
+  if (await columnExists('orders', 'site_cost')) {
+    console.log('  ⏭  orders.site_cost 已存在');
+  } else {
+    await sequelize.query(
+      'ALTER TABLE `orders` ADD COLUMN site_cost DECIMAL(14,6) NOT NULL DEFAULT 0'
+    );
+    console.log('  ✅ orders.site_cost 已添加（主站订单为 0）');
+    changed++;
+  }
+
   // 结果自查
   for (const table of TABLES) {
     const [rows] = await sequelize.query(
