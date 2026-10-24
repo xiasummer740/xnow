@@ -134,7 +134,10 @@ router.post('/add', authenticate, async (req, res) => {
     const baseMultiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
     const agentDiscount = req.site ? parseFloat(req.site.agent_discount) : parseFloat(conf.agent_discount || 0.8);
 
-    let user = await User.findByPk(req.user.id, { transaction: t });
+    // 🔒 行锁：余额校验与扣款必须在同一把锁下完成。
+    //    不加锁的话，两个并发请求会同时读到「余额够」，各自扣一次 ——
+    //    余额被扣成负数，等于平台白送服务。这类问题只在有真实并发时才暴露。
+    let user = await User.findByPk(req.user.id, { transaction: t, lock: t.LOCK.UPDATE });
     if (!user && req.user.role !== 'super_admin') {
         await t.rollback(); return res.json({ status: 'error', message: '账户异常' });
     }
@@ -184,7 +187,8 @@ router.post('/add', authenticate, async (req, res) => {
       if (!isFinite(siteCost) || siteCost < 0) {
         await t.rollback(); return res.json({ status: 'error', message: '价格异常，请联系站长' });
       }
-      siteOwner = await User.findByPk(req.site.owner_id, { transaction: t });
+      // 🔒 站长余额同样要加行锁：并发下单时否则会被同时判定"够"而扣成负数
+      siteOwner = await User.findByPk(req.site.owner_id, { transaction: t, lock: t.LOCK.UPDATE });
       if (!siteOwner) {
         await t.rollback(); return res.json({ status: 'error', message: '本站暂未开放，请联系客服' });
       }
@@ -353,7 +357,8 @@ router.post('/batch', authenticate, async (req, res) => {
         continue;
       }
 
-      let user = await User.findByPk(req.user.id, { transaction: t });
+      // 🔒 批量下单同样加行锁，防止并发穿透余额校验
+      let user = await User.findByPk(req.user.id, { transaction: t, lock: t.LOCK.UPDATE });
       if (!user && req.user.role !== 'super_admin') { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '账户异常' }); continue; }
       if (user) reportUser = user;
 
@@ -400,7 +405,8 @@ router.post('/batch', authenticate, async (req, res) => {
           results.push({ serviceId, link, quantity, status: 'error', message: '价格异常，请联系站长' });
           continue;
         }
-        siteOwner = await User.findByPk(req.site.owner_id, { transaction: t });
+        // 🔒 站长余额加行锁（批量下单同 /add）
+        siteOwner = await User.findByPk(req.site.owner_id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!siteOwner) {
           await t.rollback();
           results.push({ serviceId, link, quantity, status: 'error', message: '本站暂未开放，请联系客服' });
