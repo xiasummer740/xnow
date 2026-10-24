@@ -13,7 +13,7 @@ import { dirname, resolve } from 'node:path';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = resolve(root, 'dist/index.html');
 
-const cfg = JSON.parse(readFileSync(resolve(root, 'src/utils/seo-config.json'), 'utf8'));
+const cfg = JSON.parse(readFileSync(resolve(root, '../server/src/data/seo-config.json'), 'utf8'));
 const siteUrl = cfg.siteUrl.replace(/\/+$/, '');
 const ogImage = siteUrl + cfg.ogImage;
 

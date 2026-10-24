@@ -4,7 +4,7 @@
       <div class="flex items-center space-x-3">
         <img v-if="!appStore.isSubsite || (appStore.siteLogo && appStore.siteLogo !== '/logo.png')" :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
         <div v-else class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)] rounded-xl grid place-items-center font-black text-lg" style="background:rgba(148,163,184,.14);color:#e2e8f0">{{ (appStore.siteName || '·').trim().charAt(0) }}</div>
-        <span class="text-lg sm:text-2xl md:text-3xl font-black italic tracking-wider md:tracking-widest site-brand-text truncate max-w-[46vw] sm:max-w-[55vw]">{{ appStore.siteName || 'XNOW' }}</span>
+        <span class="text-lg sm:text-2xl md:text-3xl font-black italic tracking-wider md:tracking-widest site-brand-text truncate max-w-[46vw] sm:max-w-[55vw]">{{ appStore.brandName }}</span>
       </div>
       <div class="flex items-center space-x-4 md:space-x-6">
         <button @click="toggleLangRoute" class="text-slate-300 hover:text-white font-bold transition text-sm md:text-base select-none">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>

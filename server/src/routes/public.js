@@ -1,7 +1,31 @@
 import express from 'express';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { Config } from '../models/index.js';
 
 const router = express.Router();
+
+// 🔒 主站 SEO 文案只在【主站】下发。
+//    以前这份文案（含主站域名与品牌名）是打进前端 JS 的 —— 分站客户一按 F12 就能看到
+//    「xnow.taikon.top / XNOW PRO」，等于告诉客户这个站是二道贩子。
+//    现在搬到服务端按域名单向下发：分站请求直接 404，前端 bundle 里一个字都没有。
+//    祥哥 2026-10-25：「他也不想客户知道我的网站」。
+const SEO_FILE = resolve(dirname(fileURLToPath(import.meta.url)), '../data/seo-config.json');
+let seoCache = null;
+const readSeo = () => {
+  if (!seoCache) seoCache = JSON.parse(readFileSync(SEO_FILE, 'utf8'));
+  return seoCache;
+};
+
+router.get('/seo', (req, res) => {
+  if (req.site) return res.status(404).json({ status: 'error', message: 'Not Found' });
+  try {
+    res.json({ status: 'success', data: readSeo() });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'SEO config unavailable' });
+  }
+});
 
 router.get('/config', async (req, res) => {
   try {

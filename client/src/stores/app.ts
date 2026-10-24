@@ -8,7 +8,17 @@ const i18nDict = {
   vip_title: 'Upgrade to VIP Agent', vip_subtitle: 'Unlock wholesale prices and easily build your own SMM panel with our seamless API.', vip_feature1_title: '📉 Ultimate Wholesale Price', vip_feature1_desc: 'Bypass the middlemen! Enjoy 20%~50% off the standard retail price. Maximize your profit margins.', vip_feature2_title: '🔌 API Reseller Panel', vip_feature2_desc: 'Full access to our Developer API. Sync our entire service list to your own SMM panel and become a platform owner.', vip_feature3_title: '⚡ Priority Tech Support', vip_feature3_desc: '24/7 dedicated support channel. Auto-refills and instant refunds for absolute peace of mind.', vip_status_admin: 'You have Supreme Admin privileges. No need to upgrade.', vip_status_active: 'VIP Agent Status: ACTIVE', vip_expire: 'Expires on: ', vip_btn_renew: 'Renew VIP Status (¥ 99 / 30 Days)', vip_btn_upgrade: 'Unlock VIP Agent (¥ 99 / 30 Days)', menu_vpn: '🛡️ Secure VPN', vpn_menu_shop: '🛒 Plans', vpn_menu_clients: '📡 My Nodes', vpn_console_title: 'Secure Node Console', vpn_shop_cta: 'Get Started', vpn_buy: 'Buy Now', vpn_no_clients: 'No active nodes. Go get one!', vpn_traffic: 'Traffic', vpn_expiry: 'Expiry', vpn_vps: 'Location', vpn_status_active: 'Active' }
 };
 export const useAppStore = defineStore('app', {
-  state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', isSubsite: false, siteId: 0, tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0,
+  state: () => {
+    // 🏷️ 首屏就要知道"我是不是分站"：store 初始化早于 /api/public/config，
+    //    读上次落下的标记与站名，避免分站首屏闪出平台名。
+    const cachedSubsite = (() => { try { return localStorage.getItem('xnow_is_subsite') === '1'; } catch (e) { return false; } })();
+    const cachedName = (() => { try { return localStorage.getItem('xnow_site_name') || ''; } catch (e) { return ''; } })();
+    return { currency: 'CNY', lang: 'zh', exchangeRate: 7.25,
+      // 分站且没有站名时用中性词，绝不回落成平台品牌
+      siteName: cachedName || '增长服务',   // 真实站名由 /api/public/config 下发；兜底用中性词，bundle 里不留平台名
+      siteLogo: '/logo.png', isSubsite: cachedSubsite, siteId: 0,
+      tgBotLink: '',   // 由 /api/public/config 下发（分站不下发 → 客服链接走站长自己的）
+      globalRefreshTrigger: 0,
     // 🎨 分站主题（主站为空 → 外观与改造前一致）
     themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[],
     // 🧱 五十一期：优势三卡片（站长可自定义图标/标题/正文；空 = 用平台默认文案）
@@ -23,15 +33,31 @@ export const useAppStore = defineStore('app', {
   heroVariant: '', servicesVariant: '', sectionTitles: {} as Record<string, { title?: string; sub?: string }>,
     customCss: '', faviconUrl: '',
     // ✍️ 十九期：首页文案自定义（主站为空 → Home.vue 回落到默认文案）
-    hero: {} as Record<string, string> }),
+    hero: {} as Record<string, string> };
+  },
+  // 🏷️ 92 期：品牌名兜底放 getters（原来写成 actions 里的访问器，
+  //    取到的是 actions 对象的 this，读不到 state，分站就一直显示兜底词）
+  getters: {
+    brandName(state): string {
+      const n = (state.siteName || '').trim();
+      return n || '增长服务';
+    },
+    siteInitial(state): string {
+      const n = (state.siteName || '').trim();
+      return n ? n.replace(/^[A-Za-z0-9\s]+$/, n).charAt(0).toUpperCase() : '增';
+    },
+  },
   actions: {
     toggleCurrency() { this.currency = this.currency === 'CNY' ? 'USD' : 'CNY'; }, toggleLang() { this.lang = this.lang === 'zh' ? 'en' : 'zh'; }, triggerRefresh() { this.globalRefreshTrigger++; }, 
     async fetchRate() { try { const resRate = await fetch('https://open.er-api.com/v6/latest/USD'); const dataRate = await resRate.json(); if(dataRate && dataRate.rates && dataRate.rates.CNY) this.exchangeRate = dataRate.rates.CNY; } catch(e) {} },
-    async fetchConfig() { try { const res = await fetch('/api/public/config'); const data = await res.json(); if(data && data.status === 'success') { if (data.data.site_name) this.siteName = data.data.site_name; if (data.data.site_logo) this.siteLogo = data.data.site_logo; if (data.data.tg_bot_link) this.tgBotLink = data.data.tg_bot_link;
+    async fetchConfig() { try { const res = await fetch('/api/public/config'); const data = await res.json(); if(data && data.status === 'success') { if (data.data.site_name) { this.siteName = data.data.site_name; try { localStorage.setItem('xnow_site_name', data.data.site_name); } catch (e) {} } if (data.data.site_logo) this.siteLogo = data.data.site_logo; if (data.data.tg_bot_link) this.tgBotLink = data.data.tg_bot_link;
       // 🎨 分站主题：模板 / 色系 / 自定义主色 / 页脚 / 客服 / 首页模块
       const d = data.data;
       // 是否分站（供客户侧隐藏平台专属元素，如 PRO 徽标）
     this.isSubsite = !!d.is_subsite;
+    // 分站必须有名字；站长没填就用中性词，不能显示平台名
+    if (this.isSubsite && !(this.siteName || '').trim()) this.siteName = '增长服务';
+    if (this.isSubsite && !this.tgBotLink && this.supportUrl) this.tgBotLink = this.supportUrl;
     // 落到 localStorage 供路由守卫用（守卫读不到 store，只能读本地存储）
     try { localStorage.setItem('xnow_is_subsite', this.isSubsite ? '1' : '0'); } catch (e) {}
     this.siteId = d.site_id || 0;
@@ -79,13 +105,6 @@ export const useAppStore = defineStore('app', {
       };
       this.applyTheme();
     } } catch(e) {} this.fetchRate(); },
-    // 💅 站长自定义 CSS：注入到 <style id="xn-site-css">，只影响他自己的分站
-  // 🖼 分站没上传 logo 时，用站名首字做图标 —— 绝不能回落成主站 logo
-  get siteInitial(): string {
-    const n = (this.siteName || '').trim();
-    return n ? n.replace(/^[A-Za-z0-9\s]+$/, n).charAt(0).toUpperCase() : 'X';
-  },
-
   applyCustomCss() {
     if (typeof document === 'undefined') return;
     let el = document.getElementById('xn-site-css') as HTMLStyleElement | null;
