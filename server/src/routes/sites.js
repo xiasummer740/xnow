@@ -21,7 +21,34 @@ const DEFAULT_AGENT_DISCOUNT = 0.8;
 // 🔒 定价护栏：分站倍率与代理折扣会覆盖全局定价，低于成本价等于平台每单倒贴。
 // 成交价见 orders.js：代理 = multiplier × agent_discount，其余角色 = multiplier，
 // 而上游始终按 service.rate 实扣，所以两者都必须 ≥ 1.0（倍率 1.0 = 上游成本价）。
-const pricingError = (multiplier, agentDiscount) => {
+//
+// 🔴 但站长的"进价"不是 1.0，而是 platformMult = global_multiplier × agent_discount
+//    （默认 2.5 × 0.8 = 2.0）。客户付 multiplier × rate，站长被扣 2.0 × rate，
+//    所以站长卖 1.25 倍 = 每单倒亏 0.75 倍 —— 而旧代码恰好把 1.25 当成"不亏线"
+//    写进提示里，等于手把手教站长亏钱。下限必须按 platformMult 算。
+const DEFAULT_GLOBAL_MULTIPLIER = 2.5;
+
+// 全局倍率会变（管理密室可改），所以每次现读；读不到就用默认值
+const getGlobalMultiplier = async () => {
+  try {
+    const row = await Config.findOne({ where: { key: 'global_multiplier' } });
+    const v = row ? parseFloat(row.value) : NaN;
+    return (isFinite(v) && v > 0) ? v : DEFAULT_GLOBAL_MULTIPLIER;
+  } catch (e) {
+    return DEFAULT_GLOBAL_MULTIPLIER;
+  }
+};
+
+// 站长真正的不亏线：他每单被扣 rate × global_multiplier × agent_discount
+const siteCostMultiplier = (agentDiscount, globalMult) => {
+  const d = (agentDiscount === undefined || agentDiscount === null || agentDiscount === '' || !isFinite(parseFloat(agentDiscount)) || parseFloat(agentDiscount) <= 0)
+    ? DEFAULT_AGENT_DISCOUNT
+    : parseFloat(agentDiscount);
+  const g = (isFinite(parseFloat(globalMult)) && parseFloat(globalMult) > 0) ? parseFloat(globalMult) : DEFAULT_GLOBAL_MULTIPLIER;
+  return Math.max(1, Number((g * d).toFixed(2)));
+};
+
+const pricingError = (multiplier, agentDiscount, globalMult) => {
   const m = parseFloat(multiplier);
   if (!isFinite(m) || m <= 0) return '分站倍率必须为大于 0 的数字';
   // 祥哥定调：站主可自定义 1~100 倍
@@ -40,21 +67,22 @@ const pricingError = (multiplier, agentDiscount) => {
     if (!isFinite(d) || d <= 0) return '代理折扣必须为大于 0 的数字';
     discount = d;
   }
+  // 平台侧：成交价不能低于上游成本
   if (m * discount < 1) {
-    // 说人话：告诉他"最低能卖多少倍"，而不是甩一个数学不等式
     const floor = (1 / discount).toFixed(2);
     return `定价过低：你的代理折扣是 ${discount}，最低要卖 ${floor} 倍才不亏（你填的是 ${m} 倍）`;
+  }
+  // 站长侧：自己的售价不能低于自己的进价，否则每单赔钱，还会被 orders.js 的
+  // 安全网"抬平"到成本价 —— 客户看到的价和实际扣的钱对不上，是最伤的体验。
+  const costMult = siteCostMultiplier(discount, globalMult);
+  if (m < costMult) {
+    return `定价过低：你从平台的进价是 ${costMult} 倍（全局 ${(parseFloat(globalMult) > 0 ? parseFloat(globalMult) : DEFAULT_GLOBAL_MULTIPLIER)} × 你的折扣 ${discount}），卖 ${m} 倍每单会亏 ${(costMult - m).toFixed(2)} 倍。最低请设 ${costMult} 倍，建议 ${Math.max(costMult + 0.5, costMult * 1.5).toFixed(2)} 倍起。`;
   }
   return null;
 };
 
-// 该站当前允许的最低售价倍率（由代理折扣决定），供前端提示用
-const minMultiplier = (agentDiscount) => {
-  const d = (agentDiscount === undefined || agentDiscount === null || agentDiscount === '' || !isFinite(parseFloat(agentDiscount)) || parseFloat(agentDiscount) <= 0)
-    ? DEFAULT_AGENT_DISCOUNT
-    : parseFloat(agentDiscount);
-  return Math.max(1, Number((1 / d).toFixed(2)));
-};
+// 该站当前允许的最低售价倍率（= 站长的进价倍率），供前端提示用
+const minMultiplier = siteCostMultiplier;
 
 // 获取所有分站（管理员看全部，代理看自己的）
 router.get('/stats', authenticate, async (req, res) => {
@@ -239,13 +267,14 @@ router.get('/', authenticate, async (req, res) => {
       sites = await Site.findAll({ where: { owner_id: req.user.id }, order: [['created_at', 'DESC']] });
     }
     // 🔒 不把 SMTP 密码吐给前端：只回一个占位符，站长要改才填新的
+    const gMult = await getGlobalMultiplier();
     const safe = (rows) => rows.map(r => {
       const o = r.toJSON();
       o.smtp_pass = o.smtp_pass ? '******' : null;
       o.bufpay_key = o.bufpay_key ? '******' : null;
       o.cryptomus_key = o.cryptomus_key ? '******' : null;
-      // 前端据此提示「最低可售价」，避免站长填 1 倍被拒还不知道为什么
-      o.min_multiplier = minMultiplier(o.agent_discount);
+      // 前端据此提示「最低可售价」（= 站长的真实进价倍率，不是 1/折扣）
+      o.min_multiplier = minMultiplier(o.agent_discount, gMult);
       return o;
     });
     res.json({ status: 'success', data: safe(sites) });
@@ -301,8 +330,8 @@ router.post('/', authenticate, async (req, res) => {
     return res.json({ status: 'error', message: '该域名不可使用' });
   }
 
-  const multiplierValue = (multiplier === undefined || multiplier === null || multiplier === '') ? 2.0 : parseFloat(multiplier);
-  const priceErr = pricingError(multiplierValue, null);
+  const multiplierValue = (multiplier === undefined || multiplier === null || multiplier === '') ? 3.0 : parseFloat(multiplier);
+  const priceErr = pricingError(multiplierValue, null, await getGlobalMultiplier());
   if (priceErr) {
     return res.json({ status: 'error', message: priceErr });
   }
@@ -562,7 +591,7 @@ router.put('/:id', authenticate, async (req, res) => {
     if (multiplier !== undefined || agent_discount !== undefined) {
       const nextMultiplier = multiplier !== undefined ? parseFloat(multiplier) : parseFloat(site.multiplier);
       const nextDiscount = agent_discount !== undefined ? parseFloat(agent_discount) : parseFloat(site.agent_discount);
-      const priceErr = pricingError(nextMultiplier, nextDiscount);
+      const priceErr = pricingError(nextMultiplier, nextDiscount, await getGlobalMultiplier());
       if (priceErr) {
         return res.json({ status: 'error', message: priceErr });
       }

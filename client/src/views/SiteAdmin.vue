@@ -24,11 +24,11 @@
         </div>
         <div>
           <label class="block text-xs text-slate-400 mb-1">
-            售价倍率（你至少卖 {{ createForm.multiplier || 2 }} 倍；倍率越高客户越贵、你赚得越多）
+            售价倍率（3 倍 = 客户看到的价格是平台基础价的 3 倍；数字越大客户越贵、你赚得越多）
           </label>
           <input v-model.number="createForm.multiplier" type="number" step="0.1" min="1" max="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
           <p class="text-[10px] text-amber-500/80 mt-1">
-            提示：平台基础价 × 1 = 1 倍。你的你的成本价高于 1 倍，所以**卖得低于你的成本价会亏钱**，系统会拦住。
+            你的进价是平台基础价的 <b>2 倍</b>左右，所以<b>低于 2 倍就是亏本卖，系统会直接拦住</b>。开站后用 3 倍：客户付 3 份，你付 2 份，每单赚 1 份。
           </p>
         </div>
         <button @click="createSite()" :disabled="creating" class="w-full py-2.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
@@ -818,7 +818,7 @@ const testSmtp = async () => {
   } finally { smtpTesting.value = false }
 }
 
-const createForm = ref({ domain: '', name: '', multiplier: 2.5 })
+const createForm = ref({ domain: '', name: '', multiplier: 3 })
 const form = ref({
   name: '', multiplier: 2.5, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
