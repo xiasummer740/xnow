@@ -88,3 +88,38 @@ SELECT COUNT(*) FROM sites;                              -- 分站数
 SELECT id, domain, domain_status, cert_mode FROM sites;  -- 域名与证书状态
 SELECT COUNT(*) FROM orders WHERE site_id IS NOT NULL;   -- 分站订单数
 ```
+
+## 七、克隆库演练结果（70 期，用真实生产数据）
+
+不是只用 Beta 的测试数据验证 —— 把**生产库整份数据**（5 用户 / 31 订单 / 2839 服务 / 28 条配置）
+导进临时库 `xnow_prodclone`，然后拿新代码去跑，迁移前后各跑一次。
+
+**刻意不启动整个 app**：`app.js` 里有 8 个 `setInterval`（上游同步、Telegram 告警、备份），
+在生产数据上启动会对真实世界产生副作用。只做模型层读写。
+
+### 迁移前（= 不做迁移直接上线的下场）
+
+```
+✅ 数据库连通 / users 5 行 / services 2839 行 / orders 31 行
+❌ orders 读 site_cost:  Unknown column 'site_cost' in 'field list'
+❌ transactions 读 site_id: Unknown column 'site_id' in 'field list'
+❌ sites 全字段:          Unknown column 'template' in 'field list'
+❌ sites 新外观字段:      Unknown column 'bg_color' in 'field list'
+✅ sequelize.sync({alter:false}): 无报错        ← 注意：它不报错，也不补列，静默
+❌ 新建分站:              Unknown column 'template' in 'field list'
+```
+
+**`sync` 无报错但仍缺列** —— 这就是为什么"启动没报错"完全不能作为上线安全的依据。
+
+### 迁移后
+
+```
+✅ 全部通过（10/10）
+✅ orders 读 site_cost: id=1 charge=0.656600 site_id=0 site_cost=0.000000
+     ← 31 笔历史订单 site_cost 补成 0，语义正确（它们本来就不是分站订单）
+✅ 新建分站（含模板/色系/背景色/字号/首页模块）→ 写入并读回一致 → 已删除
+```
+
+### 收尾
+
+克隆库已删（0 残留），生产库仍是 5 用户 / 31 订单 / 0 分站，未做任何写入。
