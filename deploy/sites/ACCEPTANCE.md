@@ -752,6 +752,38 @@ GET /api/sites/stats?site_id=11   → 「无权查看该分站」  ✅（站长�
 | 格式乱填 | 「域名格式不正确」✅ |
 | 清理 | 两站的 `custom_domain`/`domain_token` 已清空，nginx 与证书目录 0 残留，站点 200 ✅ |
 
-**待办（需要祥哥给一个域名）**：随便给一个他名下的域名（不要 taikon.top），
-把 A 记录指到 `192.129.210.52`，10 分钟内能把「自动签发 Let's Encrypt + 强制 HTTPS + 回退自签」
-整条链跑给他看。
+### 十六之补：真签证书这一步，已经用真实域名跑通了（75 期）
+
+上一版这里写着"缺一个真域名，签证书这步测不了"。后来发现可以用公网通配 DNS 服务
+（`nip.io` / `sslip.io`，`192-129-210-52.nip.io` 这类名字直接解析到本机 IP）做真实测试，
+于是把整条链跑了一遍 —— 并且**跑出了这个功能的一个致命 bug**。
+
+**Bug：首次签发根本不可能成功。** 所有 vhost（含全局默认）的 80 段都是
+`return 301 https://...`，新域名此刻只有自签证书，LE 的 HTTP-01 跟到 HTTPS 就校验失败
+→ 只能退回自签 → 站长看到"浏览器不安全"。也就是说「自有域名自动证书」这条要求，
+代码逻辑上一直是个空转。
+
+修法（已合入）：专用 ACME webroot `/var/www/acme-challenge`；vhost 的 80 段
+**先放行 `/.well-known/acme-challenge/`，其余才跳转**（跳转必须写进 `location /` ——
+server 层 `return` 在 rewrite 阶段就执行，location 里的例外轮不到）；
+新增 `deploy/sites/fix-acme-webroot.sh` 修全局默认 server（幂等 + 备份 + 失败自还原），
+并接进 `deploy-prod.sh`。
+
+实测记录（Beta，真实公网域名）：
+
+```
+绑定 192-129-210-52.nip.io
+  → {"status":"success","cert_mode":"letsencrypt","vhost":"..."}   耗时 4.4 秒
+  → 证书 issuer=C=US, O=Let's Encrypt, CN=YR1   有效期 2026-10-24 → 2027-01-22
+  → curl verify=0（浏览器绿锁）HTTP=200，页面标题「阿明涨粉工作室」
+  → 同一个站，免费子域名 demostore.taikon.top 同时 200 / verify=0
+解绑
+  → vhost 0 残留、LE 证书已删除、自签 0 残留、其他站全部 200
+```
+
+顺带修掉第二个问题：**解绑时只删 vhost、不删证书**，站长换几次域名就会在
+`/etc/letsencrypt/live` 堆一堆废证书，而 LE 对"同一组域名重复签发"有每周 5 张的上限，
+堆到后面会签不下来。现在解绑会一并 `certbot delete` + 清理自签文件（尽力而为，不影响解绑）。
+
+一个小提示：绑定后**立刻**访问可能还被旧 worker 服务（nginx 是优雅重载），
+等 1~2 秒再刷新就对了 —— 实测踩过这个以为"没生效"。
