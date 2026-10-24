@@ -248,7 +248,6 @@ const cleanDescription = (t) => {
                            class="text-xs font-bold text-amber-400 hover:text-amber-300 underline decoration-amber-500/50 underline-offset-2 break-all">
                             https://www.trxyes.com/
                         </a>
-                        <span class="text-[10px] text-slate-500 ml-1">{{ app.t('usd_link_note') }}</span>
                     </p>
                     
                     <div v-if="usdtImageUrl" class="mt-6 relative group cursor-zoom-in overflow-hidden rounded-xl border border-slate-700 shadow-lg" @click="showLightbox = true">
