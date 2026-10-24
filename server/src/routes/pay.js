@@ -242,6 +242,13 @@ router.get('/return/bufpay', async (req, res) => {
 router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req, res) => {
     const { aoid, order_id, order_uid, price, pay_price, sign } = req.body;
     try {
+        // 🔒 先做参数完整性检查：这是公开端点，任何人（含扫描器）都能打。
+        //    缺字段时若直接往下走，会在解析 order_uid / 查商户配置时抛异常，
+        //    被 catch 兜成 500 —— 网关会把 500 当"我方故障"并持续重试，
+        //    既污染日志，也可能让支付平台判定回调异常。缺参数就该明确 400。
+        if (!aoid || !order_id || !order_uid || price === undefined || pay_price === undefined || !sign) {
+            return res.status(400).send('Bad Request');
+        }
         const key = await resolveBufpayKey(order_uid);
         if (!key) return res.status(500).send('No Config');
         const localSign = md5(aoid + order_id + order_uid + price + pay_price + key);
