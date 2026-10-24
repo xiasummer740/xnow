@@ -85,7 +85,14 @@ else
   die "后端启动失败"
 fi
 
-step "6. 上线后自检"
+step "6. 堵住「未知子域名落到 Beta 实例」的坑（只影响未知 Host）"
+if [ -f "$APP/deploy/sites/fix-unknown-host.sh" ]; then
+  bash "$APP/deploy/sites/fix-unknown-host.sh" || echo "  ⚠️ 这一步没成功，主站不受影响，但要人工看一眼（回滚见脚本末尾提示）"
+else
+  echo "  跳过：脚本不在"
+fi
+
+step "7. 上线后自检"
 for u in https://xnow.taikon.top/ https://xnow.taikon.top/api/public/config; do
   code=$(curl -o /dev/null -sS -w '%{http_code}' --max-time 25 "$u" 2>/dev/null)
   echo "  $u → $code"

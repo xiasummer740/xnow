@@ -123,3 +123,20 @@ SELECT COUNT(*) FROM orders WHERE site_id IS NOT NULL;   -- 分站订单数
 ### 收尾
 
 克隆库已删（0 残留），生产库仍是 5 用户 / 31 订单 / 0 分站，未做任何写入。
+
+## 八、上线时自动堵住「未知子域名串到 Beta」的坑
+
+`deploy/sites/fix-unknown-host.sh`（**尚未执行**，挂在 `deploy-prod.sh` 第 6 步自动跑）。
+
+问题回顾：`xnow-beta` 的 `server_name` 含 `*.xnow.taikon.top` 通配 ——
+任何没有自己 vhost 的免费子域名都会落到 **Beta 实例**（实测 `zzz-none.xnow.taikon.top`
+返回 Beta 平台首页）。生产分站 vhost 万一生成失败，客户就会在 Beta 库里下单、充值 —— 数据直接串。
+
+修法两步：
+1. 把通配从 `xnow-beta` 的 `server_name` 里删掉；
+2. 新增 `xnow-unknown-host`：443 的 `default_server`，未知域名一律 404 + noindex
+   （没有兜底块时，nginx 会用"加载顺序里第一个 443 server 块"接住未知 Host —— 那正好是 Beta）。
+
+影响面：**只影响未知 Host**。所有已有域名都是精确 `server_name`，行为不变。
+脚本会自己对比改前的探测结果（`xnow.taikon.top` / `beta` / `demostore` / `laozhang` / `zzz-none`），
+改后前四个必须一模一样、最后一个必须从 200 变 404；`nginx -t` 失败会自动回滚。
