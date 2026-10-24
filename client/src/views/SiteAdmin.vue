@@ -283,15 +283,24 @@
           <p class="text-slate-500">用平台送的免费子域名（现在这个地址）就不用管这些，已经能直接卖。</p>
         </div>
 
-        <div class="flex gap-2">
-          <input v-model="bindDomain" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="绑定你自己的域名，如 shop.你的品牌.com" />
-          <button @click="bindOwnDomain()" :disabled="binding" class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-800 hover:bg-slate-700 disabled:opacity-50">
-            {{ binding ? '验证中…' : '绑定并开通' }}
-          </button>
-          <button v-if="site.custom_domain" @click="republishDomain()" :disabled="publishing"
-                  class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-800 hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">
-            {{ publishing ? '修复中…' : '修复域名' }}
-          </button>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input v-model="bindDomain"
+                 class="w-full sm:flex-1 sm:min-w-0 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                 placeholder="绑定你自己的域名，如 shop.你的品牌.com" />
+          <div class="flex gap-2">
+            <button @click="bindOwnDomain()" :disabled="binding"
+                    class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 text-slate-900 hover:bg-amber-400 disabled:opacity-50 whitespace-nowrap">
+              {{ binding ? '验证中…' : '绑定并开通' }}
+            </button>
+            <button v-if="site.custom_domain" @click="republishDomain()" :disabled="publishing"
+                    class="flex-1 sm:flex-none px-3 py-2 rounded-lg text-sm font-bold bg-slate-800 hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">
+              {{ publishing ? '修复中…' : '修复域名' }}
+            </button>
+            <button v-if="site.custom_domain" @click="unbindDomain()" :disabled="unbinding"
+                    class="flex-1 sm:flex-none px-3 py-2 rounded-lg text-sm font-bold bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50 whitespace-nowrap">
+              {{ unbinding ? '解绑中…' : '解除绑定' }}
+            </button>
+          </div>
         </div>
         <div v-if="domainHint" class="bg-amber-400/10 border border-amber-500/30 rounded-lg p-3 text-[11px] text-amber-200 whitespace-pre-wrap">{{ domainHint }}</div>
       </section>
@@ -934,6 +943,29 @@ const createSite = async () => {
       billingRef.value?.load?.()
     }
   } catch (e) { alert('开通失败') } finally { creating.value = false }
+}
+
+// 🔓 解绑自有域名（94 期）：站长填错 / 想换域名时得能退回来。
+//    后端 DELETE /api/sites/:id/domain 会顺手清掉旧域名的 vhost 与证书，
+//    否则那条 nginx 配置会一直留着抢域名，站长自己解决不了。
+const unbinding = ref(false)
+const unbindDomain = async () => {
+  if (!site.value) return
+  if (!confirm(`确定解除绑定 ${site.value.custom_domain}？\n解绑后这个域名不再指向你的站点，平台送的子域名不受影响。`)) return
+  unbinding.value = true
+  try {
+    const res = await fetch(`/api/sites/${site.value.id}/domain`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${userStore.token}` },
+    })
+    const data = await res.json()
+    domainHint.value = data.message || (data.status === 'success' ? '已解除绑定' : '解绑失败')
+    if (data.status === 'success') { bindDomain.value = ''; await load() }
+  } catch (e) {
+    domainHint.value = '解绑失败：' + e.message
+  } finally {
+    unbinding.value = false
+  }
 }
 
 const bindOwnDomain = async () => {

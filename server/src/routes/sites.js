@@ -1118,9 +1118,14 @@ router.delete('/:id/domain', authenticate, async (req, res) => {
         }
       } catch (e) { /* 清不掉就算了，不影响解绑 */ }
     }
-    site.domain_status = 'none';
-    site.cert_mode = null;
+    // 🔎 94 期：解绑「自有域名」不等于这个站没了 ——
+    //    平台送的子域名还在跑，状态应该还是「已开通」。
+    //    以前这里一律写 none，站长解绑后会以为站点也关了（实测踩到）。
     site.custom_domain = null;
+    site.cert_mode = null;
+    const primaryVhost = path.join('/etc/nginx/sites-enabled',
+      `xnow-site-${site.id}-${String(site.domain || '').replace(/[^a-z0-9.-]/gi, '')}`);
+    site.domain_status = fs.existsSync(primaryVhost) ? 'active' : 'none';
     await site.save();
     bustSiteCache();
     res.json({ status: 'success', message: '域名配置已清理' });
