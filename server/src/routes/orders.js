@@ -145,7 +145,13 @@ router.post('/add', authenticate, async (req, res) => {
     const actualRole = user ? user.role : req.user.role;
     let finalMultiplier = baseMultiplier;
 
-    if (actualRole === 'super_admin' || actualRole === 'admin') { 
+    // 🏬 分站定价权归站长：站上所有客户都按站长定的倍率付款。
+    //    买家自己的专属折扣（custom_multiplier）和代理折扣是**面向平台自营**的价格，
+    //    套到别人的店里会直接击穿站长成本 —— 例如买家折扣 0.5、站长成本 1.6，
+    //    站长每卖一单倒亏 1.1，而且面板上只显示"亏了"，看不出原因。
+    if (req.site) {
+      finalMultiplier = (actualRole === 'super_admin' || actualRole === 'admin') ? 1.0 : baseMultiplier;
+    } else if (actualRole === 'super_admin' || actualRole === 'admin') { 
       finalMultiplier = 1.0; 
     } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) { 
       finalMultiplier = parseFloat(user.custom_multiplier); 
@@ -172,20 +178,22 @@ router.post('/add', authenticate, async (req, res) => {
       await t.rollback(); return res.json({ status: 'error', message: '价格异常，请联系管理员' });
     }
 
-    if (user && parseFloat(user.balance) < parseFloat(charge)) {
-      await t.rollback(); return res.json({ status: 'error', message: `余额不足，该订单需要 ¥${charge}` });
-    }
-
     // 🏬 分站结算（预存制）：客户按站主定的售价付款，站主按「代理价」付成本。
     //    平台收入 = 代理价 − 上游成本（与主站代理卖货同一口径）；
     //    站主收入 = 售价 − 代理价，钱先进站主余额，不需要平台垫资或分账。
     let siteCost = 0;
     let siteOwner = null;
+    let chargeFinal = parseFloat(charge);
     if (req.site) {
       const platformMult = parseFloat(conf.global_multiplier || 2.0) * parseFloat(conf.agent_discount || 0.8);
       siteCost = parseFloat(((qty / 1000) * parseFloat(baseRate) * platformMult * billUnits).toFixed(6));
       if (!isFinite(siteCost) || siteCost < 0) {
         await t.rollback(); return res.json({ status: 'error', message: '价格异常，请联系站长' });
+      }
+      // 🛡 兜底护栏：售价无论如何不得低于站长成本（站长不能被系统扣成亏本）
+      if (chargeFinal < siteCost) {
+        console.warn(`[order] 售价低于分站成本，已抬平：charge=${chargeFinal} siteCost=${siteCost} site=${req.site.id}`);
+        chargeFinal = siteCost;
       }
       // 🔒 站长余额同样要加行锁：并发下单时否则会被同时判定"够"而扣成负数
       siteOwner = await User.findByPk(req.site.owner_id, { transaction: t, lock: t.LOCK.UPDATE });
@@ -198,8 +206,13 @@ router.post('/add', authenticate, async (req, res) => {
       }
     }
 
+    // 💰 客户余额校验放在"最终售价"确定之后（分站可能抬平到成本以上）
+    if (user && parseFloat(user.balance) < chargeFinal) {
+      await t.rollback(); return res.json({ status: 'error', message: `余额不足，该订单需要 ¥${chargeFinal.toFixed(4)}` });
+    }
+
     if (user) {
-      user.balance = (parseFloat(user.balance) - parseFloat(charge)).toFixed(6);
+      user.balance = (parseFloat(user.balance) - chargeFinal).toFixed(6);
       await user.save({ transaction: t });
     }
 
@@ -245,12 +258,12 @@ router.post('/add', authenticate, async (req, res) => {
         site_cost: siteCost,
         upstream_order_id: String(upRes.data.order), service_id: serviceId,
         // 🔌 订阅型/邀请型没有 link，用 username 落到 link 列：历史订单里才看得出"下给谁"
-        service_name: service.name, link: link || username, quantity: qty, charge, upstream_charge, status: '排队中'
+        service_name: service.name, link: link || username, quantity: qty, charge: chargeFinal, upstream_charge, status: '排队中'
       }, { transaction: t });
       
       if (user) {
         await Transaction.create({
-          user_id: user.id, phone: user.phone, amount: -charge, balance: user.balance, 
+          user_id: user.id, phone: user.phone, amount: -chargeFinal, balance: user.balance, 
           type: '订单扣款', description: `购买服务 [ID:${serviceId}] 数量:${quantity}`
         }, { transaction: t });
       }
@@ -364,7 +377,10 @@ router.post('/batch', authenticate, async (req, res) => {
 
       const actualRole = user ? user.role : req.user.role;
       let finalMultiplier = baseMultiplier;
-      if (actualRole === 'super_admin' || actualRole === 'admin') {
+      // 🏬 分站定价权归站长（与 /add 同口径）：买家自己的专属折扣/代理折扣不适用于别人的店
+      if (req.site) {
+        finalMultiplier = (actualRole === 'super_admin' || actualRole === 'admin') ? 1.0 : baseMultiplier;
+      } else if (actualRole === 'super_admin' || actualRole === 'admin') {
         finalMultiplier = 1.0;
       } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) {
         finalMultiplier = parseFloat(user.custom_multiplier);
@@ -378,19 +394,13 @@ router.post('/batch', authenticate, async (req, res) => {
         ? parseFloat(service.custom_rate)
         : parseFloat(service.rate);
       const sellRate = baseRate * finalMultiplier;
-      const charge = parseFloat(((qty / 1000) * sellRate).toFixed(4));
+      let charge = parseFloat(((qty / 1000) * sellRate).toFixed(4));
       const upstream_charge = parseFloat(((qty / 1000) * parseFloat(service.rate)).toFixed(4));
 
       // 🔒 价格护栏：charge 非正/非法直接拒该条（防负数倍率刷余额）
       if (!isFinite(charge) || charge <= 0) {
         await t.rollback();
         results.push({ serviceId, link, quantity, status: 'error', message: '价格异常，请联系管理员' });
-        continue;
-      }
-
-      if (user && parseFloat(user.balance) - totalCharge < parseFloat(charge)) {
-        await t.rollback();
-        results.push({ serviceId, link, quantity, status: 'error', message: `余额不足，需要 ¥${charge}` });
         continue;
       }
 
@@ -405,6 +415,11 @@ router.post('/batch', authenticate, async (req, res) => {
           results.push({ serviceId, link, quantity, status: 'error', message: '价格异常，请联系站长' });
           continue;
         }
+        // 🛡 兜底护栏：售价不得低于站长成本（与 /add 同口径）
+        if (charge < siteCost) {
+          console.warn(`[batch] 售价低于分站成本，已抬平：charge=${charge} siteCost=${siteCost} site=${req.site.id}`);
+          charge = siteCost;
+        }
         // 🔒 站长余额加行锁（批量下单同 /add）
         siteOwner = await User.findByPk(req.site.owner_id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!siteOwner) {
@@ -417,6 +432,13 @@ router.post('/batch', authenticate, async (req, res) => {
           results.push({ serviceId, link, quantity, status: 'error', message: '本站当前无法接单，请联系客服补充库存' });
           continue;
         }
+      }
+
+      // 💰 余额校验放在"最终售价"确定之后
+      if (user && parseFloat(user.balance) - totalCharge < charge) {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: `余额不足，需要 ¥${charge}` });
+        continue;
       }
 
       const payloadObj = { key: conf.upstream_key, action: 'add', service: serviceId, link, quantity: qty };
