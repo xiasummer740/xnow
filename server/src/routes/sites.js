@@ -5,7 +5,7 @@ import { Site, User, Config } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
 import multer from 'multer';
 import fs from 'fs';
@@ -794,9 +794,22 @@ router.delete('/:id', authenticate, async (req, res) => {  if (!['admin', 'super
     const moved = await User.update({ site_id: 0 }, { where: { site_id: site.id } });
 
     // 域名 vhost 与证书一并清理（先于删记录，删了就找不到域名了）
-    if (site.custom_domain) {
-      try { removeVhost(site.id, site.custom_domain); reloadNginx(); } catch (e) {}
+    // ⚠️ 免费子域名走的是 site.domain，不是 custom_domain ——
+    //    只清 custom_domain 会留下"已删除的店"的 vhost 继续对外服务，
+    //    而站点记录已没了 → 访客会看到主站首页（等于暴露平台）。
+    //    所以两个字段都要清，最后统一 reload 一次。
+    let needReload = false;
+    for (const d of [site.custom_domain, site.domain]) {
+      if (!d) continue;
+      try {
+        if (removeVhost(site.id, d, { keepCert: true })) needReload = true;
+        // 🪦 立墓碑：410 Gone。
+        //    不立的话，vhost 一删该域名就落到 nginx 默认 server（= 主站首页）——
+        //    已删除的店域名还能打开、还显示平台的样子，等于把平台暴露给对方。
+        if (parkDomain(d)) needReload = true;
+      } catch (e) {}
     }
+    if (needReload) { try { reloadNginx(); } catch (e) {} }
 
     await site.destroy();
     bustSiteCache();

@@ -127,6 +127,8 @@ export const ensureCert = async (domain) => {
 
 // 写 vhost：HTTP 跳 HTTPS + HTTPS 反代到分站后端端口，静态根指向分站 dist
 export const writeVhost = ({ siteId, domain, backendPort, distRoot, cert }) => {
+  // 写真实 vhost 前先拆掉该域名的墓碑（410），否则同域名出现两份配置
+  try { unparkDomain(domain); } catch (e) {}
   const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
   const file = vhostPath(siteId, safe);
   const conf = `# 自动生成：分站 ${siteId} 自有域名 ${safe}
@@ -183,7 +185,58 @@ export const reloadNginx = () => {
   execSync('nginx -s reload', { stdio: 'pipe', timeout: 30000 });
 };
 
-export const removeVhost = (siteId, domain) => {
+// 🧹 删站要连证书一起清：
+//    只删 vhost、留下 /etc/nginx/ssl/<域名>.crt|key，删一百个站就攒一百对废证书；
+//    更要紧的是 —— 删的若是站点当前用的配置，残留配置会让"已删除的店"继续对外可访问，
+//    而站点记录已不存在 → 访客会看到主站首页，等于把平台暴露出去。
+export const removeVhost = (siteId, domain, opts = {}) => {
+  let removed = false;
   const file = vhostPath(siteId, domain);
-  try { if (fs.existsSync(file)) fs.unlinkSync(file); return true; } catch (e) { return false; }
+  try { if (fs.existsSync(file)) { fs.unlinkSync(file); removed = true; } } catch (e) {}
+  if (opts.keepCert) return removed;
+  const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
+  for (const ext of ['.crt', '.key']) {
+    const p = path.join(SSL_DIR, `${safe}${ext}`);
+    try { if (fs.existsSync(p)) { fs.unlinkSync(p); removed = true; } } catch (e) {}
+  }
+  return removed;
+};
+
+// 🪦 已释放的域名要立"墓碑"：
+//    直接删掉 vhost 会让该域名落到 nginx 的默认 server（= 主站首页），
+//    已删除的店域名仍能打开、还显示平台的样子 —— 等于把平台暴露出去。
+//    所以删站后写一个 return 410 的占位 vhost：域名不会被别人抢去，
+//    访客看到的是"该站点已下线"，而不是平台首页。
+export const gonePath = (domain) =>
+  path.join(NGINX_DIR, `xnow-gone-${String(domain).replace(/[^a-z0-9.-]/gi, '')}`);
+
+export const parkDomain = (domain) => {
+  const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
+  if (!safe) return false;
+  const body = `# 自动生成：域名 ${safe} 已释放（原分站已删除）
+# 由 server/src/utils/siteDomain.js 写入，请勿手工编辑
+server {
+    listen 80;
+    server_name ${safe};
+    return 410;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${safe};
+    ssl_certificate     /etc/nginx/ssl/${safe}.crt;
+    ssl_certificate_key /etc/nginx/ssl/${safe}.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    return 410;
+}
+`;
+  try { fs.writeFileSync(gonePath(domain), body); return true; } catch (e) { return false; }
+};
+
+export const unparkDomain = (domain) => {
+  try {
+    const p = gonePath(domain);
+    if (fs.existsSync(p)) { fs.unlinkSync(p); return true; }
+  } catch (e) {}
+  return false;
 };
