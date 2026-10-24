@@ -404,7 +404,7 @@ router.post('/', authenticate, async (req, res) => {
     let publishNote = '';
     {
       try {
-        const cert = await ensureCert(cleanDomain);
+        const cert = await ensureCert(cleanDomain, process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist'));
         const backendPort = parseInt(process.env.PORT) || 3000;
         const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
         writeVhost({ siteId: site.id, domain: cleanDomain, backendPort, distRoot, cert });
@@ -724,7 +724,7 @@ router.post('/:id/domain', authenticate, async (req, res) => {
     }
 
     // ② 证书 + ③ vhost
-    const cert = await ensureCert(domain);
+    const cert = await ensureCert(domain, process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist'));
     const backendPort = parseInt(process.env.PORT) || 3000;
     const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
     writeVhost({ siteId: site.id, domain, backendPort, distRoot, cert });
@@ -827,7 +827,7 @@ router.post('/:id/publish', authenticate, async (req, res) => {
     if (!isFreeSubdomain(site.domain)) {
       return res.json({ status: 'error', message: '自有域名请用「绑定域名」功能' });
     }
-    const cert = await ensureCert(site.domain);
+    const cert = await ensureCert(site.domain, process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist'));
     const backendPort = parseInt(process.env.PORT) || 3000;
     const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
     writeVhost({ siteId: site.id, domain: site.domain, backendPort, distRoot, cert });

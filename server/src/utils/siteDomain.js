@@ -110,40 +110,43 @@ export const verifyDomainOwnership = async (domain, token) => {
 };
 
 // 证书：有 certbot 就用 LE，没有就自签（保证能用，但标 insecure）
-export const ensureCert = async (domain) => {
+export const ensureCert = async (domain, webroot) => {
   const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
   const crt = path.join(SSL_DIR, `${safe}.crt`);
   const key = path.join(SSL_DIR, `${safe}.key`);
+  const leCrt = path.join('/etc/letsencrypt/live', safe, 'fullchain.pem');
+  const leKey = path.join('/etc/letsencrypt/live', safe, 'privkey.pem');
 
-  // 已有 Let's Encrypt 证书
-  const le = path.join('/etc/letsencrypt/live', safe, 'fullchain.pem');
-  if (fs.existsSync(le)) {
-    return { crt: le, key: path.join('/etc/letsencrypt/live', safe, 'privkey.pem'), mode: 'letsencrypt' };
-  }
-  if (fs.existsSync(crt) && fs.existsSync(key)) {
-    return { crt, key, mode: 'existing' };
-  }
+  // ① 已经是正式证书，直接用
+  if (fs.existsSync(leCrt)) return { crt: leCrt, key: leKey, mode: 'letsencrypt' };
 
-  // 尝试 certbot
+  // ② 有 certbot 就**先试着签正式证书**
+  //    ⚠️ 注意顺序：早期版本先看 /etc/nginx/ssl/<域名>.crt，那里一旦躺着一张自签证书，
+  //    就再也不会尝试正式证书 —— 等于自签永久卡位。签过自签的站永远升级不了。
   let hasCertbot = false;
   try { execSync('command -v certbot', { stdio: 'ignore' }); hasCertbot = true; } catch (e) { hasCertbot = false; }
 
   if (hasCertbot) {
+    // 优先用 webroot：不改 nginx 配置（--nginx 会就地改我们自动生成的 vhost，容易打架）
+    const auth = webroot && fs.existsSync(webroot)
+      ? `--webroot -w ${webroot}`
+      : '--nginx';
     try {
       execSync(
-        `certbot certonly --nginx -d ${safe} --non-interactive --agree-tos ` +
+        `certbot certonly ${auth} -d ${safe} --non-interactive --agree-tos ` +
         `--register-unsafely-without-email --keep-until-expiring`,
         { stdio: 'pipe', timeout: 180000 }
       );
-      if (fs.existsSync(path.join('/etc/letsencrypt/live', safe, 'fullchain.pem'))) {
-        return { crt: path.join('/etc/letsencrypt/live', safe, 'fullchain.pem'), key: path.join('/etc/letsencrypt/live', safe, 'privkey.pem'), mode: 'letsencrypt' };
-      }
+      if (fs.existsSync(leCrt)) return { crt: leCrt, key: leKey, mode: 'letsencrypt' };
     } catch (e) {
-      // 落到自签
+      // 签不下来（比如域名没解析到本机）—— 落到自签，站照样能开
     }
   }
 
-  // 自签兜底（openssl 在绝大多数镜像里都有）
+  // ③ 已有自签证书：复用
+  if (fs.existsSync(crt) && fs.existsSync(key)) return { crt, key, mode: 'existing' };
+
+  // ④ 自签兜底（openssl 在绝大多数镜像里都有）
   execSync(
     `openssl req -x509 -nodes -newkey rsa:2048 -days 3650 ` +
     `-keyout ${key} -out ${crt} -subj "/CN=${safe}"`,

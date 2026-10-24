@@ -544,3 +544,32 @@ Beta 的 vhost 里写着 `server_name beta.xnow.taikon.top beta.taikon.top *.xno
 ### ④ 顺带改掉一个平台内部叫法
 分站侧边栏原来显示「**大佬充值**」（平台内部的玩笑叫法），客户看到会莫名其妙。
 改为分站显示「账户充值」，主站保持原样（`isSubsite` 条件渲染，主站一个字没变）。
+
+## 11. 祥哥 2026-10-25 拍板的两件事（68 期落地）
+
+### ① 倍率保留成本保护底线 —— 维持现状，并把「真实下限」告诉站长
+结论：**B 方案不采用**，继续保留"卖不到成本价就不许填"的护栏。
+代码无需改动（逻辑早已就位），本轮补的是**告知**：
+站长后台原来写「倍率（1~100）」，看着像 1 倍就能卖，可实际下限是 1.25（= 他的进价），
+填 1 会被拒。现在直接显示「倍率（**1.25**~100）」，并加一行白话：
+「低于 1.25 倍就亏本了，系统不让填。3 倍 = 客户看到的价格是基础价的 3 倍。」
+（数值来自 `GET /api/sites` 返回的 `min_multiplier`，随代理折扣与全局倍率实时变化。）
+
+### ② 装 certbot，上正式证书 —— 已完成
+| 步骤 | 结果 |
+|---|---|
+| 安装 | `certbot 0.40.0` ✅，`certbot.timer` 已启用 ✅ |
+| 自动续期 | `certbot renew --dry-run` → **all renewals succeeded** ✅ |
+| 续期后重载 nginx | 已装 deploy hook `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` ✅（否则证书换了 nginx 还拿旧的） |
+| demostore.taikon.top | **Let's Encrypt 正式证书**，`curl` 不加 `-k` 校验通过（verify=0），有效期至 2027-01-22 ✅ |
+| laozhang.taikon.top | 同上，已从自签升级为正式证书 ✅ |
+| t1.xnow.taikon.top | 仍是自签 —— 该域名没有公网解析，Let's Encrypt 无法验证（预期行为，不是 bug）✅ |
+
+### ③ 顺手修掉一个会让"正式证书永远上不去"的 bug
+`ensureCert()` 原来的顺序是：先看 `/etc/nginx/ssl/<域名>.crt` 有没有 → 有就直接复用。
+问题是：**只要历史上签过一次自签证书，那张自签就会永久卡位**，以后即使装了 certbot 也永远不会再试正式证书
+（laozhang 就是这样卡住的，第一次重发布后仍是自签）。
+改为：正式证书 → **certbot 现场签**（用 `--webroot` 不改 nginx 配置）→ 才轮到旧自签 → 最后新签自签。
+修完 laozhang 一次「修复域名」就从自签升级成正式证书 ✅
+
+生产证书（`/etc/nginx/ssl/xnow.crt`）**一个字没动** ✅

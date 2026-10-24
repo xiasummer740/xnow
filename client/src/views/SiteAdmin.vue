@@ -79,8 +79,10 @@
             <input v-model="form.name" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1">倍率（1~100）</label>
-            <input v-model.number="form.multiplier" type="number" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+            <!-- 下限不是 1：低于「你的进价」等于每单倒贴，祥哥 2026-10-25 定调保留这条底线 -->
+            <label class="block text-xs text-slate-400 mb-1">倍率（{{ minMul }}~100）</label>
+            <input v-model.number="form.multiplier" type="number" step="0.1" :min="minMul" max="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+            <p class="text-[10px] text-slate-500 mt-1">低于 {{ minMul }} 倍就亏本了，系统不让填。3 倍 = 客户看到的价格是基础价的 3 倍。</p>
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">页脚版权</label>
