@@ -30,7 +30,11 @@ export const siteMiddleware = async (req, res, next) => {
       siteCache.clear();
       const allSites = await Site.findAll({ where: { status: 'active' } });
       allSites.forEach(s => {
+        // 子域名（免费）与自有域名（付费绑定）都要能被识别。
+        // ⚠️ 两者必须分开存：否则站长绑一个验证不通过的自有域名时，
+        //    会把原来的子域名顶掉 → 他的站当场失联。这是实际踩过的坑。
         if (s.domain) siteCache.set(s.domain.toLowerCase(), s.toJSON());
+        if (s.custom_domain) siteCache.set(String(s.custom_domain).toLowerCase(), s.toJSON());
       });
       cacheTime = Date.now();
     }

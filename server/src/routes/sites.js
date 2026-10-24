@@ -404,12 +404,22 @@ router.post('/:id/domain', authenticate, async (req, res) => {
     // 🔒 黑名单：主站域名与上游域名绝不允许被分站接管
     if (isDomainForbidden(domain)) return res.json({ status: 'error', message: '该域名不可绑定' });
 
-    // 已被别的分站占用
+    // 已被别的分站占用（子域名与自有域名都要查，否则会出现两个站抢同一个域名）
     const other = await Site.findOne({ where: { domain } });
-    if (other && other.id !== site.id) return res.json({ status: 'error', message: '该域名已被其他分站使用' });
+    const otherCustom = await Site.findOne({ where: { custom_domain: domain } });
+    if ((other && other.id !== site.id) || (otherCustom && otherCustom.id !== site.id)) {
+      return res.json({ status: 'error', message: '该域名已被其他分站使用' });
+    }
+
+    // 防刷：60 秒内不允许重复尝试（每次都会打 DNS / 可能触发 certbot 申请）
+    if (site.domain_status !== 'active' && site.updatedAt && Date.now() - new Date(site.updatedAt).getTime() < 60000) {
+      return res.json({ status: 'error', message: '操作过于频繁，请 60 秒后再试' });
+    }
 
     if (!site.domain_token) site.domain_token = crypto.randomBytes(16).toString('hex');
-    site.domain = domain;
+    // ⚠️ 注意：写入的是 custom_domain，**绝不覆盖 domain**。
+    //    否则验证失败时站长原来的免费子域名会一起失效，站直接失联。
+    site.custom_domain = domain;
 
     // ① 归属验证
     const dns = await verifyDomainOwnership(domain, site.domain_token);
@@ -471,10 +481,11 @@ router.delete('/:id/domain', authenticate, async (req, res) => {
     if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
       return res.status(403).json({ status: 'error', message: '无权操作此分站' });
     }
-    removeVhost(site.id, site.domain);
+    removeVhost(site.id, site.custom_domain);
     try { reloadNginx(); } catch (e) {}
     site.domain_status = 'none';
     site.cert_mode = null;
+    site.custom_domain = null;
     await site.save();
     bustSiteCache();
     res.json({ status: 'success', message: '域名配置已清理' });

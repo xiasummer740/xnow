@@ -98,6 +98,7 @@ const run = async () => {
     ['domain_status', "ENUM('none','pending','active','failed') NOT NULL DEFAULT 'none'"],
     ['domain_token',  'VARCHAR(64) NULL'],
     ['cert_mode',     'VARCHAR(16) NULL'],
+    ['custom_domain', 'VARCHAR(255) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {
