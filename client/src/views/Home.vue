@@ -4,12 +4,12 @@
       <div class="flex items-center space-x-3">
         <img v-if="!appStore.isSubsite || (appStore.siteLogo && appStore.siteLogo !== '/logo.png')" :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
         <div v-else class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)] rounded-xl grid place-items-center font-black text-lg" style="background:rgba(148,163,184,.14);color:#e2e8f0">{{ (appStore.siteName || '·').trim().charAt(0) }}</div>
-        <span class="text-2xl md:text-3xl font-black italic tracking-widest site-brand-text">{{ appStore.siteName || 'XNOW' }}</span>
+        <span class="text-lg sm:text-2xl md:text-3xl font-black italic tracking-wider md:tracking-widest site-brand-text truncate max-w-[46vw] sm:max-w-[55vw]">{{ appStore.siteName || 'XNOW' }}</span>
       </div>
       <div class="flex items-center space-x-4 md:space-x-6">
         <button @click="toggleLangRoute" class="text-slate-300 hover:text-white font-bold transition text-sm md:text-base select-none">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
-        <router-link v-if="userStore.token" to="/order" class="site-btn bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.t('console') || '控制台' }}</router-link>
-        <router-link v-else to="/login" class="site-btn bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '登录 / 注册' : 'Login / Register' }}</router-link>
+        <router-link v-if="userStore.token" to="/order" class="site-btn whitespace-nowrap px-4 py-2 text-xs sm:text-sm md:px-6 md:py-3 md:text-base bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.t('console') || '控制台' }}</router-link>
+        <router-link v-else to="/login" class="site-btn whitespace-nowrap px-4 py-2 text-xs sm:text-sm md:px-6 md:py-3 md:text-base bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '登录 / 注册' : 'Login / Register' }}</router-link>
       </div>
     </header>
 

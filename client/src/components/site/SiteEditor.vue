@@ -13,6 +13,7 @@
       <div class="site-edit-bar">
         <span class="site-edit-tip">✏️ 编辑中 · 点区块标题改文案，用 ↑ ↓ 换位置，🙈 隐藏</span>
         <div class="site-edit-actions">
+          <button class="site-edit-btn ghost" @click="openTpl">🧩 换模板</button>
           <button class="site-edit-btn ghost" @click="openLook">🎨 外观</button>
           <button class="site-edit-btn ghost" @click="reset">恢复默认</button>
           <button class="site-edit-btn ghost" @click="cancel">放弃</button>
@@ -22,6 +23,26 @@
         </div>
       </div>
 
+
+
+      <!-- 🧩 模板选择：给的是缩略图，不是"经典版/极简版"这种看不懂的词 -->
+      <div v-if="tplOpen" class="site-sheet-mask" @click.self="tplOpen = false">
+        <div class="site-sheet site-look">
+          <p class="site-look-title">换一套骨架</p>
+          <p class="site-look-hint" style="margin:0 0 12px">点一下就能预览，满意再点「保存」。不喜欢随时换回来。</p>
+          <div class="site-tpl-grid">
+            <button v-for="t in TEMPLATES" :key="t.key" class="site-tpl" :class="{ on: tplPick === t.key }"
+                    @click="applyTpl(t.key)">
+              <span class="site-tpl-thumb" v-html="t.svg"></span>
+              <span class="site-tpl-name">{{ t.name }}</span>
+              <span class="site-tpl-desc">{{ t.desc }}</span>
+            </button>
+          </div>
+          <div class="site-sheet-actions">
+            <button class="site-edit-btn ghost" @click="tplOpen = false">关闭</button>
+          </div>
+        </div>
+      </div>
 
       <!-- 🎨 外观抽屉：只有三组，每组一句人话建议（不出现 HEX / px）-->
       <div v-if="lookOpen" class="site-sheet-mask" @click.self="lookOpen = false">
@@ -216,6 +237,111 @@ const paintToolbars = () => {
   });
 };
 
+
+
+// ── 🧩 模板选择（缩略图）─────────────────────────────────────────
+const tplOpen = ref(false);
+const tplPick = ref('');
+const tplSaving = ref(false);
+
+// 缩略图直接用 SVG 画，避免额外图片请求；颜色用当前主色，看起来就是他自己的站
+const thumb = (body, bg) => `<svg viewBox="0 0 120 84" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
+  <rect width="120" height="84" fill="${bg}"/>${body}</svg>`;
+
+const TEMPLATES = [
+  {
+    key: 'classic', name: '经典', desc: '居中大标题 + 卡片',
+    svg: thumb(`
+      <rect x="34" y="14" width="52" height="7" rx="3" fill="#fff" opacity=".85"/>
+      <rect x="44" y="26" width="32" height="4" rx="2" fill="#fff" opacity=".35"/>
+      <rect x="30" y="38" width="26" height="18" rx="3" fill="#fff" opacity=".12"/>
+      <rect x="60" y="38" width="26" height="18" rx="3" fill="#fff" opacity=".12"/>
+      <rect x="44" y="62" width="32" height="8" rx="4" fill="#22d3ee"/>`, '#0b1220')
+  },
+  {
+    key: 'saas', name: 'SaaS', desc: '左右分栏 + 数据块',
+    svg: thumb(`
+      <rect x="10" y="16" width="42" height="7" rx="3" fill="#fff" opacity=".85"/>
+      <rect x="10" y="28" width="34" height="4" rx="2" fill="#fff" opacity=".35"/>
+      <rect x="10" y="38" width="26" height="8" rx="4" fill="#22d3ee"/>
+      <rect x="62" y="14" width="48" height="34" rx="4" fill="#fff" opacity=".12"/>
+      <rect x="62" y="54" width="22" height="16" rx="3" fill="#fff" opacity=".1"/>
+      <rect x="88" y="54" width="22" height="16" rx="3" fill="#fff" opacity=".1"/>`, '#08111f')
+  },
+  {
+    key: 'minimal', name: '极简', desc: '左对齐 + 细线',
+    svg: thumb(`
+      <rect x="12" y="14" width="60" height="8" rx="2" fill="#fff" opacity=".9"/>
+      <rect x="12" y="28" width="40" height="3" rx="1.5" fill="#fff" opacity=".35"/>
+      <line x1="12" y1="40" x2="108" y2="40" stroke="#fff" stroke-opacity=".2"/>
+      <rect x="12" y="46" width="80" height="3" rx="1.5" fill="#fff" opacity=".5"/>
+      <rect x="12" y="54" width="64" height="3" rx="1.5" fill="#fff" opacity=".3"/>
+      <line x1="12" y1="64" x2="108" y2="64" stroke="#fff" stroke-opacity=".2"/>
+      <rect x="12" y="70" width="46" height="3" rx="1.5" fill="#fff" opacity=".3"/>`, '#04070f')
+  },
+  {
+    key: 'neon', name: '霓虹', desc: '终端风 + 荧光描边',
+    svg: thumb(`
+      <rect x="14" y="12" width="92" height="60" rx="3" fill="none" stroke="#22d3ee" stroke-opacity=".8"/>
+      <rect x="22" y="22" width="30" height="3" rx="1.5" fill="#22d3ee"/>
+      <rect x="22" y="32" width="56" height="3" rx="1.5" fill="#22d3ee" opacity=".5"/>
+      <rect x="22" y="42" width="44" height="3" rx="1.5" fill="#22d3ee" opacity=".35"/>
+      <rect x="22" y="54" width="20" height="8" rx="2" fill="#22d3ee" opacity=".9"/>`, '#05060f')
+  },
+  {
+    key: 'magazine', name: '杂志', desc: '排名列表 + 大标题',
+    svg: thumb(`
+      <rect x="12" y="12" width="74" height="9" rx="2" fill="#fff" opacity=".9"/>
+      <rect x="12" y="26" width="34" height="3" rx="1.5" fill="#fff" opacity=".3"/>
+      <circle cx="18" cy="42" r="5" fill="#22d3ee"/>
+      <rect x="28" y="39" width="54" height="4" rx="2" fill="#fff" opacity=".6"/>
+      <circle cx="18" cy="56" r="5" fill="#fff" opacity=".25"/>
+      <rect x="28" y="53" width="46" height="4" rx="2" fill="#fff" opacity=".45"/>
+      <circle cx="18" cy="70" r="5" fill="#fff" opacity=".25"/>
+      <rect x="28" y="67" width="38" height="4" rx="2" fill="#fff" opacity=".35"/>`, '#0a0f1c')
+  },
+  {
+    key: 'glass', name: '玻璃', desc: '分栏 + 磨砂卡片',
+    svg: thumb(`
+      <rect x="10" y="14" width="40" height="7" rx="3" fill="#fff" opacity=".85"/>
+      <rect x="10" y="26" width="30" height="3" rx="1.5" fill="#fff" opacity=".3"/>
+      <rect x="10" y="36" width="24" height="8" rx="4" fill="#22d3ee"/>
+      <rect x="60" y="12" width="50" height="24" rx="6" fill="#fff" fill-opacity=".16" stroke="#fff" stroke-opacity=".35"/>
+      <rect x="60" y="42" width="50" height="24" rx="6" fill="#fff" fill-opacity=".16" stroke="#fff" stroke-opacity=".35"/>
+      <rect x="68" y="20" width="30" height="3" rx="1.5" fill="#fff" opacity=".7"/>
+      <rect x="68" y="50" width="30" height="3" rx="1.5" fill="#fff" opacity=".7"/>`, '#0c1526')
+  }
+];
+
+const openTpl = () => {
+  tplPick.value = appStore.themeTemplate || '';
+  tplOpen.value = true;
+};
+
+const applyTpl = async (key) => {
+  tplPick.value = key;
+  // 先本地立刻预览，再落库（失败则退回原模板，不留"看着变了其实没保存"的状态）
+  const prev = appStore.themeTemplate;
+  appStore.themeTemplate = key;
+  appStore.applyTheme();
+  tplSaving.value = true;
+  try {
+    const res = await fetch(`/api/sites/${appStore.siteId || ''}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify({ template: key })
+    });
+    const j = await res.json();
+    if (j.status !== 'success') throw new Error(j.message || '保存失败');
+  } catch (e) {
+    appStore.themeTemplate = prev;
+    appStore.applyTheme();
+    tplPick.value = prev;
+    alert('换模板失败：' + e.message);
+  } finally {
+    tplSaving.value = false;
+  }
+};
 
 // ── 🎨 外观三板斧 ───────────────────────────────────────────────
 const lookOpen = ref(false);
@@ -419,6 +545,14 @@ onBeforeUnmount(exit);
 .site-look-seg { display: flex; gap: 8px; }
 .site-seg { padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(148,163,184,.35); background: transparent; color: #cbd5e1; font-size: 13px; cursor: pointer; }
 .site-seg.on { background: var(--brand, #22d3ee); color: #04070f; border-color: transparent; font-weight: 800; }
+
+.site-tpl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.site-tpl { background: transparent; border: 1px solid rgba(148,163,184,.3); border-radius: 12px; padding: 8px; cursor: pointer; text-align: left; }
+.site-tpl.on { border-color: #22d3ee; box-shadow: 0 0 0 3px rgba(34,211,238,.16); }
+.site-tpl-thumb { display: block; width: 100%; aspect-ratio: 120 / 84; border-radius: 8px; overflow: hidden; }
+.site-tpl-name { display: block; color: #f1f5f9; font-size: 12px; font-weight: 700; margin-top: 6px; }
+.site-tpl-desc { display: block; color: #64748b; font-size: 10px; margin-top: 2px; }
+@media (max-width: 640px) { .site-tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 
 <style>

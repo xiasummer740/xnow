@@ -493,3 +493,7 @@ html[data-template="glass"] #app-root {
 }
 /* 字号档位：小 0.94 / 标准 1 / 大 1.08（用根字号缩放，rem 单位全套跟着变）*/
 html[data-template] { font-size: calc(16px * var(--site-font-scale, 1)) !important; }
+/* 六十四期：手机上大标题换行容易甩出一个孤字（"…专业的 / 人"）。
+   text-wrap: balance 让两行长度更均匀；仅分站生效。 */
+html[data-template] h1,
+html[data-template] h2 { text-wrap: balance; }
