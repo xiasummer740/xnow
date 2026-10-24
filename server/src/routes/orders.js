@@ -222,7 +222,10 @@ router.post('/add', authenticate, async (req, res) => {
       await siteOwner.save({ transaction: t });
       await Transaction.create({
         user_id: siteOwner.id, phone: siteOwner.phone, amount: -siteCost, balance: siteOwner.balance,
-        type: '分站成本扣款', description: `分站订单成本 服务[ID:${serviceId}] 数量:${qty}`
+        type: '分站成本扣款', description: `分站订单成本 服务[ID:${serviceId}] 数量:${qty}`,
+      // 72期：流水必须落到分站上。之前写的是 0，站长按分站查自己的成本/收益时
+      // 这些单子全被算到"主站"名下 —— 对账差钱，而且很难查。
+      site_id: req.site ? Number(req.site.id) : 0
       }, { transaction: t });
     }
 
@@ -266,7 +269,8 @@ router.post('/add', authenticate, async (req, res) => {
       if (user) {
         await Transaction.create({
           user_id: user.id, phone: user.phone, amount: -chargeFinal, balance: user.balance, 
-          type: '订单扣款', description: `购买服务 [ID:${serviceId}] 数量:${quantity}`
+          type: '订单扣款', description: `购买服务 [ID:${serviceId}] 数量:${quantity}`,
+      site_id: req.site ? Number(req.site.id) : 0
         }, { transaction: t });
       }
       
@@ -466,7 +470,8 @@ router.post('/batch', authenticate, async (req, res) => {
 
           await Transaction.create({
             user_id: user.id, phone: user.phone, amount: -charge, balance: user.balance,
-            type: '批量订单扣款', description: `批量购买 [ID:${serviceId}] ${service.name} 数量:${qty}`
+            type: '批量订单扣款', description: `批量购买 [ID:${serviceId}] ${service.name} 数量:${qty}`,
+      site_id: req.site ? Number(req.site.id) : 0
           }, { transaction: t });
         }
 
@@ -476,7 +481,8 @@ router.post('/batch', authenticate, async (req, res) => {
           await siteOwner.save({ transaction: t });
           await Transaction.create({
             user_id: siteOwner.id, phone: siteOwner.phone, amount: -siteCost, balance: siteOwner.balance,
-            type: '分站成本扣款', description: `分站批量订单成本 ${orderNo} [ID:${serviceId}] 数量:${qty}`
+            type: '分站成本扣款', description: `分站批量订单成本 ${orderNo} [ID:${serviceId}] 数量:${qty}`,
+      site_id: req.site ? Number(req.site.id) : 0
           }, { transaction: t });
         }
 
