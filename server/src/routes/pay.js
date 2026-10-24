@@ -119,9 +119,19 @@ router.post('/usd', authenticate, async (req, res) => {
             addPendingPayment({ order_id, user_id: req.user.id, amount: amountFloat, pay_type: 'USDT' });
             res.json({ status: 'success', url: response.data.result.url });
         }
-        else res.json({ status: 'error', message: '网关未返回支付链接' });
-    } catch (e) { 
-        res.json({ status: 'error', message: `网关阻断，请联系管理员` }); 
+        else {
+            // 🔴 Cryptomus 常以 HTTP 200 + {state:0,message} 的形式报参数/密钥错误，必须落日志
+            console.error(`❌ [Cryptomus] 开票被拒 order=${order_id} 返回=${JSON.stringify(response.data).slice(0, 300)}`);
+            res.json({ status: 'error', message: '网关未返回支付链接' });
+        }
+    } catch (e) {
+        // 🔴 这里曾把真实错误完全吞掉（只剩"网关阻断"），导致"USDT 充值全坏"长期无人发现。
+        //    常见根因：Cryptomus 的 Payment API Key 与商户号不属于同一账户 / 密钥被重置。
+        const detail = e?.response
+            ? `HTTP ${e.response.status} ${JSON.stringify(e.response.data).slice(0, 300)}`
+            : (e?.code || e?.message || String(e));
+        console.error(`❌ [Cryptomus] 开票失败：${detail}`);
+        res.json({ status: 'error', message: `网关阻断，请联系管理员` });
     }
 });
 
