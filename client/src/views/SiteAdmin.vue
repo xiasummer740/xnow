@@ -58,7 +58,7 @@
             </div>
           </li>
         </ul>
-        <p class="text-[10px] text-slate-500 mt-3">清单只是提醒，不拦着你开卖。但如果「收款」没配，客户充不了值；「发信」没配，客户注册不了。</p>
+        <p class="text-[10px] text-slate-500 mt-3">清单只是提醒，不拦着你开卖。但「收款」没配，客户充不了值；「发信」没配，客户收到的邮件会从平台邮箱发出（个别情况下甚至发不出去）。</p>
       </section>
 
       <!-- 收益看板 -->
@@ -486,7 +486,7 @@
       <!-- 邮件 -->
       <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">发信邮箱（客户收到的验证码用你的品牌）</h2>
-        <p class="text-[11px] text-slate-500">不填则用平台邮箱发，客户会看到平台品牌。</p>
+        <p class="text-[11px] text-slate-500">不填也能用：邮件标题、正文和署名仍然是你的品牌，但<b class="text-amber-400">发件地址会是平台的邮箱</b>，客户点开「显示详情」能看到平台域名。想让客户完全看不到平台，就用自己域名注册一个邮箱填进来（QQ 邮箱、企业邮箱都行，两分钟）。</p>
         <div class="grid md:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs text-slate-400 mb-1">SMTP 主机</label>

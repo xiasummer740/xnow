@@ -336,9 +336,30 @@ html[data-color] .site-card {
    ══════════════════════════════════════════════════════════════ */
 
 /* 极简 / 杂志：标题左对齐、卡片变细线行（不居中、无圆角、无底色） */
+/* ⚠️ 六十一期：原来只有 max-width，没有 margin auto。
+   结果 hero / 热门服务这类自带 mx-auto 的区块居中，而「三张卖点卡」「底部 CTA」
+   这类没有 mx-auto 的区块贴在页面左边 —— 整页左一个右一个，祥哥一眼就看出来了。*/
 html[data-template="minimal"] .site-section,
 html[data-template="magazine"] .site-section {
-  max-width: 46rem !important;
+  /* ⚠️ width:100% 不能省：父级是 flex 纵向容器，元素一旦有 margin:auto
+     就不再被拉伸，会收缩成"内容宽度" —— 每个区块宽度都不一样，正是
+     "左一个右一个"的直接原因。*/
+  width: 100% !important;
+  max-width: 56rem !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+/* 自带背景色的色带保持整幅宽，只把里面的内容对齐到同一列 */
+html[data-template="minimal"] .site-section.site-band,
+html[data-template="magazine"] .site-section.site-band {
+  width: 100% !important;
+  max-width: none !important;
+}
+html[data-template="minimal"] .site-section.site-band > div,
+html[data-template="magazine"] .site-section.site-band > div {
+  max-width: 56rem !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 html[data-template="minimal"] .site-section > h2,
 html[data-template="magazine"] .site-section > h2,
@@ -379,8 +400,26 @@ html[data-template="glass"] .site-section > h2 {
    ══════════════════════════════════════════════════════════════ */
 
 /* ── 杂志版式：左对齐、细线分隔、无卡片底 ── */
+/* ⚠️ 六十一期：这里原来只写了 max-width，没有 margin auto ——
+   于是「三张卖点卡」「底部 CTA」这两个自带背景的区块被卡在 46rem 宽却贴在页面左边，
+   其余区块居中，整页看起来"左一个右一个"，祥哥一眼就指出来了。
+   现在：所有区块统一居中；带背景色的色带保持整幅宽度，只把里面的内容对齐到同一列。*/
 html[data-block="editorial"] .site-section {
-  max-width: 46rem !important;
+  width: 100% !important;
+  max-width: 56rem !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+html[data-block="editorial"] .site-section.site-band {
+  width: 100% !important;
+  max-width: none !important;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+html[data-block="editorial"] .site-section.site-band > div {
+  max-width: 56rem !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 html[data-block="editorial"] .site-section > h2 {
   text-align: left !important;

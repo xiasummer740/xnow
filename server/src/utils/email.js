@@ -3,10 +3,12 @@ import { Config } from '../models/index.js';
 
 // 🏬 支持分站自有 SMTP（三期）
 //   siteCfg = { name, smtp_host, smtp_port, smtp_user, smtp_pass } 或 null
-//   - 有分站 SMTP → 用分站的账号发，发件人/标题/页脚全部是分站品牌，
-//     并且**不带平台招商内容**（"升级至尊代理"那段是平台自己的广告，
-//     出现在分站客户的邮箱里等于当面告诉客户"你的站长是二道贩子"）
-//   - 没有 → 回退到主站 SMTP 与原模板（行为与改造前一致）
+//   - 有分站 SMTP → 用分站的账号发，发件人/标题/页脚全部是分站品牌
+//   - 没有分站 SMTP（新站长第一天的常态）→ 用平台账号代发，但**模板仍用分站品牌**：
+//     六十期实测，原来这条兜底路径会把平台的 XNOW PRO 模板（含"升级至尊代理"广告）
+//     发进站长的客户邮箱 —— 客户收到一封"XNOW PRO 邀请你升级至尊代理"的信，
+//     等于平台亲自去挖站长的客户墙脚，也当场暴露站长是二级代理。
+//     现在：模板选择看「有没有分站品牌」，通道选择看「有没有分站 SMTP」，两件事分开。
 export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
     try {
         const allConfigs = await Config.findAll();
@@ -18,12 +20,15 @@ export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
             }
         });
 
-        const useSite = !!(siteCfg && siteCfg.smtp_user && siteCfg.smtp_pass);
-        const smtp_host = useSite ? siteCfg.smtp_host : (cm['smtp_host'] || 'smtp.qq.com');
-        const smtp_port = parseInt(useSite ? siteCfg.smtp_port : cm['smtp_port']) || 465;
-        const smtp_user = useSite ? siteCfg.smtp_user : (cm['smtp_email'] || cm['smtp_user'] || cm['email_user']);
-        const smtp_pass = useSite ? siteCfg.smtp_pass : cm['smtp_pass'];
-        const brand = (siteCfg && siteCfg.name) ? String(siteCfg.name) : 'XNOW PRO';
+        const useSiteSmtp = !!(siteCfg && siteCfg.smtp_user && siteCfg.smtp_pass);
+        const siteName = (siteCfg && siteCfg.name) ? String(siteCfg.name).trim() : '';
+        // 有站名就用站长的模板（中性文案 + 他的品牌），与走哪个通道无关
+        const useSiteTemplate = !!siteName;
+        const smtp_host = useSiteSmtp ? siteCfg.smtp_host : (cm['smtp_host'] || 'smtp.qq.com');
+        const smtp_port = parseInt(useSiteSmtp ? siteCfg.smtp_port : cm['smtp_port']) || 465;
+        const smtp_user = useSiteSmtp ? siteCfg.smtp_user : (cm['smtp_email'] || cm['smtp_user'] || cm['email_user']);
+        const smtp_pass = useSiteSmtp ? siteCfg.smtp_pass : cm['smtp_pass'];
+        const brand = siteName || 'XNOW PRO';
 
         if (!smtp_host || !smtp_user || !smtp_pass) {
             throw new Error(`SMTP配置缺失: host=${!!smtp_host}, user=${!!smtp_user}, pass=${!!smtp_pass}`);
@@ -39,7 +44,7 @@ export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
             }
         });
 
-        const mailOptions = useSite
+        const mailOptions = useSiteTemplate
           ? {
               from: `"${brand} 验证中心" <${smtp_user}>`,
               to: toEmail,
@@ -122,7 +127,7 @@ export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
             await transporter.sendMail(mailOptions);
             return { success: true };
         } catch (sendErr) {
-            if (!useSite) throw sendErr;
+            if (!useSiteSmtp) throw sendErr;
             // 🏬 分站 SMTP 故障时**不能连累这个站的注册**：
             //    站长配错一个端口，整站客户就收不到验证码、注册不了，
             //    而他只会看到「发送失败」，然后来找平台。

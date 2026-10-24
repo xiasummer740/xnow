@@ -123,7 +123,7 @@
     </section>
 
     <!-- Why us -->
-    <section v-if="appStore.moduleEnabled('advantages')" :style="{ order: appStore.moduleOrder('advantages') }" class="site-section relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
+    <section v-if="appStore.moduleEnabled('advantages')" :style="{ order: appStore.moduleOrder('advantages') }" class="site-section site-band relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
       <div class="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
         <!-- 🧱 分站自定义的三张卡（站长在后台改图标/标题/正文；没填就用下面的默认文案） -->
         <template v-if="appStore.isSubsite && appStore.advantages.length">
