@@ -53,6 +53,12 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
         // 🏬 分站自有商户优先：钱进站长账户，平台不碰
         const siteCreds = req.site ? await sitePayCreds(Number(req.site.id), 'bufpay') : null;
+        // 🔒 分站没配商户时**绝不回退平台商户**：
+        //    否则客户的付款会进平台账户，与「方案②：钱直接进站长账户」的约定相悖，
+        //    平台还要替站长代收代付。改为让客户联系客服手动加余额（方案①兜底）。
+        if (req.site && !siteCreds) {
+          return res.json({ status: 'error', message: '本站在线充值暂未开通，请联系客服充值', code: 'NO_SITE_MERCHANT' });
+        }
         if (siteCreds) { conf.bufpay_id = siteCreds.id; conf.bufpay_key = siteCreds.key; conf.site_name = siteCreds.name; }
         const cleanBufId = (val) => { if (!val) return ''; const match = val.match(/\/(\d+)$/); if (match) return match[1]; return val.replace(/[^0-9]/g, ''); };
         const realBufId = cleanBufId(conf.bufpay_id);
@@ -133,6 +139,10 @@ router.post('/usd', authenticate, async (req, res) => {
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
         // 🏬 分站自有 Cryptomus 优先
         const siteCredsUsd = req.site ? await sitePayCreds(Number(req.site.id), 'cryptomus') : null;
+        // 同上：分站没配 USDT 商户时不许回退平台商户
+        if (req.site && !siteCredsUsd) {
+          return res.json({ status: 'error', message: '本站 USDT 充值暂未开通，请联系客服', code: 'NO_SITE_MERCHANT' });
+        }
         if (siteCredsUsd) { conf.cryptomus_id = siteCredsUsd.id; conf.cryptomus_key = siteCredsUsd.key; }
         if (!conf.cryptomus_id || !conf.cryptomus_key) return res.json({ status: 'error', message: 'USDT商户参数未配置' });
 
