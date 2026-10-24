@@ -28,14 +28,14 @@
           </label>
           <input v-model.number="createForm.multiplier" type="number" step="0.1" min="1" max="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
           <p class="text-[10px] text-amber-500/80 mt-1">
-            提示：平台基础价 × 1 = 1 倍。你的进货价高于 1 倍，所以**卖得低于进货价会亏钱**，系统会拦住。
+            提示：平台基础价 × 1 = 1 倍。你的你的成本价高于 1 倍，所以**卖得低于你的成本价会亏钱**，系统会拦住。
           </p>
         </div>
         <button @click="createSite()" :disabled="creating" class="w-full py-2.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
           {{ creating ? '开通中…' : '立即开通' }}
         </button>
         <p class="text-[11px] text-slate-500 leading-relaxed">
-          开通后你的分站靠预存余额自动发货：客户下单 → 扣客户余额 + 按你的进货价扣你的余额，
+          开通后你的分站靠预存余额自动发货：客户下单 → 扣客户余额 + 按你的你的成本价扣你的余额，
           差额就是你的利润。余额不足会自动拒单，不会产生欠款。
         </p>
       </div>
@@ -505,7 +505,7 @@
           </div>
           <button v-if="customers.length < customerTotal" @click="loadMoreCustomers()" class="w-full mt-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">加载更多</button>
         </div>
-        <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的进货成本</p>
+        <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的成本</p>
       </section>
 
       <div class="flex gap-3">

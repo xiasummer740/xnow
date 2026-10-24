@@ -49,6 +49,11 @@ export const useAppStore = defineStore('app', {
       this.applyTheme();
     } } catch(e) {} this.fetchRate(); },
     applyTheme() {
+    // 🏷️ 三十九期：分站要换掉浏览器标签上的平台名。
+    //    站长把链接发给客户，标签栏写着「XNOW PRO」等于当场告诉客户他在哪进货。
+    if (typeof document !== 'undefined' && this.isSubsite && this.siteName) {
+      document.title = this.siteName;
+    }
       // 只在分站生效：主站不设置 data-template，保持原样
       if (!this.themeTemplate) return;
       const el = document.documentElement;
