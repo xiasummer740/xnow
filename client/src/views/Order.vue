@@ -1,7 +1,8 @@
 <template>
   <div class="max-w-5xl mx-auto space-y-4 md:space-y-6 pb-20 relative">
     
-    <div class="site-card bg-slate-800/80 p-4 md:p-5 rounded-2xl border border-slate-700 flex items-start space-x-3 md:space-x-4 shadow-xl">
+    <!-- 📢 公告为空时整块不显示：只留一个「系统公告」标题的空框，客户会以为站还没做完 -->
+    <div v-if="sysAnnouncement && String(sysAnnouncement).trim()" class="site-card bg-slate-800/80 p-4 md:p-5 rounded-2xl border border-slate-700 flex items-start space-x-3 md:space-x-4 shadow-xl">
       <div class="text-pink-500 mt-1 text-xl md:text-2xl">📢</div>
       <div class="w-full overflow-hidden">
         <h3 class="font-bold text-white mb-1 text-sm md:text-base">{{ appStore.t('sys_notice') }}</h3>
@@ -28,7 +29,7 @@
         <div class="relative">
           <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
             🔍 搜索服务
-            <span class="text-[10px] text-slate-500 ml-2 font-normal">输入服务 ID 或名称关键词，全平台筛选</span>
+            <span class="text-[10px] text-slate-500 ml-2 font-normal">输入服务 ID 或名称关键词，{{ appStore.isSubsite ? '全部服务里筛选' : '全平台筛选' }}</span>
           </label>
           <input type="text" v-model="searchQuery" @focus="searchOpen = true"
             @keydown.enter="searchResults.length && selectSearchResult(searchResults[0])"

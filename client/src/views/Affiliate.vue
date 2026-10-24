@@ -1,9 +1,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useUserStore } from '../stores/user';
+import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
 
 const userStore = useUserStore();
+const appStore = useAppStore();
 const uiStore = useUiStore();
 
 const loading = ref(true);
@@ -50,7 +52,7 @@ onMounted(() => {
         <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl p-8 md:p-10 shadow-[0_20px_50px_rgba(245,158,11,0.3)] relative overflow-hidden text-slate-900 flex flex-col md:flex-row justify-between items-center gap-8">
             <div class="absolute -right-10 -bottom-10 text-9xl opacity-20 transform -rotate-12 pointer-events-none font-black">💰</div>
             <div class="z-10 text-center md:text-left space-y-2">
-                <h2 class="text-3xl md:text-4xl font-black tracking-wider">全民躺赚计划</h2>
+                <h2 class="text-3xl md:text-4xl font-black tracking-wider">{{ appStore.isSubsite ? '推广返佣' : '全民躺赚计划' }}</h2>
                 <p class="text-amber-900 font-bold opacity-90">发送专属链接，每笔充值永久享有 <span class="bg-black text-amber-400 px-2 py-0.5 rounded-lg text-xl">{{ stats.rate * 100 }}%</span> 高额提成！</p>
                 <div class="mt-6">
                     <p class="text-sm font-bold opacity-80 uppercase tracking-widest mb-1">您的累计净赚佣金</p>
@@ -61,7 +63,7 @@ onMounted(() => {
             </div>
             
             <div class="z-10 w-full md:w-auto bg-black/20 backdrop-blur-md border border-white/20 p-5 rounded-2xl shadow-inner">
-                <p class="text-sm font-bold text-white mb-2">👇 您的专属财富密码链接</p>
+                <p class="text-sm font-bold text-white mb-2">{{ appStore.isSubsite ? '👇 您的专属邀请链接' : '👇 您的专属财富密码链接' }}</p>
                 <div class="flex items-center bg-black/40 rounded-xl p-1 border border-white/10">
                     <input type="text" readonly :value="myInviteLink" class="bg-transparent text-amber-200 font-mono text-sm px-3 py-2 w-full md:w-64 outline-none select-all cursor-text" placeholder="生成中...">
                     <button @click="copyLink" class="bg-amber-400 hover:bg-amber-300 text-slate-900 font-black px-4 py-2 rounded-lg transition transform hover:scale-105 shadow-md">一键复制</button>
