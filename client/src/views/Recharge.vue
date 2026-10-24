@@ -11,6 +11,8 @@ const app = useAppStore();
 const payType = ref('wechat');
 const amount = ref(10);
 const loading = ref(false);
+// 🏬 分站没配收款商户时：在线充值不可用，页面要一直提示「联系客服」（toast 一闪就没了，客户会以为按钮坏了）
+const noMerchant = ref(false);
 const txs = ref([]);
 
 const isRMB = computed(() => payType.value === 'wechat' || payType.value === 'alipay');
@@ -113,6 +115,10 @@ const handlePay = async () => {
             const signData = await signRes.json();
             if (signData.status !== 'success') {
                 loading.value = false;
+                if (signData.code === 'NO_SITE_MERCHANT') {
+                    // 🏬 站长还没填自己的收款商户 —— 钱不能进平台账户，只能走人工充值
+                    noMerchant.value = true;
+                }
                 return ui.showToast(signData.message || '获取签名失败', 'error');
             }
             currentOrderId.value = signData.order_id;
@@ -226,6 +232,15 @@ const cleanDescription = (t) => {
                     <button @click="handlePay" :disabled="loading" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-xl py-5 rounded-2xl transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] disabled:opacity-50">
                         {{ loading ? '正在连接收银台...' : app.t('pay_btn') }}
                     </button>
+
+                    <!-- 🏬 站长收款商户还没配好时的常驻说明（toast 一闪就没，客户会以为按钮坏了）-->
+                    <div v-if="noMerchant" class="mt-4 rounded-2xl border border-amber-500/30 bg-amber-400/10 p-4 text-sm text-amber-100 text-left">
+                        <p class="font-bold mb-1">在线充值暂未开通</p>
+                        <p class="text-amber-200/80 text-[13px]">本站暂时只能人工充值：联系客服，告诉他要充多少，客服会把余额直接加到你账户。</p>
+                        <a v-if="app.supportUrl" :href="app.supportUrl" target="_blank" rel="noopener noreferrer"
+                           class="inline-block mt-3 px-4 py-2 rounded-xl bg-amber-400 text-slate-900 font-bold text-sm">联系客服充值</a>
+                        <p v-else class="mt-3 text-amber-200/70 text-[12px]">（本站未提供客服链接，请用你平时的联系方式联系站长）</p>
+                    </div>
                 </div>
             </div>
 
