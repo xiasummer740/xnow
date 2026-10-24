@@ -66,7 +66,12 @@ git pull --ff-only origin "$BRANCH" || die "拉代码失败"
 echo "  现在提交: $(git log --oneline -1)"
 
 step "3. 数据库迁移（必须在重启之前）"
-if MYSQL_PWD="$DBP" mysql -u root xnow_db < "$APP/deploy/sites/migrate-sites.sql" 2>/tmp/migrate-prod.err; then
+# ⚠️ migrate-sites.sql 被 .gitignore 的 *.sql 忽略，git pull 不会带过来。
+#    真正兜底的是 server/src/app.js 里那几条 try/catch 的 ALTER TABLE（每次启动都会补列）。
+#    所以这里文件不存在时只提示、不算失败。
+if [ ! -f "$APP/deploy/sites/migrate-sites.sql" ]; then
+  echo "  迁移文件不存在（被 gitignore），跳过 SQL 迁移 —— 由 app.js 启动时自动补列"
+elif MYSQL_PWD="$DBP" mysql -u root xnow_db < "$APP/deploy/sites/migrate-sites.sql" 2>/tmp/migrate-prod.err; then
   echo "  ✅ 迁移成功（可重复执行，本次是幂等的）"
 else
   echo "  迁移报错，详见 /tmp/migrate-prod.err:"
