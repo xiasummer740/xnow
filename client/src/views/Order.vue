@@ -11,10 +11,10 @@
     </div>
     
     <div class="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-2 md:gap-3">
-      <div v-for="(icon, name) in platforms" :key="name" @click="selectPlatform(name)"
-           :class="['p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 transform', activePlatform === name ? 'bg-amber-400 text-slate-900 shadow-[0_5px_15px_rgba(251,191,36,0.4)] scale-105 font-black' : 'bg-slate-800/60 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-white hover:-translate-y-1']">
-        <div class="text-3xl md:text-4xl mb-1 md:mb-2 filter drop-shadow-md">{{ icon }}</div>
-        <div class="text-[10px] md:text-xs leading-tight w-full text-center font-medium whitespace-normal break-words px-1">{{ name }}</div>
+      <div v-for="p in platformList" :key="p.name" @click="selectPlatform(p.name)"
+           :class="['p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 transform', activePlatform === p.name ? 'bg-amber-400 text-slate-900 shadow-[0_5px_15px_rgba(251,191,36,0.4)] scale-105 font-black' : 'bg-slate-800/60 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-white hover:-translate-y-1']">
+        <div class="text-3xl md:text-4xl mb-1 md:mb-2 filter drop-shadow-md">{{ p.icon }}</div>
+        <div class="text-[10px] md:text-xs leading-tight w-full text-center font-medium whitespace-normal break-words px-1">{{ p.name }}</div>
       </div>
     </div>
 
@@ -217,10 +217,33 @@ import { useAppStore } from '../stores/app';
 
 const userStore = useUserStore(); const uiStore = useUiStore(); const appStore = useAppStore();
 
-const platforms = { 'TikTok': '🎵', '电报': '✈️', 'Facebook': '📘', 'Instagram': '📸', 'Twitter': '🐦', 'YouTube': '▶️', 'Spotify': '🎧', 'Snapchat': '👻', 'Google': '🔍', 'Discord': '🎮', 'LinkedIn': '💼', 'Reddit': '🤖', 'Traffic': '🌐', '其他': '➕', '全部': '≡' };
+// 🧩 平台按钮不再手写死列表 —— 由"实际有服务的分类"推导（见下方 platformList）。
+//    手写死列表的教训（2026-10-24 祥哥发现）：platformKeywords 支持 Line/Shopee/WhatsApp，
+//    但按钮里没有它们 → 这些平台下的服务除「全部」外根本进不去；同时上游没有的平台本站却显示。
+//    这里的 PLATFORM_META 只负责「图标 + 展示顺序」，是否显示由数据决定。
+const PLATFORM_META = [
+  { name: '全部',     icon: '☰' },
+  { name: 'TikTok',   icon: '🎵' },
+  { name: 'Telegram', icon: '✈️' },
+  { name: 'Facebook', icon: '📘' },
+  { name: 'Instagram',icon: '📸' },
+  { name: 'Twitter',  icon: '🐦' },
+  { name: 'Line',     icon: '💬' },
+  { name: 'Shopee',   icon: '🛍️' },
+  { name: 'WhatsApp', icon: '💚' },
+  { name: 'Traffic',  icon: '🌐' },
+  { name: 'YouTube',  icon: '▶️' },
+  { name: 'Spotify',  icon: '🎧' },
+  { name: 'Snapchat', icon: '👻' },
+  { name: 'Google',   icon: '🔍' },
+  { name: 'Discord',  icon: '🎮' },
+  { name: 'LinkedIn', icon: '💼' },
+  { name: 'Reddit',   icon: '🤖' },
+  { name: '其他',     icon: '➕' }
+];
 const platformKeywords = {
   'TikTok': ['tiktok', 'tk', '抖音'],
-  '电报': ['telegram', 'tg', '电报'],
+  'Telegram': ['telegram', 'tg', '电报'],
   'Facebook': ['facebook', 'fb', '脸书'],
   'Instagram': ['instagram', 'ig', 'ins', '照片'],
   'Twitter': ['twitter', 'x', '推特'],
@@ -237,9 +260,29 @@ const platformKeywords = {
   'Traffic': ['traffic', 'website', 'seo', '流量', '网站']
 };
 
+// 🧩 只显示"确实有服务"的平台，按 PLATFORM_META 的顺序排；「全部」永远第一，「其他」仅在有归不进去的分类时出现
+const platformList = computed(() => {
+    const cats = [...new Set(rawServices.value.map(s => s.category))];
+    const has = new Set();
+    let hasOther = false;
+    for (const cat of cats) {
+        const lc = String(cat || '').toLowerCase();
+        let matched = false;
+        for (const [p, kws] of Object.entries(platformKeywords)) {
+            if (kws.some(kw => lc.includes(kw))) { has.add(p); matched = true; break; }
+        }
+        if (!matched) hasOther = true;
+    }
+    return PLATFORM_META.filter(m => {
+        if (m.name === '全部') return true;
+        if (m.name === '其他') return hasOther;
+        return has.has(m.name);
+    });
+});
+
 const platformGuideLinks = {
     'TikTok': atob('aHR0cHM6Ly93d3cudGlrdG9rLmNvbS9AdXNlcm5hbWU='),
-    '电报': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'),
+    'Telegram': atob('aHR0cHM6Ly90Lm1lL3VzZXJuYW1l'),
     'Facebook': atob('aHR0cHM6Ly93d3cuZmFjZWJvb2suY29tL3VzZXJuYW1l'),
     'Instagram': atob('aHR0cHM6Ly93d3cuaW5zdGFncmFtLmNvbS91c2VybmFtZQ=='),
     'Twitter': atob('aHR0cHM6Ly90d2l0dGVyLmNvbS91c2VybmFtZQ=='),
