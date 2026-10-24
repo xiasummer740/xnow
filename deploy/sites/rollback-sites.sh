@@ -29,7 +29,14 @@ case "$ENV" in
   *) echo "必须指定 --env beta 或 --env prod"; exit 1 ;;
 esac
 BACKUP_DIR=/root/backups
-DBP=$(grep '^DB_PASS=' /var/www/xnow/server/.env | cut -d= -f2-)
+# ⚠️ 口令与"回滚后自检"的目标都必须跟着 --env 走。
+#    原来写死生产路径/主站域名/3000 端口：--env beta 演练时会去读生产口令，
+#    回滚完还会用主站域名去探活 —— 演练看起来"通过"，其实探的根本不是这台环境。
+DBP=$(grep '^DB_PASS=' "$APP_DIR/server/.env" | cut -d= -f2-)
+case "$ENV" in
+  beta) CHECK_HOST=beta.taikon.top;  CHECK_PORT=3001 ;;
+  prod) CHECK_HOST=xnow.taikon.top;  CHECK_PORT=3000 ;;
+esac
 
 if [ "$LIST" = "1" ] || [ -z "$STAMP" ]; then
   echo "可用备份（$ENV）："
@@ -87,7 +94,7 @@ pm2 restart "$PM2_APP" --update-env >/dev/null 2>&1
 sleep 8
 pm2 list | grep -E "$PM2_APP" | sed 's/^/    /'
 echo
-echo -n "  主站首页 -> "; curl -sk -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 -H "Host: xnow.taikon.top" https://127.0.0.1/
-echo -n "  主站 API -> "; curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 8 http://127.0.0.1:3000/api/public/config
+echo -n "  主站首页 -> "; curl -sk -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 -H "Host: $CHECK_HOST" https://127.0.0.1/ --resolve "$CHECK_HOST:443:127.0.0.1"
+echo -n "  主站 API -> "; curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 8 "http://127.0.0.1:$CHECK_PORT/api/public/config"
 echo
 echo "回滚流程执行完毕，请人工确认首页、登录、下单三项。"
