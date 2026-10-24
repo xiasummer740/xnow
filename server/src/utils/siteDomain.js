@@ -23,16 +23,40 @@ const SSL_DIR = '/etc/nginx/ssl';
 const OUR_APEX = ['xnow.taikon.top', 'taikon.top'];
 const UPSTREAM = ['tk7188.com'];
 
+// 🚫 平台自用的子域名，绝不能给站长当分站用。
+//    例：站长把分站取名叫 beta.xnow.taikon.top，而 Beta 测试环境正好也是这个名字 ——
+//    两份 nginx 配置抢同一个 server_name，谁生效取决于加载顺序，极难排查。
+//    六十六期补：Beta 环境正式落到 beta.xnow.taikon.top，所以必须先把这批名字锁住。
+const RESERVED_LABELS = [
+  'www', 'api', 'admin', 'beta', 'demo', 'test', 'dev', 'staging', 'pre',
+  'mail', 'smtp', 'imap', 'pop', 'ftp', 'ns', 'ns1', 'ns2', 'dns',
+  'cdn', 'static', 'img', 'assets', 'download', 'status', 'monitor',
+  'panel', 'console', 'dashboard', 'pay', 'payment', 'support', 'help'
+];
+
 // 免费子域名：xxx.xnow.taikon.top —— 这是**合法且鼓励**的建站域名
 export const isFreeSubdomain = (domain) => {
   const d = String(domain || '').toLowerCase();
   return OUR_APEX.some(a => d.endsWith('.' + a));
 };
 
+// 是否落在"平台保留名"里（只看免费子域名的第一段）
+export const isReservedSubdomain = (domain) => {
+  const d = String(domain || '').toLowerCase();
+  for (const apex of OUR_APEX) {
+    if (!d.endsWith('.' + apex)) continue;
+    const label = d.slice(0, -(apex.length + 1));
+    if (!label) return true;
+    return RESERVED_LABELS.includes(label.split('.')[0]);
+  }
+  return false;
+};
+
 // 主站/上游域名本体及其子域：任何情况下都不许被分站占用
 export const isForbiddenApex = (domain) => {
   const d = String(domain || '').toLowerCase();
   if (OUR_APEX.includes(d) || UPSTREAM.includes(d)) return true;
+  if (isReservedSubdomain(d)) return true;
   return UPSTREAM.some(u => d.endsWith('.' + u));
 };
 

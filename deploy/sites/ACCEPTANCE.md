@@ -486,3 +486,36 @@ XNOW 出现 0 次、**浏览器里 0 个失败请求**（说明分站没引用�
 机器上没有 ACME 客户端（`certbot`），所以现在自有域名用的是**自签证书** ——
 能访问、能卖，但客户浏览器会提示"不安全"。装上 certbot 后同一条代码路径就会自动换成
 Let's Encrypt 正式证书（`ensureCert` 里已是"有 certbot 就优先用它"）。
+
+## 9. Beta 环境入口与 nginx 清理（66 期）
+
+### 目标里写的 Beta 地址原来打不开
+交付目标要求 Beta 环境是 `beta.xnow.taikon.top`，但那台机器上：
+- 已有一个 `xnow-beta` vhost 认领了 `beta.xnow.taikon.top`（所以地址本身是通的），
+- **但没有禁止搜索引擎收录** —— Beta 是测试环境，被收录就会和主站抢排名，还会把还没验收的页面暴露出去。
+
+已给 Beta 的 `/`、`/assets/`、`/uploads/` 三处都加上 `X-Robots-Tag: noindex, nofollow`。
+（第一次只写在 server 块里没生效 —— nginx 的规则是 location 里一旦有自己的 `add_header`，
+就不再继承上层的，必须逐层写。）
+
+### 顺手清掉 10 个"幽灵 vhost"
+nginx 里有 10 份分站配置，对应的分站**在 Beta 库里早就删掉了**（`t-admin`、`laozhang2/3/4`、
+`newagent`、`deftest` 等历史演练站）。留着有两个坏处：占着域名，且将来有站长真要用这些名字时，
+会莫名其妙拿到一份旧配置。
+
+核对方式：逐个用 vhost 文件名里的分站 id 回查 Beta 库，查不到才删。
+**同时确认了生产库 `xnow_db` 里分站数是 0** —— 所以删掉的全是 Beta 演练残留，
+不可能是生产分站的配置。现存 3 个 vhost 全部指向 `/var/www/xnow-beta`，与 3 个 Beta 分站一一对应。
+
+### 平台保留子域名（代码）
+站长给自己的分站起名叫 `beta.xnow.taikon.top` 会怎样？两份 nginx 配置抢同一个 `server_name`，
+谁生效取决于加载顺序 —— 极难排查。已加保留名单（`www/api/admin/beta/demo/test/dev/staging/mail/
+smtp/ns/cdn/static/pay/panel/...`），建站时直接拒绝。
+验证：`beta.xnow.taikon.top` → 保留；`myshop.xnow.taikon.top`、`laozhang.taikon.top` → 允许建站。
+
+### ⚠️ 发现一个上线前必须处理的风险（未动，等祥哥）
+Beta 的 vhost 里写着 `server_name beta.xnow.taikon.top beta.taikon.top *.xnow.taikon.top;`
+—— 那个 **`*.xnow.taikon.top` 通配**会把任何"没有自己 vhost 的免费子域名"都接到 **Beta** 实例上。
+实测：访问一个不存在的 `zzz-none.xnow.taikon.top`，返回的是平台首页（Beta 那份）。
+如果生产分站将来某个 vhost 生成失败，客户会落到 Beta 库上 —— 数据就串了。
+现在生产库分站数是 0，所以还没造成实际影响。**建议随生产上线一起把这行通配删掉**（改一行）。
