@@ -69,14 +69,26 @@ router.get('/stats', authenticate, async (req, res) => {
     }
 
     const { sequelize } = await import('../models/index.js');
+    // 💰 退款/取消必须从收益里扣掉，否则站长看着"赚了"，实际钱已经退回去了。
+    //    退款金额直接读流水（客户退款 + 站长成本退还），都带 site_id，
+    //    所以部分退款（按比例）也能算准，不依赖订单行的 remains。
     const [rows] = await sequelize.query(
       `SELECT COUNT(*) AS total_orders,
-              COALESCE(SUM(charge), 0) AS revenue,
-              COALESCE(SUM(site_cost), 0) AS cost,
+              COALESCE(SUM(charge), 0) AS revenue_gross,
+              COALESCE(SUM(site_cost), 0) AS cost_gross,
               COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END), 0) AS today_orders,
-              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN charge ELSE 0 END), 0) AS today_revenue,
-              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN site_cost ELSE 0 END), 0) AS today_cost
+              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN charge ELSE 0 END), 0) AS today_revenue_gross,
+              COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN site_cost ELSE 0 END), 0) AS today_cost_gross
        FROM orders WHERE site_id = ?`,
+      { replacements: [siteId] }
+    );
+    const [refundRows] = await sequelize.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN type = '退款入账' THEN amount ELSE 0 END), 0) AS refunded_revenue,
+         COALESCE(SUM(CASE WHEN type = '分站成本退还' THEN amount ELSE 0 END), 0) AS refunded_cost,
+         COALESCE(SUM(CASE WHEN type = '退款入账' AND DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) AS today_refunded_revenue,
+         COALESCE(SUM(CASE WHEN type = '分站成本退还' AND DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) AS today_refunded_cost
+       FROM transactions WHERE site_id = ?`,
       { replacements: [siteId] }
     );
     const [userRows] = await sequelize.query(
@@ -85,10 +97,11 @@ router.get('/stats', authenticate, async (req, res) => {
     );
 
     const r = rows[0] || {};
-    const revenue = parseFloat(r.revenue || 0);
-    const cost = parseFloat(r.cost || 0);
-    const todayRevenue = parseFloat(r.today_revenue || 0);
-    const todayCost = parseFloat(r.today_cost || 0);
+    const rf = refundRows[0] || {};
+    const revenue = parseFloat(r.revenue_gross || 0) - parseFloat(rf.refunded_revenue || 0);
+    const cost = parseFloat(r.cost_gross || 0) - parseFloat(rf.refunded_cost || 0);
+    const todayRevenue = parseFloat(r.today_revenue_gross || 0) - parseFloat(rf.today_refunded_revenue || 0);
+    const todayCost = parseFloat(r.today_cost_gross || 0) - parseFloat(rf.today_refunded_cost || 0);
     res.json({
       status: 'success',
       data: {
@@ -101,6 +114,7 @@ router.get('/stats', authenticate, async (req, res) => {
         revenue: revenue.toFixed(4),
         cost: cost.toFixed(4),
         profit: (revenue - cost).toFixed(4),
+        refunded: (parseFloat(rf.refunded_revenue || 0)).toFixed(4),
         today_orders: Number(r.today_orders || 0),
         today_revenue: todayRevenue.toFixed(4),
         today_cost: todayCost.toFixed(4),

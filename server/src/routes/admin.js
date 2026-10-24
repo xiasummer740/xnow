@@ -890,13 +890,27 @@ router.get('/finance', authenticate, async (req, res) => {
     `, { type: sq.QueryTypes.SELECT });
 
     // 2. 订单利润统计
+    // 🏬 口径修正：分站订单的钱进的是**站长**账户，平台只拿「代理价（site_cost）」，
+    //    不是客户付的 charge。原来一律 SUM(charge) 会把站长的营业额算成平台营收。
+    //    退款也要扣：订单被退款后服务没交付，这笔收入事实上不存在。
     const [orderStats] = await sq.query(`
       SELECT
-        COALESCE(SUM(charge), 0) as total_charge,
-        COALESCE(SUM(upstream_charge), 0) as total_upstream_charge,
-        COALESCE(SUM(charge - upstream_charge), 0) as total_profit,
-        COUNT(*) as total_orders
+        COALESCE(SUM(CASE WHEN is_refunded = 0 THEN (CASE WHEN site_id = 0 THEN charge ELSE site_cost END) ELSE 0 END), 0) as total_charge,
+        COALESCE(SUM(CASE WHEN is_refunded = 0 THEN upstream_charge ELSE 0 END), 0) as total_upstream_charge,
+        COALESCE(SUM(CASE WHEN is_refunded = 0 THEN ((CASE WHEN site_id = 0 THEN charge ELSE site_cost END) - upstream_charge) ELSE 0 END), 0) as total_profit,
+        COUNT(*) as total_orders,
+        COALESCE(SUM(CASE WHEN site_id > 0 THEN charge ELSE 0 END), 0) as subsite_gmv
       FROM orders
+    `, { type: sq.QueryTypes.SELECT });
+    // 退款冲减：**只看流水做对账展示**，不再参与毛利计算。
+    //   已退款订单整单排除（保守口径：宁可少算，不能虚报平台赚了）。
+    //   分站订单的退款由站长承担，平台实际掏的是「分站成本退还」。
+    const [orderRefundAdj] = await sq.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN type = '退款入账' AND site_id = 0 THEN amount ELSE 0 END), 0) as main_refund,
+        COALESCE(SUM(CASE WHEN type = '分站成本退还' THEN amount ELSE 0 END), 0) as subsite_refund
+      FROM transactions
+      WHERE type IN ('退款入账', '分站成本退还')
     `, { type: sq.QueryTypes.SELECT });
 
     // 3. 退款统计（只看平台自己的单：分站订单的退款由站长承担，不该冲减平台营收）
@@ -982,6 +996,8 @@ router.get('/finance', authenticate, async (req, res) => {
     `, { type: sq.QueryTypes.SELECT });
 
     // 11. 总览汇总（利润模型）
+    // 沿用上面的口径：total_charge 已是"平台实收"（主站 charge / 分站 site_cost），
+    // 且已排除退款订单，所以毛利直接相减即可，不再二次冲减（否则会重复扣）。
     const grossProfit = parseFloat(orderStats.total_charge) - parseFloat(orderStats.total_upstream_charge);
     const netIncome = parseFloat(deposit.total_deposit) - parseFloat(refund.total_refund) - parseFloat(commission.total_commission);
     const profitRate = parseFloat(orderStats.total_charge) > 0
