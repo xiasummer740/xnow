@@ -136,7 +136,17 @@
       </section>
 
 
-      <!-- 💰 售价页：倍率 + 单服务改价 + 折扣促销 -->
+      <!-- 💰 全站价页：加价率 + 单服务改价 + 限时折扣 -->
+      <!-- 103 期：祥哥问「售价 和 客户价 是不是重复」—— 不重复，但界面没说清。
+           两页各加一句话，讲明白「这一页管谁的价」。 -->
+      <div v-if="page === 'pricing'" class="rounded-xl border border-amber-400/30 bg-amber-400/5 px-3.5 py-3 mb-1">
+        <p class="text-[11px] text-amber-300 font-bold mb-1">这一页 = 全站统一价（所有客户都按这里的价买）</p>
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          加价率决定基础价；可以给单个服务单独定价；最下面的「限时折扣」是<b class="text-slate-200">临时</b>降价，到期自动恢复。
+          <span class="block mt-1 text-slate-500">想给某个人或某群老客户更低价 → 去「客户价」页。</span>
+        </p>
+      </div>
+
       <section v-if="page === 'pricing'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">加价率</h2>
         <div class="grid md:grid-cols-2 gap-3 items-start">
@@ -180,7 +190,15 @@
 
       <!-- 💰 定价体系：单服务改价 + 折扣促销（组件自取自存，保存后回读本站配置） -->
       <SitePricing v-if="page === 'pricing' && site && site.id" :site-id="site.id" @saved="load()" />
-          <SiteCustomers v-if="page === 'customers' && site && site.id" :site-id="site.id" @saved="load()" />
+          <div v-if="page === 'customers'" class="rounded-xl border border-sky-400/30 bg-sky-400/5 px-3.5 py-3 mb-1">
+        <p class="text-[11px] text-sky-300 font-bold mb-1">这一页 = 个别客户价（只影响你指定的客户）</p>
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          分组折扣：把客户分到「VIP / 老客户」等组，整组按这个折扣买；单独定价：只给某一个客户。
+          <span class="block mt-1 text-slate-500">这里的价优先级高于「全站价」里的限时折扣。客户线下转账给你，也在这里手动加余额。</span>
+        </p>
+      </div>
+
+      <SiteCustomers v-if="page === 'customers' && site && site.id" :site-id="site.id" @saved="load()" />
 
       <!-- 🎨 装修页（92 期）：实时预览 + 可视化配色/模板/模块拖拽/细节风格 -->
       <DesignStudio v-if="page === 'design'" :form="form" :site="site" :pv="pv" :templates="templates"
@@ -378,13 +396,25 @@
           {{ saving ? '保存中…' : '保存全部修改' }}
         </button>
       </div>
+
+      <!-- 💾 102 期：只要有未保存的改动，就浮一条保存条。
+           起因：祥哥把加价率改完找不到保存（全局按钮在整页最底部；装修页/文案页要滑更久）。
+           现在改完随手就能点，并且明确提示「没保存」。 -->
+      <div v-if="dirty && page !== 'orders' && page !== 'customers'"
+           class="sticky bottom-3 z-30 mt-3 flex items-center gap-2 rounded-xl border border-amber-400/60 bg-slate-900/95 backdrop-blur pl-3 pr-24 py-2 shadow-2xl">
+        <span class="text-[11px] text-amber-300 flex-1">● 有未保存的修改</span>
+        <button @click="save()" :disabled="saving"
+                class="px-5 py-2 rounded-lg bg-amber-400 text-slate-900 font-black text-sm disabled:opacity-50">
+          {{ saving ? '保存中…' : '保存' }}
+        </button>
+      </div>
       <p class="text-[10px] text-slate-600 text-center">修改保存后，你的分站访客刷新页面即可看到新外观</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import DesignStudio from '../components/site/DesignStudio.vue'
 import CopyStudio from '../components/site/CopyStudio.vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -403,8 +433,8 @@ const PAGE_TABS = [
   { key: 'overview', icon: '🏠', label: '概览', hint: '站点信息 · 开站清单 · 收益心跳' },
   { key: 'design',   icon: '🎨', label: '装修', hint: '模板 / 色系 / 首页模块排序 + 实时预览' },
   { key: 'copy',     icon: '✍️', label: '文案', hint: '首屏版式、每块标题、按钮与图片' },
-  { key: 'pricing',  icon: '💰', label: '售价', hint: '倍率 / 单服务改价 / 折扣促销' },
-  { key: 'customers', icon: '👥', label: '客户价', hint: '分组折扣 / 单个客户单独定价' },
+  { key: 'pricing',  icon: '💰', label: '全站价', hint: '加价率 / 单服务改价 / 限时折扣' },
+  { key: 'customers', icon: '👥', label: '客户价', hint: '只给指定客户更低价' },
   { key: 'payment',  icon: '💳', label: '收款', hint: '填自己的商户，客户付款直接进你账户' },
   { key: 'email',    icon: '📧', label: '邮件', hint: '客户收到的验证码用你的品牌' },
   { key: 'domain',   icon: '🌐', label: '域名', hint: '绑定自己的域名 + 证书状态' },
@@ -454,7 +484,7 @@ const steps = computed(() => {
     {
       key: 'price',
         go: 'pricing',
-      title: '设置售价（不低于你的进货价）',
+      title: '设置全站价（不低于你的进货价）',
       done: mk !== null && mk >= 0,
       hint: mk === null ? '还没设置加价率' : `当前加价 ${mk}%（0% = 按进货价卖，不赚不亏）`
     },
@@ -859,6 +889,9 @@ const load = async () => {
       const r2 = await fetch(`/api/sites/stats?site_id=${s.id}`, { headers: headers() })
       const d2 = await r2.json()
       stats.value = d2.data || {}
+      // 载入完成即「无未保存改动」
+      await nextTick()
+      savedSig.value = formSig.value
     }
   } catch (e) { console.error(e) } finally { loading.value = false }
 }
@@ -890,6 +923,13 @@ const moveModule = (i, dir) => {
   const t = arr[i]; arr[i] = arr[j]; arr[j] = t
   arr.forEach((m, idx) => (m.order = idx))
 }
+
+// 💾 「有没有未保存的改动」：当前表单与上次载入/保存时的快照对比
+const savedSig = ref('')
+const formSig = computed(() => {
+  try { return JSON.stringify(form.value) } catch (e) { return '' }
+})
+const dirty = computed(() => !!savedSig.value && !!site.value && formSig.value !== savedSig.value)
 
 // 💾 加价率就地保存（见模板注释）
 const markupMsg = ref('')
@@ -950,7 +990,7 @@ const save = async (silent = false) => {
     const res = await fetch(`/api/sites/${site.value.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) })
     const data = await res.json()
     if (!silent) alert(data.status === 'success' ? '✅ 已保存，访客刷新即可看到新外观' : `❌ ${data.message}`)
-    if (data.status === 'success') load()
+    if (data.status === 'success') { savedSig.value = formSig.value; await load() }
     return data.status === 'success'
   } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
 }
