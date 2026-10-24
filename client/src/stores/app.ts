@@ -11,6 +11,8 @@ export const useAppStore = defineStore('app', {
   state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0,
     // 🎨 分站主题（主站为空 → 外观与改造前一致）
     themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[],
+    // 🎨 二十七期：风格细分维度（空 = 用模板默认）
+    uiRadius: '', uiDensity: '', cardStyle: '', fontStyle: '', btnShape: '', heroLayout: '',
     // ✍️ 十九期：首页文案自定义（主站为空 → Home.vue 回落到默认文案）
     hero: {} as Record<string, string> }),
   actions: {
@@ -26,6 +28,13 @@ export const useAppStore = defineStore('app', {
       this.supportUrl = d.support_url || '';
       this.announcement = d.announcement || '';
       if (d.home_modules) { try { const m = JSON.parse(d.home_modules); if (Array.isArray(m)) this.homeModules = m; } catch(e) {} }
+      // 🎨 二十七期：风格细分维度
+      this.uiRadius = d.ui_radius || '';
+      this.uiDensity = d.ui_density || '';
+      this.cardStyle = d.card_style || '';
+      this.fontStyle = d.font_style || '';
+      this.btnShape = d.btn_shape || '';
+      this.heroLayout = d.hero_layout || '';
       // ✍️ 十九期：首页文案（主站没有这些 key → 保持空对象 → 首页用默认文案）
       this.hero = {
         hero_badge: d.hero_badge || '', hero_title: d.hero_title || '',
@@ -46,6 +55,15 @@ export const useAppStore = defineStore('app', {
         el.style.setProperty('--brand', this.themeAccent);
         el.style.setProperty('--brand-soft', this.themeAccent + '2e');
         el.style.setProperty('--brand-strong', this.themeAccent);
+      }
+      // 🎨 二十七期：风格细分维度（圆角/间距/卡片/字体/按钮/英雄布局）。
+      //    只写 data-* 属性，具体样式在 site-theme.css；主站不设置 → 无影响。
+      const styleMap: Record<string, string> = {
+        radius: this.uiRadius, density: this.uiDensity, card: this.cardStyle,
+        font: this.fontStyle, btn: this.btnShape, hero: this.heroLayout
+      };
+      for (const [attr, val] of Object.entries(styleMap)) {
+        if (val) el.dataset[attr] = val; else delete el.dataset[attr];
       }
     },
     moduleEnabled(key: string) {

@@ -34,6 +34,13 @@ router.get('/config', async (req, res) => {
       data.footer_text = req.site.footer_text || '';
       data.support_url = req.site.support_url || '';
       data.home_modules = req.site.home_modules || '';
+      // 🎨 二十七期：风格细分维度（圆角/间距/卡片/字体/按钮/英雄布局）
+      data.ui_radius = req.site.ui_radius || '';
+      data.ui_density = req.site.ui_density || '';
+      data.card_style = req.site.card_style || '';
+      data.font_style = req.site.font_style || '';
+      data.btn_shape = req.site.btn_shape || '';
+      data.hero_layout = req.site.hero_layout || '';
       // ✍️ 十九期：首页文案自定义（空则前端回落到主站默认文案）
       data.logo_url = req.site.logo || '';
       data.hero_badge = req.site.hero_badge || '';

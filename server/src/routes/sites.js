@@ -372,6 +372,23 @@ router.put('/:id', authenticate, async (req, res) => {
       site.accent = hex || null;
     }
     if (footer_text !== undefined) site.footer_text = String(footer_text || '').slice(0, 255);
+    // 🎨 二十七期：风格细分维度。空字符串 = 用模板默认，非法值直接拒绝（不静默改默认）。
+    const STYLE_FIELDS = {
+      ui_radius: ['square', 'soft', 'round', 'pill'],
+      ui_density: ['compact', 'normal', 'relaxed'],
+      card_style: ['outline', 'glass', 'solid'],
+      font_style: ['sans', 'rounded', 'serif', 'mono'],
+      btn_shape: ['pill', 'rounded', 'square'],
+      hero_layout: ['center', 'split', 'banner']
+    };
+    for (const [field, allowed] of Object.entries(STYLE_FIELDS)) {
+      const raw = req.body[field];
+      if (raw === undefined) continue;
+      const v = String(raw || '').trim();
+      if (!v) { site[field] = null; continue; }
+      if (!allowed.includes(v)) return res.json({ status: 'error', message: `${field} 取值不合法` });
+      site[field] = v;
+    }
     if (support_url !== undefined) {
       const u = String(support_url || '').trim();
       // 🔒 只允许 http(s)，防止 javascript: 伪协议挂在客服按钮上

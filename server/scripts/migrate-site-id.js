@@ -127,6 +127,13 @@ const run = async () => {
     ['hero_btn2_text', 'VARCHAR(40) NULL'],
     ['hero_btn2_url',  'VARCHAR(255) NULL'],
     ['hero_bg_url',    'VARCHAR(512) NULL'],
+    // 🎨 二十七期：风格细分维度（自由组合，不再局限于 6 个固定模板）
+    ['ui_radius',      'VARCHAR(12) NULL'],
+    ['ui_density',     'VARCHAR(12) NULL'],
+    ['card_style',     'VARCHAR(12) NULL'],
+    ['font_style',     'VARCHAR(12) NULL'],
+    ['btn_shape',      'VARCHAR(12) NULL'],
+    ['hero_layout',    'VARCHAR(12) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {

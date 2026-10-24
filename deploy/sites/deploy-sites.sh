@@ -91,8 +91,11 @@ fi
 
 say "=== 3. 记录当前版本（回滚锚点）==="
 # 代码快照：生产目录不是 git 仓库，回滚只能靠这个 tar（这是演练时发现的，别删）
+# 6.5 步会改 nginx，所以把线上 vhost 一并收进快照，回滚才能连 nginx 一起还原。
 CODE_BK="$BACKUP_DIR/${ENV}-${STAMP}-code.tar.gz"
-tar czf "$CODE_BK" -C "$APP_DIR" server/src server/scripts 2>/dev/null
+NG_EXTRA=""
+[ "$ENV" = "prod" ] && NG_EXTRA="/etc/nginx/sites-enabled/xnow-spa-https"
+tar czf "$CODE_BK" -C "$APP_DIR" server/src server/scripts $NG_EXTRA 2>/dev/null
 if [ -s "$CODE_BK" ]; then ok "代码快照：$CODE_BK（$(stat -c%s "$CODE_BK") 字节）"; else bad "代码快照失败，为安全计中止"; exit 1; fi
 cd "$APP_DIR/server" || die "进入目录失败"
 CUR_HEAD=$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -120,6 +123,38 @@ ok "后端代码已更新"
 say "=== 6. 替换前端产物 ==="
 rsync -a --delete "$SRC_DIR/client/dist/" "$APP_DIR/client/dist/" || die "前端替换失败"
 ok "前端产物已更新（$(ls -1 "$APP_DIR/client/dist" | wc -l) 项）"
+
+# ────────────────────────────────────────────────────────────────
+# 6.5 nginx：分站免费子域名必须由主站 vhost 接住
+#   上线勘验发现：生产 xnow-spa-https 只写了 server_name xnow.taikon.top，
+#   未匹配的 Host 会落到 default_server（另一个项目的 :8000）。
+#   表现就是"站长开了站，打开却是别人的网站"。所以这里必须补通配符。
+#   规则：只在 prod 做；先备份；装完用 `nginx -s reload` 验证（禁止在生产跑 nginx -t）。
+# ────────────────────────────────────────────────────────────────
+if [ "$ENV" = "prod" ]; then
+  say "=== 6.5 同步 nginx 分站配置 ==="
+  NG_SRC="$SRC_DIR/deploy/nginx/production/xnow-spa-https"
+  NG_DIR=/etc/nginx/sites-enabled
+  NG_BAK="$BACKUP_DIR/${ENV}-${STAMP}-nginx"
+  if [ ! -f "$NG_SRC" ]; then
+    bad "缺少 nginx 模板：$NG_SRC"; die "nginx 模板缺失"
+  fi
+  mkdir -p "$NG_BAK"
+  cp "$NG_DIR/xnow-spa-https" "$NG_BAK/" 2>/dev/null && ok "已备份现有 nginx 配置到 $NG_BAK"
+  if grep -q '\*\.xnow\.taikon\.top' "$NG_DIR/xnow-spa-https" 2>/dev/null; then
+    ok "nginx 已含分站通配符，跳过替换"
+  else
+    cp "$NG_SRC" "$NG_DIR/xnow-spa-https" || die "nginx 配置写入失败"
+    if nginx -s reload 2>/dev/null; then
+      ok "nginx 已重载（分站子域名已接通）"
+    else
+      bad "nginx 重载失败 → 立刻还原"
+      cp "$NG_BAK/xnow-spa-https" "$NG_DIR/xnow-spa-https" 2>/dev/null
+      nginx -s reload 2>/dev/null
+      die "nginx 配置有问题已还原"
+    fi
+  fi
+fi
 
 say "=== 7. 重启（reload 平滑重启，不中断连接） ==="
 pm2 reload "$PM2_APP" --update-env >/dev/null 2>&1 || pm2 restart "$PM2_APP" >/dev/null 2>&1

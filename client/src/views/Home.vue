@@ -12,7 +12,8 @@
       </div>
     </header>
 
-    <main :style="heroBgStyle" class="relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
+    <main :style="heroBgStyle" class="hero-wrap site-section relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
+      <div class="hero-copy flex flex-col items-center">
       <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ hero.badge }}</div>
       <h1 v-if="hero.title" class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
         <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ hero.title }}</span>
@@ -27,26 +28,42 @@
       <p class="text-slate-500 text-sm max-w-lg mx-auto mb-10 leading-relaxed">
         {{ hero.desc }}
       </p>
+      </div>
+
+      <!-- 左文右图布局的右侧视觉块（其它布局下不显示） -->
+      <div class="hero-visual hidden" aria-hidden="true">
+        <div class="site-card rounded-3xl p-6 bg-slate-900/60 border border-slate-700/40">
+          <div class="text-xs text-slate-400 mb-3">{{ appStore.lang === 'zh' ? '实时交付' : 'Live delivery' }}</div>
+          <div class="h-2 rounded-full bg-amber-400/80 mb-3 w-4/5"></div>
+          <div class="h-2 rounded-full bg-slate-700 mb-3 w-3/5"></div>
+          <div class="h-2 rounded-full bg-slate-700 mb-6 w-2/5"></div>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div><div class="text-lg font-black text-amber-400">24/7</div><div class="text-[10px] text-slate-500">在线</div></div>
+            <div><div class="text-lg font-black text-amber-400">0.3s</div><div class="text-[10px] text-slate-500">起送</div></div>
+            <div><div class="text-lg font-black text-amber-400">99%</div><div class="text-[10px] text-slate-500">完成率</div></div>
+          </div>
+        </div>
+      </div>
 
       <!-- Platform quick preview -->
       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3 mb-10 max-w-2xl">
-        <div v-for="p in platforms" :key="p.name" class="flex flex-col items-center gap-1.5 bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3 hover:border-amber-500/30 transition cursor-default">
+        <div v-for="p in platforms" :key="p.name" class="site-card flex flex-col items-center gap-1.5 bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3 hover:border-amber-500/30 transition cursor-default">
           <span class="text-2xl">{{ p.icon }}</span>
           <span class="text-[11px] text-slate-400 font-bold">{{ p.name[appStore.lang] || p.name }}</span>
         </div>
       </div>
 
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
-        <router-link v-if="hero.btn1Url" :to="hero.btn1Url" class="w-full sm:w-auto px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
+      <div class="hero-actions flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
+        <router-link v-if="hero.btn1Url" :to="hero.btn1Url" class="w-full sm:w-auto site-btn px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
           {{ hero.btn1Text }}
         </router-link>
-        <router-link v-else to="/login" class="w-full sm:w-auto px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
+        <router-link v-else to="/login" class="w-full sm:w-auto site-btn px-10 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.3)] flex items-center justify-center">
           {{ appStore.lang === 'zh' ? '⚡ 立即注册体验' : '⚡ Get Started Now' }}
         </router-link>
-        <router-link v-if="hero.btn2Url" :to="hero.btn2Url" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
+        <router-link v-if="hero.btn2Url" :to="hero.btn2Url" class="w-full sm:w-auto site-btn px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
           {{ hero.btn2Text }}
         </router-link>
-        <router-link v-else to="/vpn" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
+        <router-link v-else to="/vpn" class="w-full sm:w-auto site-btn px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
           {{ appStore.lang === 'zh' ? '🛡️ 安全节点' : '🛡️ VPN' }}
         </router-link>
       </div>

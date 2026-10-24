@@ -137,6 +137,71 @@
                 </div>
               </div>
             </div>
+
+            <!-- 🎨 二十七期：风格细分（模板只能整体换，这些可以自由叠加） -->
+            <div class="pt-3 border-t border-slate-700/50">
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-xs text-slate-400">细节风格（可自由叠加在模板之上）</label>
+                <button @click="resetStyles()" class="text-[10px] text-slate-500 hover:text-amber-400">跟随模板</button>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-1">圆角</label>
+                  <select v-model="form.ui_radius" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">跟随模板</option>
+                    <option value="square">直角（硬朗）</option>
+                    <option value="soft">小圆角（干净）</option>
+                    <option value="round">大圆角（柔和）</option>
+                    <option value="pill">胶囊（可爱）</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-1">页面节奏</label>
+                  <select v-model="form.ui_density" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">跟随模板</option>
+                    <option value="compact">紧凑（信息多）</option>
+                    <option value="normal">标准</option>
+                    <option value="relaxed">宽松（高级感）</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-1">卡片质感</label>
+                  <select v-model="form.card_style" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">跟随模板</option>
+                    <option value="outline">描边（极简）</option>
+                    <option value="glass">毛玻璃（通透）</option>
+                    <option value="solid">实心（厚实）</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-1">字体</label>
+                  <select v-model="form.font_style" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">跟随模板</option>
+                    <option value="sans">现代无衬线</option>
+                    <option value="rounded">圆润</option>
+                    <option value="serif">衬线（杂志感）</option>
+                    <option value="mono">等宽（科技感）</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-1">按钮形状</label>
+                  <select v-model="form.btn_shape" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">跟随模板</option>
+                    <option value="pill">胶囊</option>
+                    <option value="rounded">圆角</option>
+                    <option value="square">方角</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-1">首屏布局</label>
+                  <select v-model="form.hero_layout" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                    <option value="">居中式（默认）</option>
+                    <option value="split">左文右图</option>
+                    <option value="banner">整屏大图</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 右：实时预览 -->
@@ -518,20 +583,38 @@ const pv = computed(() => {
     strong = hex
     soft = hex + '2e'   // 18% 透明近似
   }
-  const base = { brand, strong, soft }
-  switch (t) {
+    const base = { brand, strong, soft }
+  // 🎨 二十七期：站长选的细节风格优先于模板默认值（预览必须跟着变）
+  const RADII = { square: '0.25rem', soft: '0.75rem', round: '1.25rem', pill: '2rem' }
+  const FONTS = {
+    sans: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+    rounded: '"SF Pro Rounded", "PingFang SC", system-ui, sans-serif',
+    serif: 'Georgia, "Songti SC", "Times New Roman", serif',
+    mono: '"JetBrains Mono", Consolas, monospace'
+  }
+  const CARDS = { outline: 'transparent', glass: 'rgba(255,255,255,.06)', solid: 'rgba(15,23,42,.92)' }
+  const out = (() => { switch (t) {
     case 'saas': return { ...base, radius: '0.5rem', surface: 'rgba(15,23,42,.55)', border: 'rgba(148,163,184,.12)', shadow: '0 6px 18px rgba(0,0,0,.35)', letter: '0.02em', titleFont: 'inherit', bg: '#0a1120' }
     case 'minimal': return { ...base, radius: '0.75rem', surface: 'rgba(2,6,23,.6)', border: 'rgba(148,163,184,.1)', shadow: 'none', letter: '0.03em', titleFont: 'inherit', bg: '#04070f' }
     case 'neon': return { ...base, radius: '1.25rem', surface: 'rgba(15,23,42,.78)', border: 'rgba(148,163,184,.3)', shadow: `0 0 40px ${soft}`, letter: '0', titleFont: 'inherit', bg: `radial-gradient(320px 160px at 16% -10%, ${soft}, transparent 60%), radial-gradient(260px 140px at 90% 0%, rgba(147,51,234,.16), transparent 60%), #060b18` }
     case 'magazine': return { ...base, radius: '1.1rem', surface: 'rgba(17,24,39,.8)', border: 'rgba(148,163,184,.18)', shadow: '0 22px 60px rgba(0,0,0,.55)', letter: '0.06em', titleFont: 'Georgia, "Times New Roman", "Songti SC", serif', bg: '#0d1117' }
     case 'glass': return { ...base, radius: '1.6rem', surface: 'rgba(255,255,255,.06)', border: 'rgba(255,255,255,.16)', shadow: '0 24px 60px rgba(0,0,0,.5)', letter: '0', titleFont: 'inherit', bg: `radial-gradient(300px 160px at 8% -8%, ${soft}, transparent 55%), radial-gradient(280px 140px at 95% 8%, rgba(56,189,248,.14), transparent 55%), #070d1a` }
     default: return { ...base, radius: '1rem', surface: 'rgba(15,23,42,.72)', border: 'rgba(148,163,184,.18)', shadow: '0 18px 45px rgba(0,0,0,.45)', letter: '0', titleFont: 'inherit', bg: '#0b1220' }
-  }
+  } })()
+  // 细节风格覆盖模板默认值（预览必须跟着站长点的那一下就变）
+  if (form.value.ui_radius && RADII[form.value.ui_radius]) out.radius = RADII[form.value.ui_radius]
+  if (form.value.card_style && CARDS[form.value.card_style] !== undefined) out.surface = CARDS[form.value.card_style]
+  out.font = FONTS[form.value.font_style] || 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
+  out.btnRadius = form.value.btn_shape === 'pill' ? '999px'
+    : form.value.btn_shape === 'square' ? '0.25rem'
+    : `calc(${out.radius} * 0.6)`
+  out.gap = form.value.ui_density === 'compact' ? '6px' : form.value.ui_density === 'relaxed' ? '15px' : '10px'
+  return out
 })
 
 const previewShell = computed(() => ({
   background: pv.value.bg,
-  fontFamily: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+  fontFamily: pv.value.font,
   letterSpacing: pv.value.letter
 }))
 const previewNav = computed(() => ({
@@ -543,7 +626,7 @@ const previewCard = computed(() => ({
   border: `1px solid ${pv.value.border}`,
   borderRadius: pv.value.radius,
   boxShadow: pv.value.shadow,
-  backdropFilter: form.value.template === 'glass' ? 'blur(6px)' : undefined
+  backdropFilter: (form.value.template === 'glass' || form.value.card_style === 'glass') ? 'blur(6px)' : undefined
 }))
 const previewBtnPrimary = computed(() => ({
   background: `linear-gradient(135deg, ${pv.value.brand}, ${pv.value.strong})`,
@@ -551,7 +634,7 @@ const previewBtnPrimary = computed(() => ({
   fontSize: '9px',
   fontWeight: 800,
   padding: '3px 9px',
-  borderRadius: `calc(${pv.value.radius} * 0.6)`,
+  borderRadius: pv.value.btnRadius,
   boxShadow: `0 0 12px ${pv.value.soft}`
 }))
 const previewBtnGhost = computed(() => ({
@@ -559,7 +642,7 @@ const previewBtnGhost = computed(() => ({
   color: 'rgba(226,232,240,.8)',
   fontSize: '9px',
   padding: '3px 9px',
-  borderRadius: `calc(${pv.value.radius} * 0.6)`
+  borderRadius: pv.value.btnRadius
 }))
 const previewFooter = computed(() => ({ borderTop: `1px solid ${pv.value.border}` }))
 
@@ -622,6 +705,7 @@ const createForm = ref({ domain: '', name: '', multiplier: 2.5 })
 const form = ref({
   name: '', multiplier: 2.5, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
+  ui_radius: '', ui_density: '', card_style: '', font_style: '', btn_shape: '', hero_layout: '',
   bufpay_id: '', bufpay_key: '', cryptomus_id: '', cryptomus_key: '',
   smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '',
   logo: '', hero_badge: '', hero_title: '', hero_subtitle: '', hero_desc: '',
@@ -672,6 +756,9 @@ const load = async () => {
         footer_text: s.footer_text || '', support_url: s.support_url || '',
         announcement: s.announcement || '',
         template: s.template || 'classic', color: s.color || 'cyan', accent: s.accent || '',
+        ui_radius: s.ui_radius || '', ui_density: s.ui_density || '',
+        card_style: s.card_style || '', font_style: s.font_style || '',
+        btn_shape: s.btn_shape || '', hero_layout: s.hero_layout || '',
         modules: parseModules(s.home_modules),
         bufpay_id: s.bufpay_id || '', bufpay_key: s.bufpay_key ? '******' : '',
         cryptomus_id: s.cryptomus_id || '', cryptomus_key: s.cryptomus_key ? '******' : '',
@@ -689,6 +776,16 @@ const load = async () => {
       stats.value = d2.data || {}
     }
   } catch (e) { console.error(e) } finally { loading.value = false }
+}
+
+// 🎨 二十七期：一键回到"跟随模板"（避免站长乱点后不知道该选什么）
+const resetStyles = () => {
+  form.value.ui_radius = ''
+  form.value.ui_density = ''
+  form.value.card_style = ''
+  form.value.font_style = ''
+  form.value.btn_shape = ''
+  form.value.hero_layout = ''
 }
 
 const parseModules = (raw) => {
@@ -718,6 +815,9 @@ const save = async (silent = false) => {
       footer_text: form.value.footer_text, support_url: form.value.support_url,
       announcement: form.value.announcement,
       template: form.value.template, color: form.value.color, accent: form.value.accent,
+      ui_radius: form.value.ui_radius, ui_density: form.value.ui_density,
+      card_style: form.value.card_style, font_style: form.value.font_style,
+      btn_shape: form.value.btn_shape, hero_layout: form.value.hero_layout,
       home_modules: JSON.stringify(form.value.modules.map((m, i) => ({ key: m.key, enabled: !!m.enabled, order: i }))),
       bufpay_id: form.value.bufpay_id, bufpay_key: form.value.bufpay_key,
       cryptomus_id: form.value.cryptomus_id, cryptomus_key: form.value.cryptomus_key,

@@ -1,6 +1,11 @@
 server {
     listen 443 ssl http2;
-    server_name xnow.taikon.top;
+    # 🏬 分站：免费子域名（t1./shop./…）与主站共用一个后端，
+    #    由 siteMiddleware 按 Host 识别是哪一站。
+    #    不加通配符的话，未匹配的 Host 会落到 default_server
+    #    （那是另一个项目的 :8000），表现为"站长开了站，打开却是别人的网站"。
+    #    自有域名不在这里：它由 siteDomain.js 自助生成独立 vhost（含证书申请）。
+    server_name xnow.taikon.top *.xnow.taikon.top;
 
     ssl_certificate /etc/nginx/ssl/xnow.crt;
     ssl_certificate_key /etc/nginx/ssl/xnow.key;

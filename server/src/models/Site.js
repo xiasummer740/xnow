@@ -16,6 +16,14 @@ const Site = sequelize.define('Site', {
   color: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'cyan' },
   accent: { type: DataTypes.STRING(16), allowNull: true },            // 自定义主色 HEX，优先于 color
   footer_text: { type: DataTypes.STRING(255), allowNull: true },       // 页脚版权
+  // 🎨 二十七期：把"风格"从 6 个固定模板，扩展成可自由组合的 6 个维度。
+  //    全部走 CSS 变量 / data 属性，不改结构也不影响主站。
+  ui_radius: { type: DataTypes.STRING(12), allowNull: true },   // square | soft | round | pill
+  ui_density: { type: DataTypes.STRING(12), allowNull: true },  // compact | normal | relaxed
+  card_style: { type: DataTypes.STRING(12), allowNull: true },  // outline | glass | solid
+  font_style: { type: DataTypes.STRING(12), allowNull: true },  // sans | rounded | serif | mono
+  btn_shape: { type: DataTypes.STRING(12), allowNull: true },   // pill | rounded | square
+  hero_layout: { type: DataTypes.STRING(12), allowNull: true }, // center | split | banner
   support_url: { type: DataTypes.STRING(255), allowNull: true },       // 客服链接（TG 等）
   home_modules: { type: DataTypes.TEXT, allowNull: true },             // 首页模块 JSON:[{key,enabled,order}]
   // ✍️ 首页文案自定义（十九期·祥哥："选好模板之后在哪设计自己的网站？"）
