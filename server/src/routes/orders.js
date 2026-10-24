@@ -27,7 +27,8 @@ const BILLED_BY_QUANTITY = new Set(['default', 'custom comments', 'package', 'me
 
 const FIELD_LABELS = {
   link: '目标链接', quantity: '数量', comments: '评论内容',
-  username: '用户名', delay: '延迟', hashtag: '话题标签', answerNumber: '选项编号'
+  username: '用户名', delay: '延迟', hashtag: '话题标签', answerNumber: '选项编号',
+  posts: '新帖子数量'
 };
 
 const TYPE_REQUIRED = {
@@ -36,7 +37,9 @@ const TYPE_REQUIRED = {
   'package': ['link', 'quantity'],
   'mentions hashtag': ['link', 'quantity', 'hashtag'],
   'invites from groups': ['username', 'quantity'],
-  'subscriptions': ['username', 'quantity', 'delay'],
+  // 🆕 posts 必填：订阅型上游按"每条新帖投喂一次"持续下单，本站只收一次钱，
+  //    所以必须让客户明确"买几次投喂"，否则成本无上限（方案 A，2026-10-24 祥哥拍板）
+  'subscriptions': ['username', 'quantity', 'delay', 'posts'],
   'poll': ['link', 'quantity', 'answerNumber']
 };
 
@@ -52,6 +55,11 @@ const validateForType = (type, f) => {
   if (BILLED_BY_QUANTITY.has(t)) {
     const n = Number(f.quantity);
     if (!Number.isInteger(n) || n <= 0) return '数量必须是正整数';
+  }
+  if (t === 'subscriptions') {
+    const p = Number(f.posts);
+    if (!Number.isInteger(p) || p <= 0) return '新帖子数量必须是正整数（每条新帖投喂一次，按次数收费）';
+    if (p > 10000) return '新帖子数量过大（最多 10000 条）';
   }
   if (t === 'poll' && !/^\d+$/.test(String(f.answerNumber))) return '选项编号必须是数字';
   return null;
@@ -108,9 +116,10 @@ router.post('/add', authenticate, async (req, res) => {
     // 🔌 先按上游类型校验必填字段，再校验数量边界
     const orderType = normType(service.type);
     const qty = (quantity === undefined || quantity === null || quantity === '') ? undefined : parseInt(quantity);
+    const postsQty = (posts === undefined || posts === null || posts === '') ? undefined : parseInt(posts);
     const fieldErr = validateForType(service.type, {
       link, quantity: qty, comments: comments || custom_comments,
-      username, delay, hashtag, answerNumber
+      username, delay, hashtag, answerNumber, posts: postsQty
     });
     if (fieldErr) { await t.rollback(); return res.json({ status: 'error', message: fieldErr }); }
 
@@ -148,8 +157,12 @@ router.post('/add', authenticate, async (req, res) => {
       ? parseFloat(service.custom_rate)
       : parseFloat(service.rate);
     const sellRate = baseRate * finalMultiplier;
-    const charge = ((qty / 1000) * sellRate).toFixed(4);
-    const upstream_charge = ((qty / 1000) * parseFloat(service.rate)).toFixed(4);
+    // 🔑 方案 A（2026-10-24 祥哥拍板）：订阅型按"投喂次数"计价。
+    //    上游会为客户的每一条新帖各投喂一次、每次单独扣上游余额；
+    //    本站若只按一次收费，客户发帖越多亏得越多 → 按 posts 次数乘算。
+    const billUnits = orderType === 'subscriptions' ? postsQty : 1;
+    const charge = ((qty / 1000) * sellRate * billUnits).toFixed(4);
+    const upstream_charge = ((qty / 1000) * parseFloat(service.rate) * billUnits).toFixed(4);
 
     // 🔒 价格护栏：倍率被写成负数/0/NaN 时 charge 非法，拒绝下单（防负扣款刷余额）
     if (!isFinite(parseFloat(charge)) || parseFloat(charge) <= 0) {

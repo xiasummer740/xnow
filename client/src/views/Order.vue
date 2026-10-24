@@ -144,8 +144,11 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">新帖子 posts <span class="text-slate-500 font-normal">（可选）</span></label>
-              <input type="number" v-model="form.posts" placeholder="留空 = 不限（跟随账号以后每一条新帖）" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
+              <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
+                新帖子数量 <span class="text-red-400">*</span>
+                <span class="text-[10px] text-slate-500 ml-2 font-normal">上游为每条新帖投喂一次，按次数收费</span>
+              </label>
+              <input type="number" min="1" v-model="form.posts" placeholder="例如 3（= 未来 3 条新帖各投喂一次）" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
             </div>
             <div class="md:col-span-2">
               <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">到期日期 expiry <span class="text-slate-500 font-normal">（可选，格式 日/月/年）</span></label>
@@ -169,6 +172,9 @@
               <div class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-amber-400 md:text-right font-black text-xl md:text-2xl shadow-inner">
                 {{ appStore.formatMoney(rawTotalPrice) }}
               </div>
+              <p v-if="isSubscriptions" class="text-[10px] text-slate-500 mt-1.5 md:text-right">
+                × {{ billUnits }} 次投喂（每条新帖一次）
+              </p>
             </div>
           </div>
         </div>
@@ -252,9 +258,16 @@ const needsUsername = computed(() => isSubscriptions.value || isInvites.value);
 const usesLink = computed(() => !isSubscriptions.value && !isInvites.value);
 
 const dynamicGuideLink = computed(() => platformGuideLinks[activePlatform.value] || atob('aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20vbGluaw=='));
+// 🔑 订阅型按"投喂次数"计价（方案 A）：上游为每条新帖投喂一次、每次都扣上游余额
+const billUnits = computed(() => {
+    if (!isSubscriptions.value) return 1;
+    const p = parseInt(form.value.posts);
+    return (Number.isInteger(p) && p > 0) ? p : 0;
+});
 const rawTotalPrice = computed(() => {
     if (!activeService.value || !form.value.quantity) return '0.00';
-    return ((parseInt(form.value.quantity) / 1000) * parseFloat(activeService.value.rate)).toFixed(4);
+    if (billUnits.value === 0) return '0.00';
+    return ((parseInt(form.value.quantity) / 1000) * parseFloat(activeService.value.rate) * billUnits.value).toFixed(4);
 });
 
 // 排他性正则过滤引擎
@@ -401,6 +414,12 @@ const submitOrder = async () => {
   if (needsUsername.value && !String(form.value.username).trim()) return uiStore.showToast('请输入用户名（不要带 @ 或链接）！', 'error');
   if (isMentions.value && !String(form.value.hashtag).trim()) return uiStore.showToast('请输入话题标签！', 'error');
   if (isPoll.value && !String(form.value.answerNumber).trim()) return uiStore.showToast('请输入选项编号！', 'error');
+  // 🔑 方案 A：订阅型必须填投喂次数，否则成本无上限
+  if (isSubscriptions.value) {
+      const p = parseInt(form.value.posts);
+      if (!Number.isInteger(p) || p <= 0) return uiStore.showToast('请填写新帖子数量（未来要投喂几条新帖）！', 'error');
+      if (p > 10000) return uiStore.showToast('新帖子数量过大（最多 10000 条）', 'error');
+  }
   
   const currentQty = Number(form.value.quantity);
   const minQty = Number(activeService.value?.min || 1);
