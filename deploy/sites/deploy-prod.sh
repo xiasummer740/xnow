@@ -35,11 +35,17 @@ echo "  当前分支: $(git rev-parse --abbrev-ref HEAD)"
 echo "  当前提交: $(git log --oneline -1)"
 echo "  生产分站数: $(MYSQL_PWD="$DBP" mysql -N -u root xnow_db -e 'SELECT COUNT(*) FROM sites' 2>/dev/null)"
 echo "  生产用户/订单: $(MYSQL_PWD="$DBP" mysql -N -u root xnow_db -e 'SELECT CONCAT((SELECT COUNT(*) FROM users)," / ",(SELECT COUNT(*) FROM orders))' 2>/dev/null)"
-echo "  pm2 状态: $(pm2 jlist 2>/dev/null | python3 -c 'import sys,json
+# pm2 的表格带 Unicode 竖线，直接 awk 取列不可靠 —— 落成 json 再解析
+pm2 jlist > /tmp/xnow-pm2.json 2>/dev/null
+echo "  pm2 状态: $(python3 - <<'PY' 2>/dev/null
+import json
 try:
-    d=json.load(sys.stdin)
-    print(", ".join(f"{x[\"name\"]}={x[\"pm2_env\"][\"status\"]}" for x in d))
-except Exception: print("读不到")' 2>/dev/null)"
+    d = json.load(open('/tmp/xnow-pm2.json'))
+    print("  ".join("%s=%s" % (x.get("name"), (x.get("pm2_env") or {}).get("status")) for x in d))
+except Exception:
+    print("读不到")
+PY
+)"
 
 step "1. 备份（数据库 + 前端 + nginx + 代码快照）"
 mkdir -p "$BAK" || die "备份目录建不出来"
@@ -118,7 +124,7 @@ fi
 
 if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then
   echo ""
-  echo "  [dry-run] 到此处为止都是只读检查，没有改动任何文件。"
+  echo "  [dry-run] 到此处为止：应用目录一个字节都没动（上面第 1 步的备份是新增文件，无害且有用）。"
   echo "  [dry-run] 备份目录（本次未创建）会是：$PREFLIGHT"
   exit 0
 fi
