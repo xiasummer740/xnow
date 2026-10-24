@@ -1,9 +1,10 @@
 <template>
   <!-- 💳 计费卡（87 期）：代理资格 + 分站月费 + 到期提示 -->
-  <div class="space-y-3 mb-5">
-    <!-- 代理资格 -->
-    <div class="rounded-2xl border p-4"
-         :class="isAgent ? 'border-emerald-800/60 bg-emerald-950/20' : 'border-amber-700/60 bg-amber-950/20'">
+  <div v-if="showAgentCard || sites.length" class="space-y-3 mb-5">
+    <!-- 代理资格：只在"需要你动手"时出现（未开通 / 已过期 / 有到期时间）。
+         早期代理是长期有效、不计月费的，给他看一张挂着「续费 ¥99」的卡纯属添乱。 -->
+    <div v-if="showAgentCard" class="rounded-2xl border p-4"
+         :class="isAgent && agentExpired ? 'border-rose-800/60 bg-rose-950/20' : (isAgent ? 'border-emerald-800/60 bg-emerald-950/20' : 'border-amber-700/60 bg-amber-950/20')">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
@@ -104,6 +105,13 @@ const headers = () => ({
 
 const isStaff = computed(() => ['admin', 'super_admin'].includes(me.value.role))
 const isAgent = computed(() => me.value.role === 'agent')
+// 代理卡是否要显示：未开通 / 已过期 / 有明确到期时间 → 显示；长期有效与管理员 → 隐藏
+const showAgentCard = computed(() => {
+  if (isStaff.value) return false
+  if (!isAgent.value) return true                    // 还没开通：这就是开通入口
+  if (agentExpired.value) return true                // 已过期：需要续费
+  return Number(agent.value.expire_at || 0) > 0      // 有到期时间：需要看到剩余天数 + 续费
+})
 const agentExpired = computed(() => isAgent.value && agent.value.expire_at > 0 && agent.value.expire_at <= Date.now())
 const agentExpireText = computed(() => agent.value.expire_text || '')
 const agentDaysLeft = computed(() => (agent.value.expire_at ? agent.value.days_left : null))

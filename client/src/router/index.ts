@@ -21,7 +21,7 @@ const routes = [
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: () => import('../views/ApiDoc.vue') },
       { path: 'affiliate', component: () => import('../views/Affiliate.vue') },
-      { path: 'my-site', component: () => import('../views/SiteAdmin.vue') }
+      { path: 'my-site/:page?', component: () => import('../views/SiteAdmin.vue') }
     ]
   },
   { path: '/vpn', component: VpnLayout, children: [

@@ -8,6 +8,17 @@
       <button @click="load()" class="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">刷新</button>
     </div>
 
+    <!-- 🧭 92 期：原来 11 个区块堆在一页，手机上滑很久还找不到。拆页后导航就这一条 -->
+    <nav v-if="site" class="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-4 bg-slate-950/95 backdrop-blur border-b border-slate-800 md:border-none md:bg-transparent">
+      <div class="grid grid-cols-4 gap-1.5 md:flex md:flex-wrap md:overflow-visible">
+        <button v-for="t in PAGE_TABS" :key="t.key" @click="go(t.key)"
+          class="px-1.5 py-2 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-1"
+          :class="page === t.key ? 'bg-amber-400 text-slate-900' : 'bg-slate-900/80 text-slate-300 border border-slate-800'">
+          {{ t.icon }} {{ t.label }}
+        </button>
+      </div>
+    </nav>
+
     <!-- 📣 推荐同行开店：站长把朋友介绍来开至尊代理/充值，他拿 10% 返佣。
          只出现在主站的「我的分站」页，分站上不露痕迹。 -->
 
@@ -66,25 +77,31 @@
     <!-- 已有分站 -->
     <div v-else class="space-y-5">
       <!-- 🚦 开站清单：新手不知道"开完站还差什么"，这里直接告诉他 -->
-      <section v-if="pendingSteps.length" class="bg-gradient-to-br from-amber-500/10 to-slate-900/70 border border-amber-500/30 rounded-2xl p-5">
+      <section v-if="page === 'overview' && pendingSteps.length" class="bg-gradient-to-br from-amber-500/10 to-slate-900/70 border border-amber-500/30 rounded-2xl p-5">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-bold text-sm text-amber-300">开站清单（还差 {{ pendingSteps.length }} 步才建议开卖）</h2>
           <span class="text-[11px] text-amber-400/80">{{ doneSteps.length }} / {{ steps.length }} 已完成</span>
         </div>
         <ul class="space-y-2">
-          <li v-for="s in steps" :key="s.key" class="flex items-start gap-2 text-xs">
-            <span class="mt-[1px]">{{ s.done ? '✅' : '⬜' }}</span>
-            <div>
-              <span :class="s.done ? 'text-slate-500 line-through' : 'text-slate-200 font-bold'">{{ s.title }}</span>
-              <span v-if="!s.done" class="block text-[11px] text-slate-500 mt-0.5">{{ s.hint }}</span>
-            </div>
+          <li v-for="s in steps" :key="s.key">
+            <component :is="s.done || !s.go ? 'div' : 'button'" :type="s.done || !s.go ? undefined : 'button'"
+              @click="(!s.done && s.go) ? go(s.go) : null"
+              class="w-full text-left flex items-start gap-2 text-xs rounded-lg px-1 py-1"
+              :class="(!s.done && s.go) ? 'hover:bg-amber-400/10' : ''">
+              <span class="mt-[1px]">{{ s.done ? '✅' : '⬜' }}</span>
+              <div class="flex-1">
+                <span :class="s.done ? 'text-slate-500 line-through' : 'text-slate-200 font-bold'">{{ s.title }}</span>
+                <span v-if="!s.done" class="block text-[11px] text-slate-500 mt-0.5">{{ s.hint }}</span>
+              </div>
+              <span v-if="!s.done && s.go" class="shrink-0 text-[11px] text-amber-400/90 mt-0.5">去改 →</span>
+            </component>
           </li>
         </ul>
         <p class="text-[10px] text-slate-500 mt-3">清单只是提醒，不拦着你开卖。但「收款」没配，客户充不了值；「发信」没配，客户收到的邮件会从平台邮箱发出（个别情况下甚至发不出去）。</p>
       </section>
 
       <!-- 收益看板 -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div v-if="page === 'overview'" class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div v-for="c in cards" :key="c.label" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
           <p class="text-[11px] text-slate-500">{{ c.label }}</p>
           <p class="text-xl font-black mt-1" :class="c.cls">{{ c.value }}</p>
@@ -93,18 +110,15 @@
       </div>
 
       <!-- 基本信息 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
-        <h2 class="font-bold text-sm text-amber-400">基本信息</h2>
+      <section v-if="page === 'overview'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-sm text-amber-400">站点信息</h2>
+          <span class="text-[10px] text-slate-500">名字 / 页脚 / 客服 / 公告</span>
+        </div>
         <div class="grid md:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs text-slate-400 mb-1">站点名称</label>
             <input v-model="form.name" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <!-- 下限不是 1：低于「你的进价」等于每单倒贴，祥哥 2026-10-25 定调保留这条底线 -->
-            <label class="block text-xs text-slate-400 mb-1">倍率（{{ minMul }}~100）</label>
-            <input v-model.number="form.multiplier" type="number" step="0.1" :min="minMul" max="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-            <p class="text-[10px] text-slate-500 mt-1">低于 {{ minMul }} 倍就亏本了，系统不让填。3 倍 = 客户看到的价格是基础价的 3 倍。</p>
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">页脚版权</label>
@@ -121,405 +135,52 @@
         </div>
       </section>
 
+
+      <!-- 💰 售价页：倍率 + 单服务改价 + 折扣促销 -->
+      <section v-if="page === 'pricing'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+        <h2 class="font-bold text-sm text-amber-400">售价倍率</h2>
+        <div class="grid md:grid-cols-2 gap-3 items-start">
+          <div>
+            <input v-model.number="form.multiplier" type="number" step="0.1" :min="minMul" max="100"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+            <p class="text-[10px] text-slate-500 mt-1">可填 {{ minMul }} ~ 100 倍；低于 {{ minMul }} 倍就亏本了，系统不让填。</p>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2">
+            3 倍 = 客户看到的价格是平台基础价的 3 倍。你的进价约是基础价的 2 倍，客户付 3 份、你付 2 份，每单赚 1 份。
+            <span class="block text-slate-500 mt-1">下面还能给单个服务单独定价、或做全站折扣。</span>
+          </p>
+        </div>
+      </section>
+
+
+      <!-- 🧭 92 期：分页入口（手机两列 / 桌面四列），一格一件事 -->
+      <div v-if="page === 'overview'" class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <button v-for="t in PAGE_TABS.filter(x => x.key !== 'overview')" :key="'entry' + t.key" @click="go(t.key)"
+          class="text-left px-4 py-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-amber-400/60 transition">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">{{ t.icon }}</span>
+            <span class="font-bold text-sm text-white">{{ t.label }}</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1 leading-snug">{{ t.hint }}</p>
+        </button>
+      </div>
+
       <!-- 💰 定价体系：单服务改价 + 折扣促销（组件自取自存，保存后回读本站配置） -->
-      <SitePricing v-if="site && site.id" :site-id="site.id" @saved="load()" />
+      <SitePricing v-if="page === 'pricing' && site && site.id" :site-id="site.id" @saved="load()" />
 
-      <!-- 外观 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
-        <h2 class="font-bold text-sm text-amber-400 mb-3">外观模板</h2>
+      <!-- 🎨 装修页（92 期）：实时预览 + 可视化配色/模板/模块拖拽/细节风格 -->
+      <DesignStudio v-if="page === 'design'" :form="form" :site="site" :pv="pv" :templates="templates"
+        :colors="colors" :presets="presets" :uploading="uploading" :preview-modules="previewModules"
+        :module-label="moduleLabel" :module-hint="moduleHint" :sample-price="samplePrice"
+        :bg-presets="BG_PRESETS" @apply-preset="applyPreset" @reset-styles="resetStyles"
+        @pick-image="pickImage" />
 
-        <!-- 🎨 三十三期：一键风格预设。
-             站长不需要懂 6 个旋钮怎么配 —— 先挑一套整体风格，
-             不满意再用下面的旋钮微调。每个预设都是一套调好的组合。 -->
-        <div class="mb-4">
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-xs text-slate-400">一键风格（先挑一套，再微调）</label>
-            <span class="text-[10px] text-slate-600">点一下整套生效</span>
-          </div>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <button v-for="p in presets" :key="p.key" @click="applyPreset(p)"
-              class="text-left px-3 py-2 rounded-lg border transition hover:border-amber-400/60"
-              :class="activePreset === p.key ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 bg-slate-950/40'">
-              <div class="flex items-center gap-1.5 mb-0.5">
-                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="{ background: p.colorHex }"></span>
-                <span class="text-xs font-bold text-white">{{ p.name }}</span>
-              </div>
-              <div class="text-[10px] text-slate-500 leading-tight">{{ p.desc }}</div>
-            </button>
-          </div>
-        </div>
-
-        <div class="grid lg:grid-cols-2 gap-5">
-          <!-- 左：选择器 -->
-          <div class="space-y-3">
-            <div>
-              <label class="block text-xs text-slate-400 mb-2">模板</label>
-              <div class="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-3 gap-2">
-                <button v-for="t in templates" :key="t.key" @click="form.template = t.key"
-                  class="px-2 py-2 rounded-lg text-xs border transition"
-                  :class="form.template === t.key ? 'border-amber-400 bg-amber-400/10 text-amber-300 font-bold' : 'border-slate-700 text-slate-400 hover:border-slate-600'">
-                  {{ t.label }}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs text-slate-400 mb-2">色系</label>
-              <div class="flex flex-wrap gap-2">
-                <button v-for="c in colors" :key="c.key" @click="form.color = c.key; form.accent = ''"
-                  class="w-9 h-9 rounded-full border-2 transition"
-                  :class="form.color === c.key && !form.accent ? 'border-white scale-110' : 'border-transparent opacity-70 hover:opacity-100'"
-                  :style="{ background: c.hex }" :title="c.label"></button>
-              </div>
-              <div class="mt-2 flex items-center gap-2">
-                <input v-model="form.accent" placeholder="#RRGGBB 自定义" class="w-32 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs" />
-                <span class="text-[10px] text-slate-500">填了就覆盖上面的色系</span>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs text-slate-400 mb-2">首页模块（开关 + 排序）</label>
-              <div class="space-y-1.5">
-                <div v-for="(m, i) in form.modules" :key="m.key" class="flex items-center gap-2 bg-slate-950/60 rounded-lg px-3 py-2">
-                  <input type="checkbox" v-model="m.enabled" class="w-[18px] h-[18px] shrink-0 accent-amber-400" />
-                  <span class="text-xs flex-1">{{ moduleLabel(m.key) }}</span>
-                  <button @click="moveModule(i, -1)" :disabled="i === 0" title="上移" class="w-9 h-9 md:w-7 md:h-7 grid place-items-center rounded-lg bg-slate-800/70 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800/70">↑</button>
-                  <button @click="moveModule(i, 1)" :disabled="i === form.modules.length - 1" title="下移" class="w-9 h-9 md:w-7 md:h-7 grid place-items-center rounded-lg bg-slate-800/70 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800/70">↓</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 🎨 二十七期：风格细分（模板只能整体换，这些可以自由叠加） -->
-            <div class="pt-3 border-t border-slate-700/50">
-              <div class="flex items-center justify-between mb-2">
-                <label class="block text-xs text-slate-400">细节风格（可自由叠加在模板之上）</label>
-                <button @click="resetStyles()" class="px-2 py-1.5 -my-1 rounded-lg text-[10px] text-slate-500 hover:text-amber-400 hover:bg-slate-800/60">跟随模板</button>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">圆角</label>
-                  <select v-model="form.ui_radius" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs">
-                    <option value="">跟随模板</option>
-                    <option value="square">直角（硬朗）</option>
-                    <option value="soft">小圆角（干净）</option>
-                    <option value="round">大圆角（柔和）</option>
-                    <option value="pill">胶囊（可爱）</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">页面节奏</label>
-                  <select v-model="form.ui_density" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs">
-                    <option value="">跟随模板</option>
-                    <option value="compact">紧凑（信息多）</option>
-                    <option value="normal">标准</option>
-                    <option value="relaxed">宽松（高级感）</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">卡片质感</label>
-                  <select v-model="form.card_style" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                    <option value="">跟随模板</option>
-                    <option value="outline">描边（极简）</option>
-                    <option value="glass">毛玻璃（通透）</option>
-                    <option value="solid">实心（厚实）</option>
-                  </select>
-                </div>
-
-              <!-- 71期：背景与字号（站长不动代码也要能改；与首页悬浮编辑器同一套选项）-->
-              <div class="col-span-2 mt-1">
-                <label class="block text-[10px] text-slate-500 mb-1">页面背景</label>
-                <div class="flex flex-wrap gap-2">
-                  <button v-for="b in BG_PRESETS" :key="b.key" type="button"
-                    class="w-9 h-9 rounded-lg border-2 transition"
-                    :class="form.bg_color === b.key ? 'border-amber-400 scale-110' : 'border-slate-700'"
-                    :style="{ background: b.css }" :title="b.name"
-                    @click="form.bg_color = b.key"></button>
-                </div>
-                <div class="flex flex-wrap items-center gap-2 mt-2">
-                  <button type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-amber-400"
-                    :disabled="uploading === 'bg_image'" @click="pickImage('bg_image')">
-                    {{ uploading === 'bg_image' ? '上传中…' : '上传自己的背景图' }}
-                  </button>
-                  <button v-if="form.bg_image" type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400"
-                    @click="form.bg_image = ''">去掉背景图</button>
-                  <span v-if="form.bg_image" class="text-[10px] text-emerald-400">已选背景图（选纯色会让图片失效）</span>
-                </div>
-              </div>
-
-              <div class="col-span-2">
-                <label class="block text-[10px] text-slate-500 mb-1">字号</label>
-                <div class="flex gap-2">
-                  <button v-for="f in FONT_SCALES" :key="f.key" type="button"
-                    class="flex-1 py-1.5 rounded-lg text-xs border transition"
-                    :class="(form.font_scale || 'md') === f.key ? 'bg-amber-400 text-slate-900 border-amber-400 font-bold' : 'bg-slate-950 border-slate-700 text-slate-400'"
-                    @click="form.font_scale = f.key">{{ f.name }}</button>
-                </div>
-                <p class="text-[10px] text-slate-600 mt-1">字小一点能多放信息；字大一点更好读。</p>
-              </div>
-                <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">字体</label>
-                  <select v-model="form.font_style" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                    <option value="">跟随模板</option>
-                    <option value="sans">现代无衬线</option>
-                    <option value="rounded">圆润</option>
-                    <option value="serif">衬线（杂志感）</option>
-                    <option value="mono">等宽（科技感）</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">按钮形状</label>
-                  <select v-model="form.btn_shape" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                    <option value="">跟随模板</option>
-                    <option value="pill">胶囊</option>
-                    <option value="rounded">圆角</option>
-                    <option value="square">方角</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">首屏布局</label>
-                  <select v-model="form.hero_layout" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                    <option value="">居中式（默认）</option>
-                    <option value="split">左文右图</option>
-                    <option value="banner">整屏大图</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ══════════════════════════════════════════════════════════
-               🎨 全方位 DIY（四十一期）
-               祥哥："需要站长能全方位 DIY 自己的网站"
-               上面的旋钮只改颜色/圆角；这一块改的是**版式结构**与**每一块的字**。
-               ══════════════════════════════════════════════════════════ -->
-          <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 mt-4">
-            <div class="flex items-center justify-between mb-3">
-              <h2 class="font-bold text-sm text-amber-400">🎨 版式与文案（自己排版）</h2>
-              <span class="text-[10px] text-slate-500">留空 = 用模板默认</span>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              <div>
-                <label class="block text-[10px] text-slate-500 mb-1">首屏版式（结构不同，不只是换色）</label>
-                <select v-model="form.hero_variant" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                  <option value="">跟随模板（推荐）</option>
-                  <option value="center">居中大标题 · 电商落地页</option>
-                  <option value="split">左文右价卡 · SaaS 产品页</option>
-                  <option value="editorial">杂志排版 · 左对齐 + 首字下沉</option>
-                  <option value="terminal">终端窗口 · 极客工具感</option>
-                </select>
-                <p v-if="form.hero_variant || form.services_variant" class="mt-1 text-[10px] text-amber-400/90 leading-relaxed">
-                  ⚠️ 你选了具体版式，上面 6 套模板的版式都会被它盖掉（只剩配色不同）。想用模板自带的版式，把这两项都选回「跟随模板」。
-                </p>
-              </div>
-              <div>
-                <label class="block text-[10px] text-slate-500 mb-1">服务列表版式</label>
-                <select v-model="form.services_variant" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                  <option value="">跟随模板</option>
-                  <option value="cards">卡片网格</option>
-                  <option value="table">价格表 · 一行一个服务</option>
-                  <option value="ranked">编号榜单 · 杂志感</option>
-                </select>
-              </div>
-            </div>
-
-            <label class="block text-[10px] text-slate-500 mb-2">每个区块的标题 / 副标题（不改就用默认）</label>
-            <div class="space-y-2 mb-4">
-              <div v-for="sec in SECTION_KEYS" :key="sec.key" class="grid grid-cols-[80px_1fr_1fr] items-center gap-2">
-                <span class="text-[10px] text-slate-500">{{ sec.label }}</span>
-                <input v-model="form.section_titles[sec.key].title" :placeholder="sec.phTitle"
-                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
-                <input v-model="form.section_titles[sec.key].sub" :placeholder="sec.phSub"
-                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
-              </div>
-            </div>
-
-            <label class="block text-[10px] text-slate-500 mb-2">
-              「优势」三张卡片的内容（图标 + 标题 + 说明；留空用系统默认文案）
-            </label>
-            <div class="space-y-2 mb-4">
-              <div v-for="(a, i) in form.advantages" :key="'adv' + i" class="grid grid-cols-[46px_1fr] gap-2 items-start">
-                <input v-model="a.icon" maxlength="4" :placeholder="['⚡','💎','🔒'][i]"
-                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-center text-sm" />
-                <div class="space-y-1.5">
-                  <input v-model="a.title" maxlength="30" :placeholder="['秒级自动交付','超值价格','安全无需密码'][i]"
-                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
-                  <input v-model="a.body" maxlength="80"
-                    :placeholder="['系统全自动对接，下单即处理。','价格以下单页为准，透明可查。','只需目标链接，无需账号密码。'][i]"
-                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
-                </div>
-              </div>
-              <p class="text-[10px] text-slate-600">图标最多 2 个字符（emoji 即可），标题最多 30 字，说明最多 80 字。</p>
-            </div>
-
-            <div class="mb-3">
-              <label class="block text-[10px] text-slate-500 mb-1">
-                <span>站点图标（浏览器标签上的小图标）</span>
-                <button type="button" @click="pickImage('favicon_url')" :disabled="uploading"
-                  class="ml-2 text-[10px] px-2 py-1 rounded border border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
-                  {{ uploading === 'favicon_url' ? '上传中…' : '📤 上传图标' }}
-                </button>
-              </label>
-              <input v-model="form.favicon_url" placeholder="留空则用默认图标"
-                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs" />
-            </div>
-
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-1">自定义 CSS（高级：能改任何细节，最多 8000 字符）</label>
-              <textarea v-model="form.custom_css" rows="5" spellcheck="false"
-                placeholder="例如：&#10;.site-card { border-radius: 0; }&#10;h1 { letter-spacing: -0.02em; }"
-                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono leading-relaxed"></textarea>
-              <p class="mt-1 text-[10px] text-slate-600">只影响你自己的分站。为安全起见，@import 与尖括号会被自动过滤。</p>
-            </div>
-          </section>
-
-          <!-- 右：实时预览 -->
-          <div class="lg:sticky lg:top-4 self-start">
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-xs text-slate-400">效果预览（点了就变，不用保存）</label>
-              <span class="text-[10px] text-slate-600">近似效果</span>
-            </div>
-
-            <div :style="previewShell"
-              class="rounded-xl overflow-hidden border border-slate-700/60 shadow-lg">
-              <!-- 顶部导航 -->
-              <div :style="previewNav" class="flex items-center justify-between px-3 py-2">
-                <span :style="{ color: pv.brand, fontWeight: 800, fontSize: '11px', fontFamily: pv.titleFont }">{{ form.name || '你的站点名' }}</span>                <div class="flex gap-2">
-                  <span v-for="n in ['服务', '充值', '我的']" :key="n" :style="{ color: 'rgba(226,232,240,.55)', fontSize: '9px' }">{{ n }}</span>
-                </div>
-              </div>
-
-              <!-- Hero -->
-              <div class="px-3 pt-3 pb-2">
-                <div :style="{ color: '#f8fafc', fontSize: '15px', fontWeight: 900, lineHeight: 1.25, fontFamily: pv.titleFont }">
-                  {{ form.hero_title || form.name || '你的站点名' }}
-                </div>
-                <div :style="{ color: 'rgba(148,163,184,.9)', fontSize: '9px', marginTop: '3px' }">
-                  {{ form.hero_subtitle || '全自动数字营销 · 秒级交付' }}
-                </div>
-                <div class="flex gap-1.5 mt-2">
-                  <span :style="previewBtnPrimary">{{ form.hero_btn1_text || '立即下单' }}</span>
-                  <span :style="previewBtnGhost">{{ form.hero_btn2_text || '查看价格' }}</span>
-                </div>
-              </div>
-
-              <!-- 模块（跟随开关与排序） -->
-              <div class="px-3 pb-2 space-y-1.5">
-                <div v-for="m in previewModules" :key="m.key" :style="previewCard" class="px-2 py-1.5">
-                  <div class="flex items-center justify-between">
-                    <span :style="{ color: '#e2e8f0', fontSize: '9px', fontWeight: 700, fontFamily: pv.titleFont }">{{ moduleLabel(m.key) }}</span>
-                    <span v-if="m.key === 'hot_services'" :style="{ color: pv.brand, fontSize: '9px', fontWeight: 700 }">¥{{ samplePrice }}/千</span>
-                  </div>
-                  <div v-if="m.key === 'stats'" class="flex gap-2 mt-1">
-                    <span v-for="s in ['2839 服务', '12.4k 订单', '99.2% 完成']" :key="s"
-                      :style="{ color: 'rgba(148,163,184,.85)', fontSize: '8px' }">{{ s }}</span>
-                  </div>
-                  <div v-else-if="m.key === 'hot_services'" class="mt-1 space-y-1">
-                    <div v-for="(sv, i) in ['TikTok 涨粉', 'Telegram 成员', '网页流量']" :key="i"
-                      class="flex items-center justify-between">
-                      <span :style="{ color: 'rgba(203,213,225,.9)', fontSize: '8px' }">{{ sv }}</span>
-                      <span :style="{ color: 'rgba(148,163,184,.8)', fontSize: '8px' }">下单</span>
-                    </div>
-                  </div>
-                  <div v-else :style="{ color: 'rgba(148,163,184,.6)', fontSize: '8px', marginTop: '2px' }">
-                    {{ moduleHint(m.key) }}
-                  </div>
-                </div>
-                <div v-if="!previewModules.length" :style="{ color: 'rgba(148,163,184,.6)', fontSize: '9px' }" class="py-2 text-center">
-                  首页模块全部关闭了，只剩导航和 Hero
-                </div>
-              </div>
-
-              <!-- 页脚 -->
-              <div :style="previewFooter" class="px-3 py-1.5 text-center">
-                <span :style="{ color: 'rgba(148,163,184,.75)', fontSize: '8px' }">
-                  {{ form.footer_text || `© ${new Date().getFullYear()} ${form.name || '你的站点名'}` }}
-                </span>
-              </div>
-            </div>
-
-            <p class="text-[10px] text-slate-500 mt-2 leading-relaxed">
-              这是近似预览（配色/圆角/阴影/字体/模块顺序与实际一致，真实页面还有动画与真实数据）。
-              保存后打开你的站，看到的就是最终效果。
-            </p>
-            <a v-if="site && site.domain" :href="`//${site.domain}`" target="_blank"
-              class="inline-block mt-1 text-[11px] text-sky-400 hover:text-sky-300">
-              保存后点这里打开真实站点 ↗
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <!-- ✍️ 首页文案：模板决定"骨架"，这里决定"上面写什么话" -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h2 class="font-bold text-sm text-amber-400">首页文案（把话换成你自己的）</h2>
-            <p class="text-[11px] text-slate-500 mt-1">
-              上面选的是「长什么样」，这里写的是「说什么话」。留空就用系统默认文案 —— 但默认文案和主站一样，客户一眼能认出来。
-            </p>
-          </div>
-          <button @click="fillHeroDemo" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px]">
-            用示例文案填满
-          </button>
-        </div>
-        <div class="grid md:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">顶部小标签</label>
-            <input v-model="form.hero_badge" maxlength="120" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="🚀 全网最低价涨粉平台" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">大标题（显眼那一行）</label>
-            <input v-model="form.hero_title" maxlength="120" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="涨粉就找我们" />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs text-slate-400 mb-1">副标题</label>
-            <input v-model="form.hero_subtitle" maxlength="255" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="TikTok / IG / YouTube 全平台涨粉，秒级交付" />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs text-slate-400 mb-1">灰色小字说明</label>
-            <input v-model="form.hero_desc" maxlength="255" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="支持微信 / 支付宝 / USDT 充值，注册即用" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">主按钮文字</label>
-            <input v-model="form.hero_btn1_text" maxlength="40" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="⚡ 立即注册" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">主按钮链接</label>
-            <input v-model="form.hero_btn1_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="/login（留空默认注册页）" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">次按钮文字</label>
-            <input v-model="form.hero_btn2_text" maxlength="40" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="💬 联系客服" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">次按钮链接</label>
-            <input v-model="form.hero_btn2_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="https://t.me/你的客服" />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs text-slate-400 mb-1 flex items-center justify-between">
-              <span>Logo 图片</span>
-              <button type="button" @click="pickImage('logo')" :disabled="uploading"
-                class="text-[10px] px-2 py-1 rounded border border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
-                {{ uploading === 'logo' ? '上传中…' : '📤 上传图片' }}
-              </button>
-            </label>
-            <input v-model="form.logo" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="/logo.png 或 https://你的图床/logo.png" />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs text-slate-400 mb-1 flex items-center justify-between">
-              <span>首页背景图（可选）</span>
-              <button type="button" @click="pickImage('hero_bg_url')" :disabled="uploading"
-                class="text-[10px] px-2 py-1 rounded border border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
-                {{ uploading === 'hero_bg_url' ? '上传中…' : '📤 上传图片' }}
-              </button>
-            </label>
-            <input v-model="form.hero_bg_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空用模板自带背景" />
-          </div>
-        </div>
-        <p class="text-[10px] text-slate-500">链接只能填 http(s):// 开头的地址或站内路径（如 /login）。图片建议 1600×900 以内，纯色或暗色背景更耐看。</p>
-      </section>
+      <!-- ✍️ 文案页（92 期）：字段旁边就能看到成品，所见即将来客户看到的 -->
+      <CopyStudio v-if="page === 'copy'" :form="form" :pv="pv" :section-keys="SECTION_KEYS"
+        :uploading="uploading" @pick-image="pickImage" @fill-demo="fillHeroDemo" />
 
       <!-- 收款 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+      <section v-if="page === 'payment'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">收款商户（钱直接进你的账户）</h2>
         <p class="text-[11px] text-slate-500 leading-relaxed">
           填你自己的 BufPay / Cryptomus 商户，客户在你站上付款时直接进你的账号。
@@ -558,7 +219,7 @@
       </section>
 
       <!-- 邮件 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+      <section v-if="page === 'email'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">发信邮箱（客户收到的验证码用你的品牌）</h2>
         <p class="text-[11px] text-slate-500">不填也能用：邮件标题、正文和署名仍然是你的品牌，但<b class="text-amber-400">发件地址会是平台的邮箱</b>，客户点开「显示详情」能看到平台域名。想让客户完全看不到平台，就用自己域名注册一个邮箱填进来（QQ 邮箱、企业邮箱都行，两分钟）。</p>
         <div class="grid md:grid-cols-2 gap-3">
@@ -599,7 +260,7 @@
       </section>
 
       <!-- 域名 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+      <section v-if="page === 'domain'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">域名</h2>
         <p class="text-xs text-slate-400">
           当前站点域名：<span class="text-amber-300 font-bold">{{ site.domain }}</span>
@@ -635,7 +296,7 @@
       </section>
 
       <!-- 明细 -->
-      <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
+      <section v-if="page === 'orders'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="font-bold text-sm text-amber-400">经营明细</h2>
           <div class="flex gap-2">
@@ -689,7 +350,7 @@
         <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的成本</p>
       </section>
 
-      <div class="flex gap-3">
+      <div v-if="page !== 'orders'" class="flex gap-3">
         <button @click="save()" :disabled="saving" class="flex-1 py-3 rounded-xl font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
           {{ saving ? '保存中…' : '保存全部修改' }}
         </button>
@@ -700,12 +361,38 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import DesignStudio from '../components/site/DesignStudio.vue'
+import CopyStudio from '../components/site/CopyStudio.vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import SiteBilling from '../components/site/SiteBilling.vue'
 import SitePricing from '../components/site/SitePricing.vue'
 
 const userStore = useUserStore()
+const router = useRouter()
+const route = useRoute()
+
+// 🧭 92 期：把原来一页到底的「我的分站」拆成 8 个页面（祥哥："是不是也要做各自页面，这样方便些"）。
+//    每个页面一个地址，可以直接收藏/分享/浏览器后退；手机上不会再滑半天找不到某一项。
+const PAGE_TABS = [
+  { key: 'overview', icon: '🏠', label: '概览', hint: '站点信息 · 开站清单 · 收益心跳' },
+  { key: 'design',   icon: '🎨', label: '装修', hint: '模板 / 色系 / 首页模块排序 + 实时预览' },
+  { key: 'copy',     icon: '✍️', label: '文案', hint: '首屏版式、每块标题、按钮与图片' },
+  { key: 'pricing',  icon: '💰', label: '售价', hint: '倍率 / 单服务改价 / 折扣促销' },
+  { key: 'payment',  icon: '💳', label: '收款', hint: '填自己的商户，客户付款直接进你账户' },
+  { key: 'email',    icon: '📧', label: '邮件', hint: '客户收到的验证码用你的品牌' },
+  { key: 'domain',   icon: '🌐', label: '域名', hint: '绑定自己的域名 + 证书状态' },
+  { key: 'orders',   icon: '📊', label: '经营', hint: '订单明细 / 客户消费' },
+]
+const page = ref('overview')
+const go = (key) => router.push(key === 'overview' ? '/my-site' : `/my-site/${key}`)
+watch(() => route.params.page, (v) => {
+  page.value = PAGE_TABS.some(t => t.key === v) ? v : 'overview'
+}, { immediate: true })
+watch(page, (v) => {
+  if (v === 'orders') { loadOrders(); loadCustomers() }
+})
 const loading = ref(true)
 const billingRef = ref(null)
 const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 99 })
@@ -740,36 +427,42 @@ const steps = computed(() => {
   return [
     {
       key: 'price',
+        go: 'pricing',
       title: `设置售价（不低于 ${minMul.value} 倍才不亏）`,
       done: isFinite(mul) && mul >= minMul.value,
       hint: `现在是 ${isFinite(mul) ? mul : '未设置'} 倍。低于 ${minMul.value} 倍等于亏本卖。`
     },
     {
       key: 'pay',
+        go: 'payment',
       title: '配置收款商户（客户才能在线充值）',
       done: !!(s.bufpay_id && s.bufpay_key) || !!(s.cryptomus_id && s.cryptomus_key),
       hint: '没配的话客户点充值会看到「暂未开通」，只能靠你手动给他加余额。'
     },
     {
       key: 'smtp',
+        go: 'email',
       title: '配置发信邮箱（客户注册要收验证码）',
       done: !!(s.smtp_host && s.smtp_user && s.smtp_pass),
       hint: '没配的话客户注册不了。填完记得点「发一封测试信」。'
     },
     {
       key: 'look',
+        go: 'design',
       title: '换成你自己的样子（模板 + 色系 + 页脚）',
       done: (s.template && s.template !== 'classic') || (s.color && s.color !== 'cyan') || !!s.footer_text,
       hint: '默认样式和主站相近，换成自己的模板客户才看不出是同一家。'
     },
     {
       key: 'copy',
+        go: 'copy',
       title: '写自己的首页文案（标题/副标题/按钮）',
       done: !!(s.hero_title || s.hero_subtitle),
       hint: '模板决定长什么样，文案决定说什么话。默认文案和主站一模一样。'
     },
     {
       key: 'domain',
+        go: 'domain',
       title: '绑定自己的域名（可选，显得更专业）',
       done: !!(s.custom_domain && s.domain_status === 'active'),
       hint: '不绑也能用免费子域名，不影响收款。'
@@ -882,6 +575,10 @@ const loadHotPrice = async () => {
 }
 
 const moduleHint = (key) => ({
+  audience: '客户案例墙，让新客户觉得「真的有人在用」',
+  steps: '三步流程图，降低「不会用」的顾虑',
+  advantages: '三条核心卖点：快、值、安全',
+  cta: '页面底部的行动号召（注册 / 下单）',
   announce: '一条滚动公告，比如「新用户首单 9 折」',
   stats: '服务数 / 订单数 / 完成率，增加信任感',
   hot_services: '把卖得最好的服务摆在首页',
