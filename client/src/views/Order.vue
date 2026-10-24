@@ -84,7 +84,12 @@
         <div v-if="activeService" class="bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl md:rounded-2xl p-4 md:p-5 flex items-center justify-between text-slate-900 shadow-[0_5px_15px_rgba(251,191,36,0.3)]">
           <div class="flex items-start md:items-center space-x-3 md:space-x-4 w-full mr-2">
             <div class="bg-slate-900 text-amber-400 font-black px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-sm md:text-base flex-shrink-0 mt-0.5 md:mt-0">ID: {{ activeService.service }}</div>
-            <div class="font-bold text-xs md:text-sm whitespace-normal break-words flex-grow leading-snug">{{ activeService.name }}</div>
+            <div class="font-bold text-xs md:text-sm whitespace-normal break-words flex-grow leading-snug">
+              <!-- 74 期：服务名常常是「ID:30094 | 🔥🎉【千粉2-3小时完成】TikTok 真人粉 | 高质量真实用户 | …」
+                   这么一长串，手机上能把整张卡撑成 5 行。手机只显示提炼后的短名，电脑端照旧显示全称。 -->
+              <span class="md:hidden line-clamp-2">{{ shortServiceName(activeService.name) }}</span>
+              <span class="hidden md:inline">{{ activeService.name }}</span>
+            </div>
           </div>
           <div class="text-xl md:text-2xl font-black whitespace-nowrap flex-shrink-0">{{ appStore.formatMoney(activeService.rate) }}</div>
         </div>
@@ -356,6 +361,15 @@ const rawTotalPrice = computed(() => {
 });
 
 // 排他性正则过滤引擎
+// 服务名太长时给手机端提炼一句人话：去掉开头的 ID、去掉表情、只留第一段
+const shortServiceName = (n) => {
+  let t = String(n || '');
+  t = t.replace(/^\s*ID\s*[:：]?\s*\d+\s*[|｜]\s*/i, '');
+  t = t.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').trim();
+  t = t.split(/[|｜]/)[0].trim();
+  return t.length > 22 ? t.slice(0, 22) + '…' : t;
+};
+
 const isCustomComments = computed(() => {
     if (!activeService.value) return false;
     // 🔌 特殊类型优先判定：否则名字里带"自定义"的订阅型会同时显示评论框

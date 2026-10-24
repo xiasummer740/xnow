@@ -19,6 +19,11 @@ router.get('/config', async (req, res) => {
     const data = {};
     configs.forEach(c => data[c.key] = c.value);
 
+    // 🌐 主站地址（站长推广链接要用）。服务端下发而不是前端取 window.location.origin：
+    //    万一站长在自己的分站域名下打开了「我的分站」，取 origin 会生成一个分站链接，
+    //    拉来的人就成了分站的客户，返佣也就落不到主站体系里。
+    data.main_origin = process.env.MAIN_ORIGIN || 'https://xnow.taikon.top';
+
     // 分站覆盖：使用分站专属配置
     if (req.site) {
       data.site_name = req.site.name || data.site_name;

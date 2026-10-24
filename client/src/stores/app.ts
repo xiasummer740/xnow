@@ -18,7 +18,8 @@ export const useAppStore = defineStore('app', {
     // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）
     bgColor: '', bgImage: '', fontScale: '',
     // 🎨 四十一期：全方位 DIY
-    heroVariant: '', servicesVariant: '', sectionTitles: {} as Record<string, { title?: string; sub?: string }>,
+    mainOrigin: '',   // 主站地址（服务端下发，推广链接用）
+  heroVariant: '', servicesVariant: '', sectionTitles: {} as Record<string, { title?: string; sub?: string }>,
     customCss: '', faviconUrl: '',
     // ✍️ 十九期：首页文案自定义（主站为空 → Home.vue 回落到默认文案）
     hero: {} as Record<string, string> }),
@@ -33,6 +34,7 @@ export const useAppStore = defineStore('app', {
     // 落到 localStorage 供路由守卫用（守卫读不到 store，只能读本地存储）
     try { localStorage.setItem('xnow_is_subsite', this.isSubsite ? '1' : '0'); } catch (e) {}
     this.siteId = d.site_id || 0;
+    if (d.main_origin) this.mainOrigin = d.main_origin;
     if (d.theme_template) this.themeTemplate = d.theme_template;
       if (d.theme_color) this.themeColor = d.theme_color;
       this.themeAccent = d.theme_accent || '';
