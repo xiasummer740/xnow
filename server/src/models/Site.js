@@ -27,7 +27,11 @@ const Site = sequelize.define('Site', {
   bufpay_id: { type: DataTypes.STRING(64), allowNull: true },
   bufpay_key: { type: DataTypes.STRING(128), allowNull: true },
   cryptomus_id: { type: DataTypes.STRING(64), allowNull: true },
-  cryptomus_key: { type: DataTypes.STRING(160), allowNull: true }
+  cryptomus_key: { type: DataTypes.STRING(160), allowNull: true },
+  // 🌐 自有域名开通状态
+  domain_status: { type: DataTypes.ENUM('none', 'pending', 'active', 'failed'), allowNull: false, defaultValue: 'none' },
+  domain_token: { type: DataTypes.STRING(64), allowNull: true },   // TXT 验证用令牌
+  cert_mode: { type: DataTypes.STRING(16), allowNull: true }       // letsencrypt / selfsigned / existing
 }, {
   tableName: 'sites',
   timestamps: true,

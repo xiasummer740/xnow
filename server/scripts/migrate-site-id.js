@@ -95,6 +95,9 @@ const run = async () => {
     ['bufpay_key',    'VARCHAR(128) NULL'],
     ['cryptomus_id',  'VARCHAR(64) NULL'],
     ['cryptomus_key', 'VARCHAR(160) NULL'],
+    ['domain_status', "ENUM('none','pending','active','failed') NOT NULL DEFAULT 'none'"],
+    ['domain_token',  'VARCHAR(64) NULL'],
+    ['cert_mode',     'VARCHAR(16) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {

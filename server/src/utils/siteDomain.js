@@ -1,0 +1,159 @@
+// 🏬 分站自有域名自动开通（六期）
+//
+// 站长绑自己的域名（如 shop.hisbrand.com）→ 系统验证归属 → 申请证书 → 写 nginx vhost → 重载。
+//
+// 三道安全闸门：
+//   ① 域名黑名单：主站域名及其子域、上游域名一律不许绑（防止分站把生产域名抢走）
+//   ② 归属验证：DNS A 记录必须指向本机，**或** 存在 TXT 记录 xnow-verify=<token>
+//      （后者是为了兼容 Cloudflare 代理模式 —— 开了橙云之后 A 记录解析出来是 CF 的 IP，
+//        永远等不到本机 IP，没有 TXT 兜底站长就永远绑不上）
+//   ③ 证书：优先 Let's Encrypt；机器上没有 certbot 时退回自签证书保证能用，
+//      并把状态标成 insecure 让站长知道"能用但不被浏览器信任"
+
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import dns from 'dns/promises';
+import { Site } from '../models/index.js';
+
+const NGINX_DIR = '/etc/nginx/sites-enabled';
+const SSL_DIR = '/etc/nginx/ssl';
+
+// 绝不允许分站绑定的域名（主站 + 上游）
+const FORBIDDEN = ['xnow.taikon.top', 'taikon.top', 'tk7188.com'];
+
+export const isDomainForbidden = (domain) => {
+  const d = String(domain || '').toLowerCase();
+  if (!d) return true;
+  return FORBIDDEN.some(f => d === f || d.endsWith('.' + f));
+};
+
+export const isValidDomain = (domain) => {
+  const d = String(domain || '').toLowerCase();
+  // 只允许标准主机名：标签 1~63、总长 ≤253，且必须至少两级
+  if (d.length > 253 || d.length < 4) return false;
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d)) return false;
+  return d.includes('.');
+};
+
+export const vhostPath = (siteId, domain) =>
+  path.join(NGINX_DIR, `xnow-site-${siteId}-${String(domain).replace(/[^a-z0-9.-]/gi, '')}`);
+
+// 归属验证：返回 { ok, reason, detail }
+export const verifyDomainOwnership = async (domain, token) => {
+  const expectedIp = process.env.SERVER_PUBLIC_IP || '192.129.210.52';
+  let aRecords = [];
+  try { aRecords = await dns.resolve4(domain); } catch (e) { aRecords = []; }
+  if (aRecords.includes(expectedIp)) {
+    return { ok: true, reason: 'A 记录指向本机', detail: aRecords.join(',') };
+  }
+  // Cloudflare 橙云兜底：查 TXT
+  let txt = [];
+  try {
+    const rows = await dns.resolveTxt(domain);
+    txt = rows.map(r => r.join(''));
+  } catch (e) { txt = []; }
+  if (token && txt.some(t => t.trim() === `xnow-verify=${token}`)) {
+    return { ok: true, reason: 'TXT 记录验证通过（Cloudflare 代理模式）', detail: `a=${aRecords.join(',') || '无'}` };
+  }
+  return {
+    ok: false,
+    reason: '域名尚未指向本机',
+    detail: `A 记录: ${aRecords.join(',') || '无'}；也未找到 TXT xnow-verify=${token || '(未生成)'}`
+  };
+};
+
+// 证书：有 certbot 就用 LE，没有就自签（保证能用，但标 insecure）
+export const ensureCert = async (domain) => {
+  const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
+  const crt = path.join(SSL_DIR, `${safe}.crt`);
+  const key = path.join(SSL_DIR, `${safe}.key`);
+
+  // 已有 Let's Encrypt 证书
+  const le = path.join('/etc/letsencrypt/live', safe, 'fullchain.pem');
+  if (fs.existsSync(le)) {
+    return { crt: le, key: path.join('/etc/letsencrypt/live', safe, 'privkey.pem'), mode: 'letsencrypt' };
+  }
+  if (fs.existsSync(crt) && fs.existsSync(key)) {
+    return { crt, key, mode: 'existing' };
+  }
+
+  // 尝试 certbot
+  let hasCertbot = false;
+  try { execSync('command -v certbot', { stdio: 'ignore' }); hasCertbot = true; } catch (e) { hasCertbot = false; }
+
+  if (hasCertbot) {
+    try {
+      execSync(
+        `certbot certonly --nginx -d ${safe} --non-interactive --agree-tos ` +
+        `--register-unsafely-without-email --keep-until-expiring`,
+        { stdio: 'pipe', timeout: 180000 }
+      );
+      if (fs.existsSync(path.join('/etc/letsencrypt/live', safe, 'fullchain.pem'))) {
+        return { crt: path.join('/etc/letsencrypt/live', safe, 'fullchain.pem'), key: path.join('/etc/letsencrypt/live', safe, 'privkey.pem'), mode: 'letsencrypt' };
+      }
+    } catch (e) {
+      // 落到自签
+    }
+  }
+
+  // 自签兜底（openssl 在绝大多数镜像里都有）
+  execSync(
+    `openssl req -x509 -nodes -newkey rsa:2048 -days 3650 ` +
+    `-keyout ${key} -out ${crt} -subj "/CN=${safe}"`,
+    { stdio: 'pipe', timeout: 60000 }
+  );
+  return { crt, key, mode: 'selfsigned' };
+};
+
+// 写 vhost：HTTP 跳 HTTPS + HTTPS 反代到分站后端端口，静态根指向分站 dist
+export const writeVhost = ({ siteId, domain, backendPort, distRoot, cert }) => {
+  const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
+  const file = vhostPath(siteId, safe);
+  const conf = `# 自动生成：分站 ${siteId} 自有域名 ${safe}
+# 由 server/src/utils/siteDomain.js 写入，请勿手工编辑
+server {
+    listen 80;
+    server_name ${safe};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${safe};
+
+    ssl_certificate     ${cert.crt};
+    ssl_certificate_key ${cert.key};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    root ${distRoot};
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:${backendPort};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+
+    location / {
+        try_files $uri $uri.html $uri/ /index.html;
+    }
+}
+`;
+  fs.writeFileSync(file, conf, 'utf8');
+  return file;
+};
+
+export const reloadNginx = () => {
+  // -s reload 是原子的：配置有错时保留旧进程继续服务，不会像 restart 那样中断
+  execSync('nginx -s reload', { stdio: 'pipe', timeout: 30000 });
+};
+
+export const removeVhost = (siteId, domain) => {
+  const file = vhostPath(siteId, domain);
+  try { if (fs.existsSync(file)) fs.unlinkSync(file); return true; } catch (e) { return false; }
+};

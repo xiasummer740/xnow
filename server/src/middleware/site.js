@@ -4,6 +4,13 @@ const siteCache = new Map();
 let cacheTime = 0;
 const CACHE_TTL = 60 * 1000; // 1分钟缓存
 
+// 站点增删改（尤其是新绑域名）后必须立刻失效缓存，
+// 否则最长 60 秒内新域名仍被当成主站 —— 表现为「域名刚开通却看不到分站内容」。
+export const clearSiteCache = () => {
+  siteCache.clear();
+  cacheTime = 0;
+};
+
 export const siteMiddleware = async (req, res, next) => {
   try {
     // 🔒 只认 nginx 透传的 Host（install.sh 里 `proxy_set_header Host $host`）。

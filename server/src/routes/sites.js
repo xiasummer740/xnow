@@ -1,8 +1,15 @@
 import express from 'express';
+import crypto from 'crypto';
+import path from 'path';
 import { Site, User } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
+import { isValidDomain, isDomainForbidden, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
+import { clearSiteCache } from '../middleware/site.js';
+
+// 站点数据一变就让 Host→站点 的缓存失效，避免「新绑域名 60 秒内仍显示主站」
+const bustSiteCache = () => { try { clearSiteCache(); } catch (e) {} };
 
 const router = express.Router();
 
@@ -179,6 +186,7 @@ router.post('/', authenticate, async (req, res) => {
       announcement: null,
       status: 'active'
     });
+    bustSiteCache();
 
     sendTgMessage(`🏗️ <b>新分站创建</b>\n🌐 <b>域名:</b> <code>${cleanDomain}</code>\n📛 <b>名称:</b> ${name}\n👤 <b>站长UID:</b> <code>${ownerId}</code>\n💹 <b>倍率:</b> ${multiplierValue}`);
 
@@ -277,6 +285,7 @@ router.put('/:id', authenticate, async (req, res) => {
     if (cryptomus_key !== undefined && cryptomus_key !== '******') site.cryptomus_key = String(cryptomus_key || '') || null;
 
     await site.save();
+    bustSiteCache();
     res.json({ status: 'success', message: '分站更新成功', data: site });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '更新失败' });
@@ -284,6 +293,101 @@ router.put('/:id', authenticate, async (req, res) => {
 });
 
 // 删除分站
+// 🌐 绑定/开通自有域名（六期）
+//  第一步：站长把域名的 A 记录指向本机（或加一条 TXT xnow-verify=<token>，用于 CF 橙云）
+//  第二步：调本接口 → 验证归属 → 申请证书 → 写 nginx vhost → 重载
+router.post('/:id/domain', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权操作此分站' });
+    }
+
+    const domain = String(req.body?.domain || '').trim().toLowerCase();
+    if (!isValidDomain(domain)) return res.json({ status: 'error', message: '域名格式不正确' });
+    // 🔒 黑名单：主站域名与上游域名绝不允许被分站接管
+    if (isDomainForbidden(domain)) return res.json({ status: 'error', message: '该域名不可绑定' });
+
+    // 已被别的分站占用
+    const other = await Site.findOne({ where: { domain } });
+    if (other && other.id !== site.id) return res.json({ status: 'error', message: '该域名已被其他分站使用' });
+
+    if (!site.domain_token) site.domain_token = crypto.randomBytes(16).toString('hex');
+    site.domain = domain;
+
+    // ① 归属验证
+    const dns = await verifyDomainOwnership(domain, site.domain_token);
+    if (!dns.ok) {
+      site.domain_status = 'pending';
+      await site.save();
+      bustSiteCache();
+      return res.json({
+        status: 'pending',
+        message: dns.reason,
+        detail: dns.detail,
+        hint: `请把 ${domain} 的 A 记录指向本机 IP；若域名走 Cloudflare 代理（橙云），
+请在 DNS 里加一条 TXT 记录：xnow-verify=${site.domain_token}`,
+        token: site.domain_token
+      });
+    }
+
+    // ② 证书 + ③ vhost
+    const cert = await ensureCert(domain);
+    const backendPort = parseInt(process.env.PORT) || 3000;
+    const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+    writeVhost({ siteId: site.id, domain, backendPort, distRoot, cert });
+    reloadNginx();
+
+    site.domain_status = 'active';
+    site.cert_mode = cert.mode;
+    await site.save();
+    bustSiteCache();
+
+    sendTgMessage(
+      `🌐 <b>分站自有域名已开通</b>\n🏬 ${site.name}\n🔗 <code>${domain}</code>\n` +
+      `🔐 证书: ${cert.mode === 'letsencrypt' ? 'Let\'s Encrypt ✅' : cert.mode === 'selfsigned' ? '自签 ⚠️ 浏览器会提示不安全' : '已存在'}`
+    );
+
+    res.json({
+      status: 'success',
+      message: cert.mode === 'letsencrypt'
+        ? '域名已开通，证书已自动签发 ✅'
+        : cert.mode === 'selfsigned'
+          ? '域名已开通，但本机未装 certbot，暂用自签证书（浏览器会提示不安全）'
+          : '域名已开通 ✅',
+      data: { domain, status: site.domain_status, cert_mode: site.cert_mode, vhost: vhostPath(site.id, domain) }
+    });
+  } catch (e) {
+    console.error('[sites] 域名开通失败:', e.message);
+    try {
+      const s = await Site.findByPk(req.params.id);
+      if (s) { s.domain_status = 'failed'; await s.save(); }
+    } catch (_) {}
+    res.status(500).json({ status: 'error', message: `开通失败：${e.message}` });
+  }
+});
+
+// 解绑自有域名（清理 vhost，避免残留配置抢域名）
+router.delete('/:id/domain', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权操作此分站' });
+    }
+    removeVhost(site.id, site.domain);
+    try { reloadNginx(); } catch (e) {}
+    site.domain_status = 'none';
+    site.cert_mode = null;
+    await site.save();
+    bustSiteCache();
+    res.json({ status: 'success', message: '域名配置已清理' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '解绑失败' });
+  }
+});
+
 router.delete('/:id', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) {
     return res.status(403).json({ status: 'error', message: '仅管理员可删除分站' });
@@ -292,6 +396,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     const site = await Site.findByPk(req.params.id);
     if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
     await site.destroy();
+    bustSiteCache();
     sendTgMessage(`🗑️ <b>分站已删除</b>\n🌐 域名: <code>${site.domain}</code>\n📛 名称: ${site.name}`);
     res.json({ status: 'success', message: '分站已删除' });
   } catch (e) {
