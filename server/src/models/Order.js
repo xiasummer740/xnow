@@ -5,6 +5,8 @@ const Order = sequelize.define('Order', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   order_no: { type: DataTypes.STRING(50), unique: true },
   user_id: { type: DataTypes.INTEGER, allowNull: false },
+  // 🏬 分站归属：0 = 主站，>0 = sites.id。分站主的结算与统计全靠这一列。
+  site_id: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   phone: { type: DataTypes.STRING(20) }, 
   upstream_order_id: { type: DataTypes.STRING(50) },
   service_id: { type: DataTypes.INTEGER },

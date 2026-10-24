@@ -30,16 +30,15 @@ export const siteMiddleware = async (req, res, next) => {
 
     // 精确匹配
     let site = siteCache.get(cleanHost);
-    // 通配符匹配：*.主域名
+    // 子域名匹配：只认「该分站自己域名的下级」（如 www.shop.com → shop.com）。
+    // 🔴 绝不能用「公共后缀」兜底（曾经写成取域名最后两段）——
+    //    那样任何 xxx.base.com 都会被判成第一个分站，
+    //    后果是主站域名被盗用成某个分站的身份，价格倍率与用户隔离全部错位。
     if (!site) {
-      const parts = cleanHost.split('.');
-      if (parts.length >= 3) {
-        for (const [domain, s] of siteCache) {
-          const domainParts = domain.split('.');
-          if (domainParts.length >= 2 && cleanHost.endsWith('.' + domainParts.slice(-2).join('.'))) {
-            site = s;
-            break;
-          }
+      for (const [domain, s] of siteCache) {
+        if (cleanHost.endsWith('.' + domain)) {
+          site = s;
+          break;
         }
       }
     }

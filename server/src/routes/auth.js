@@ -67,7 +67,10 @@ router.post('/register', async (req, res) => {
     const registerIp = getRealIp(req);
     
     const newUser = await User.create({
-      id: finalUid, phone: cleanPhone, email: cleanEmail, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId, api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
+      id: finalUid, phone: cleanPhone, email: cleanEmail, password_hash, role: assignedRole, balance: initBalance, register_ip: registerIp, inviter_id: finalInviterId,
+      // 🏬 在哪个分站域名注册就归属哪个分站；主站注册为 0
+      site_id: req.site ? Number(req.site.id) : 0,
+      api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
     });
     
     if(global.verificationCodes) global.verificationCodes.delete(email);
@@ -106,6 +109,21 @@ router.post('/login', async (req, res) => {
     
     const isValid = await bcrypt.compare(String(password), String(user.password_hash));
     if (!isValid) return res.status(401).json({ status: 'error', message: '账号或密码错误' });
+
+    // 🏬 分站隔离：密码正确之后再判归属，避免用错误密码探测账号属于哪个站。
+    //    例外：平台方（超管/管理员）可跨站登录做客服；分站主本人可登录自己的分站。
+    const siteCtx = req.site ? Number(req.site.id) : 0;
+    const userSite = Number(user.site_id || 0);
+    const isPlatformStaff = user.role === 'super_admin' || user.role === 'admin';
+    const isSiteOwner = req.site && Number(req.site.owner_id) === Number(user.id);
+    if (!isPlatformStaff && !isSiteOwner && userSite !== siteCtx) {
+      return res.status(403).json({
+        status: 'error',
+        message: userSite === 0
+          ? '该账号属于主站，请到主站域名登录'
+          : '该账号属于其他分站，请到注册时的站点登录'
+      });
+    }
 
     user.last_login_ip = getRealIp(req);
     user.last_login_at = new Date();

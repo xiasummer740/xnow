@@ -365,6 +365,7 @@ router.post('/batch', authenticate, async (req, res) => {
         const orderNo = 'XN' + Date.now() + Math.floor(Math.random() * 100);
         const newOrder = await Order.create({
           order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
+          site_id: req.site ? Number(req.site.id) : 0,
           upstream_order_id: String(upRes.data.order), service_id: serviceId,
           service_name: service.name, link, quantity: qty, charge, upstream_charge, status: '排队中'
         }, { transaction: t });

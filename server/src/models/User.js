@@ -16,6 +16,9 @@ const User = sequelize.define('User', {
   // 💡 核心加法：新增最后登录时间字段
   last_login_at: { type: DataTypes.DATE, allowNull: true },
   inviter_id: { type: DataTypes.INTEGER, allowNull: true },
+  // 🏬 分站归属：0 = 主站，>0 = sites.id。
+  //    分站注册的用户只能在那个分站域名登录（超管、管理员、该分站主本人例外）。
+  site_id: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
   is_banned: { type: DataTypes.BOOLEAN, defaultValue: false },
   ban_reason: { type: DataTypes.STRING(255), allowNull: true },
