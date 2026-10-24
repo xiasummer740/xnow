@@ -224,6 +224,25 @@ title / description / og 换成**站长自己的站名**。
 
 主站 vhost 完全没动：`/`、`/vpn`、`/finance`、`/en` 与修之前逐字相同（XNOW 出现次数 19/16/1/15）。
 
+### 静态资源与爬虫层面（2026-10-24 · 五十九期）
+
+再往上游查了一层：**站长域名下能直接下载到什么文件**。
+
+| 资源 | 修之前 | 现在 |
+|---|---|---|
+| `/logo.png` | 200，**与主站同文件**（平台 logo）| 404 ✅ |
+| `/og-image.png` | 200，与主站同文件（平台分享图）| 404 ✅ |
+| `/apple-touch-icon.png`、`/favicon-32.png`、`/favicon.ico` | 200，与主站同文件 | 404 ✅ |
+| `/robots.txt` | 回落成网页（HTML 冒充文本）| 200，中性内容 `User-agent: * / Allow: /` ✅ |
+| `/sitemap.xml`、`/manifest.json`、`/site.webmanifest`、`/ads.txt`、`/security.txt` | 回落成网页 | 404 ✅ |
+| `/api/public/config`、`/api/services/public`、`/api/health` | — | XNOW 命中 0 ✅ |
+| 分站 404 页面正文 | nginx 默认页 | 无平台痕迹 ✅ |
+
+主站对照：`/logo.png`、`/og-image.png`、`/favicon.ico`、`/apple-touch-icon.png` 全部仍 200（未受影响）。
+
+分站首页的实际渲染同时复核：标题是站长自己的站名、文字量 1036 / 1180 字符、
+XNOW 出现 0 次、**浏览器里 0 个失败请求**（说明分站没引用任何被拦的平台资源）。
+
 ### 价格口径一致性（分站）
 
 | 检查 | 结果 |

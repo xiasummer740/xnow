@@ -183,6 +183,25 @@ server {
         return 404;
     }
 
+    # 🖼️ 平台的品牌图（logo / 分享图 / 图标）在分站上不许直接取。
+    #    五十九期实测：这几个文件与主站 sha256 完全相同 —— 站长域名下能直接
+    #    下载到平台的 logo 和 og 分享图，等于把进货来源挂在门牌上。
+    #    分站自己的图标由站长上传（favicon_url），前端已确保不回落平台 logo。
+    location ~* ^/(og-image|apple-touch-icon|favicon-32|favicon|logo)\.(png|ico|jpg|svg)$ {
+        return 404;
+    }
+
+    # 🤖 分站自己的 robots.txt：中性内容，允许收录（站长要靠它被搜到）
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\nAllow: /\n";
+    }
+
+    # 📄 站点声明 / 清单这类平台文件对分站无意义，别让它们回落成网页
+    location ~* ^/(sitemap\.xml|manifest\.json|site\.webmanifest|ads\.txt|security\.txt)$ {
+        return 404;
+    }
+
     location / {
         # ⚠️ 不能用 /index.html：那份带平台 SEO 元信息（title/description/og 全是 XNOW）。
         #    /site.html 是构建时生成的中性入口（同一份 JS，只是元信息中性）。

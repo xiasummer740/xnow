@@ -22,7 +22,8 @@ router.get('/config', async (req, res) => {
     // 分站覆盖：使用分站专属配置
     if (req.site) {
       data.site_name = req.site.name || data.site_name;
-      data.site_logo = req.site.logo || data.site_logo;
+      // 站长没传 logo 就留空，让前端显示站名首字（不要回落到平台的 /logo.png）
+      data.site_logo = req.site.logo || '';
       // 🔒 分站上不要下发 agent_discount：主站那边它是"公开营销折扣"没问题，
       //    但在站长的店里，它等于把「平台给代理打 8 折」这条分销关系摊给客户看 ——
       //    客户一算就明白站长是二级代理。分站零售价与它无关，前端也不消费它。
