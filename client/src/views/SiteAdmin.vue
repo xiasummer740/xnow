@@ -226,6 +226,71 @@
             </div>
           </div>
 
+          <!-- ══════════════════════════════════════════════════════════
+               🎨 全方位 DIY（四十一期）
+               祥哥："需要站长能全方位 DIY 自己的网站"
+               上面的旋钮只改颜色/圆角；这一块改的是**版式结构**与**每一块的字**。
+               ══════════════════════════════════════════════════════════ -->
+          <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 mt-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="font-bold text-sm text-amber-400">🎨 版式与文案（自己排版）</h2>
+              <span class="text-[10px] text-slate-500">留空 = 用模板默认</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-[10px] text-slate-500 mb-1">首屏版式（结构不同，不只是换色）</label>
+                <select v-model="form.hero_variant" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                  <option value="">跟随模板</option>
+                  <option value="center">居中大标题 · 电商落地页</option>
+                  <option value="split">左文右价卡 · SaaS 产品页</option>
+                  <option value="editorial">杂志排版 · 左对齐 + 首字下沉</option>
+                  <option value="terminal">终端窗口 · 极客工具感</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-500 mb-1">服务列表版式</label>
+                <select v-model="form.services_variant" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
+                  <option value="">跟随模板</option>
+                  <option value="cards">卡片网格</option>
+                  <option value="table">价格表 · 一行一个服务</option>
+                  <option value="ranked">编号榜单 · 杂志感</option>
+                </select>
+              </div>
+            </div>
+
+            <label class="block text-[10px] text-slate-500 mb-2">每个区块的标题 / 副标题（不改就用默认）</label>
+            <div class="space-y-2 mb-4">
+              <div v-for="sec in SECTION_KEYS" :key="sec.key" class="grid grid-cols-[80px_1fr_1fr] items-center gap-2">
+                <span class="text-[10px] text-slate-500">{{ sec.label }}</span>
+                <input v-model="form.section_titles[sec.key].title" :placeholder="sec.phTitle"
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
+                <input v-model="form.section_titles[sec.key].sub" :placeholder="sec.phSub"
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs" />
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-[10px] text-slate-500 mb-1">
+                <span>站点图标（浏览器标签上的小图标）</span>
+                <button type="button" @click="pickImage('favicon_url')" :disabled="uploading"
+                  class="ml-2 text-[10px] px-2 py-1 rounded border border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
+                  {{ uploading === 'favicon_url' ? '上传中…' : '📤 上传图标' }}
+                </button>
+              </label>
+              <input v-model="form.favicon_url" placeholder="留空则用默认图标"
+                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs" />
+            </div>
+
+            <div>
+              <label class="block text-[10px] text-slate-500 mb-1">自定义 CSS（高级：能改任何细节，最多 8000 字符）</label>
+              <textarea v-model="form.custom_css" rows="5" spellcheck="false"
+                placeholder="例如：&#10;.site-card { border-radius: 0; }&#10;h1 { letter-spacing: -0.02em; }"
+                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono leading-relaxed"></textarea>
+              <p class="mt-1 text-[10px] text-slate-600">只影响你自己的分站。为安全起见，@import 与尖括号会被自动过滤。</p>
+            </div>
+          </section>
+
           <!-- 右：实时预览 -->
           <div class="lg:sticky lg:top-4 self-start">
             <div class="flex items-center justify-between mb-2">
@@ -796,6 +861,16 @@ const activePreset = computed(() => {
 // 套用预设：只改表单（客户视角预览立刻变），站长满意再点保存
 // 🖼️ 三十七期：图片上传（Logo / 首页背景图）。
 // 站长大多不会把图片传到图床再拿链接 —— 给个按钮直接传。
+// 🎨 四十一期：可自定义文案的首页区块
+const SECTION_KEYS = [
+  { key: 'audience',     label: '谁在用',   phTitle: '🎯 谁在用 我的站', phSub: '客户群一句话' },
+  { key: 'steps',        label: '三步开始', phTitle: '📋 三步开始',      phSub: '流程副标题' },
+  { key: 'advantages',   label: '优势',     phTitle: '为什么选我们',     phSub: '优势副标题' },
+  { key: 'hot_services', label: '热门服务', phTitle: '热门服务',         phSub: '登录后可看全部' },
+  { key: 'faq',          label: '常见问题', phTitle: '❓ 常见问题',      phSub: 'FAQ 副标题' },
+  { key: 'cta',          label: '底部号召', phTitle: '现在就开始',       phSub: 'CTA 副标题' },
+]
+
 const uploading = ref('')
 const pickImage = (field) => {
   const input = document.createElement('input')
@@ -876,6 +951,18 @@ const load = async () => {
         ui_radius: s.ui_radius || '', ui_density: s.ui_density || '',
         card_style: s.card_style || '', font_style: s.font_style || '',
         btn_shape: s.btn_shape || '', hero_layout: s.hero_layout || '',
+      // 🎨 四十一期：结构级 DIY
+      hero_variant: s.hero_variant || '', services_variant: s.services_variant || '',
+      custom_css: s.custom_css || '', favicon_url: s.favicon_url || '',
+      section_titles: (() => {
+        let saved = {}
+        try { saved = s.section_titles ? JSON.parse(s.section_titles) : {} } catch (e) { saved = {} }
+        const filled = {}
+        for (const k of ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta']) {
+          filled[k] = { title: (saved[k] && saved[k].title) || '', sub: (saved[k] && saved[k].sub) || '' }
+        }
+        return filled
+      })(),
         modules: parseModules(s.home_modules),
         bufpay_id: s.bufpay_id || '', bufpay_key: s.bufpay_key ? '******' : '',
         cryptomus_id: s.cryptomus_id || '', cryptomus_key: s.cryptomus_key ? '******' : '',
@@ -945,7 +1032,13 @@ const save = async (silent = false) => {
       hero_subtitle: form.value.hero_subtitle, hero_desc: form.value.hero_desc,
       hero_btn1_text: form.value.hero_btn1_text, hero_btn1_url: form.value.hero_btn1_url,
       hero_btn2_text: form.value.hero_btn2_text, hero_btn2_url: form.value.hero_btn2_url,
-      hero_bg_url: form.value.hero_bg_url
+      hero_bg_url: form.value.hero_bg_url,
+      // 🎨 四十一期：结构级 DIY（版式 / 逐区块文案 / 自定义 CSS / 图标）
+      hero_variant: form.value.hero_variant || '',
+      services_variant: form.value.services_variant || '',
+      section_titles: JSON.stringify(form.value.section_titles || {}),
+      custom_css: form.value.custom_css || '',
+      favicon_url: form.value.favicon_url || ''
     }
     const res = await fetch(`/api/sites/${site.value.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) })
     const data = await res.json()

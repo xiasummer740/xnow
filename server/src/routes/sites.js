@@ -431,7 +431,10 @@ router.put('/:id', authenticate, async (req, res) => {
       card_style: ['outline', 'glass', 'solid'],
       font_style: ['sans', 'rounded', 'serif', 'mono'],
       btn_shape: ['pill', 'rounded', 'square'],
-      hero_layout: ['center', 'split', 'banner']
+      hero_layout: ['center', 'split', 'banner'],
+      // 🎨 四十一期：结构级 DIY（换版式，不只是换色）
+      hero_variant: ['center', 'split', 'editorial', 'terminal'],
+      services_variant: ['cards', 'table', 'ranked']
     };
     for (const [field, allowed] of Object.entries(STYLE_FIELDS)) {
       const raw = req.body[field];
@@ -486,6 +489,50 @@ router.put('/:id', authenticate, async (req, res) => {
         .map((m, i) => ({ key: m.key, enabled: m.enabled !== false, order: Number.isFinite(+m.order) ? +m.order : i }))
         .sort((a, b) => a.order - b.order);
       site.home_modules = JSON.stringify(clean.slice(0, 12));
+    }
+
+    // 📝 四十一期：每个首页区块的标题/副标题（站长逐块改文案）
+    //    只接受已知区块键，长度截断，防止把超长 HTML 塞进标题把版面撑爆。
+    if (req.body.section_titles !== undefined) {
+      let st = req.body.section_titles;
+      if (typeof st === 'string') {
+        try { st = st ? JSON.parse(st) : {}; } catch { return res.json({ status: 'error', message: '区块文案格式错误' }); }
+      }
+      if (st && typeof st !== 'object') return res.json({ status: 'error', message: '区块文案格式错误' });
+      const KEYS = ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta'];
+      const cleanSt = {};
+      for (const k of KEYS) {
+        const v = st && st[k];
+        if (!v || typeof v !== 'object') continue;
+        const title = String(v.title || '').slice(0, 60).trim();
+        const sub = String(v.sub || '').slice(0, 80).trim();
+        if (title || sub) cleanSt[k] = { title, sub };
+      }
+      site.section_titles = Object.keys(cleanSt).length ? JSON.stringify(cleanSt) : null;
+    }
+
+    // 💅 四十一期：站长自己的 CSS（高级功能）
+    //    CSS 只能影响他自己的分站，风险可控；但仍过滤掉能引入外部资源的写法：
+    //    @import 可以外联别人的样式表（顺便把你的访客 IP 送出去）、expression() 是远古 IE 脚本口子，
+    //    尖括号一律删掉，避免有人试图在这里拼标签闭合出去。
+    if (req.body.custom_css !== undefined) {
+      let css = String(req.body.custom_css || '');
+      if (css.length > 8000) return res.json({ status: 'error', message: '自定义 CSS 不能超过 8000 字符' });
+      css = css
+        .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+        .replace(/@import[^;]*;?/gi, '')
+        .replace(/expression\s*\(/gi, '')
+        .replace(/javascript:/gi, '');
+      site.custom_css = css.trim() ? css : null;
+    }
+
+    // 🖼 站点图标（浏览器标签上的小图标）
+    if (req.body.favicon_url !== undefined) {
+      const fav = String(req.body.favicon_url || '').trim();
+      if (fav && !/^https?:\/\//i.test(fav) && !fav.startsWith('/')) {
+        return res.json({ status: 'error', message: '图标地址必须是 http(s):// 开头或站内路径' });
+      }
+      site.favicon_url = fav ? fav.slice(0, 512) : null;
     }
 
     // 🔒 两个价格字段可单独修改，但必须按"改完之后"的组合校验，

@@ -52,6 +52,12 @@ router.get('/config', async (req, res) => {
       data.hero_btn2_text = req.site.hero_btn2_text || '';
       data.hero_btn2_url = req.site.hero_btn2_url || '';
       data.hero_bg_url = req.site.hero_bg_url || '';
+      // 🎨 四十一期：全方位 DIY（结构级版式 + 逐区块文案 + 自定义 CSS + 站点图标）
+      data.hero_variant = req.site.hero_variant || '';
+      data.services_variant = req.site.services_variant || '';
+      data.section_titles = req.site.section_titles || '';
+      data.custom_css = req.site.custom_css || '';
+      data.favicon_url = req.site.favicon_url || '';
     }
 
     res.json({ status: 'success', data });

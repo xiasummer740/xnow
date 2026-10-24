@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col min-h-screen bg-transparent text-white font-sans selection:bg-amber-400 selection:text-slate-900 relative overflow-hidden z-10">
-    <header class="relative z-20 flex items-center justify-between px-6 py-4 md:px-12 lg:py-6 max-w-7xl mx-auto">
+    <header :class="['relative z-20 flex items-center justify-between px-6 py-4 md:px-12 lg:py-6 max-w-7xl mx-auto', appStore.isSubsite ? 'w-full' : '']">
       <div class="flex items-center space-x-3">
         <img :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
         <span class="text-2xl md:text-3xl font-black italic tracking-widest site-brand-text">{{ appStore.siteName || 'XNOW' }}</span>
@@ -12,7 +12,11 @@
       </div>
     </header>
 
-    <main :style="heroBgStyle" class="hero-wrap site-section relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
+    <!-- 🎭 分站首屏：按模板走四套不同版式（主站仍用下面原来那段，一行没改） -->
+    <SubsiteHero v-if="appStore.isSubsite" :style="heroBgStyle" :variant="appStore.heroVariant || layout.hero" :hero="hero"
+      :platforms="platforms" :services="previewServices" :lang="appStore.lang" :site-name="appStore.siteName" />
+
+    <main v-else :style="heroBgStyle" class="hero-wrap site-section relative z-20 flex flex-col items-center justify-center text-center px-4 pt-16 md:pt-24 lg:pt-32 max-w-5xl mx-auto">
       <div class="hero-copy flex flex-col items-center">
       <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ hero.badge }}</div>
       <h1 v-if="hero.title" class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
@@ -75,7 +79,7 @@
 
     <!-- Use cases -->
     <section v-if="appStore.moduleEnabled('audience')" :style="{ order: appStore.moduleOrder('audience') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
-      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 谁在用 ' + (appStore.siteName || '我们') : '🎯 Who It’s For' }}</h2>
+      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('audience') || (appStore.lang === 'zh' ? '🎯 谁在用 ' + (appStore.siteName || '我们') : '🎯 Who It’s For') }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">🎬</div>
@@ -97,7 +101,7 @@
 
     <!-- How it works -->
     <section v-if="appStore.moduleEnabled('steps')" :style="{ order: appStore.moduleOrder('steps') }" class="site-section relative z-20 max-w-4xl mx-auto px-6 py-8">
-      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '📋 三步开始' : '📋 How It Works' }}</h2>
+      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('steps') || (appStore.lang === 'zh' ? '📋 三步开始' : '📋 How It Works') }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition">1</div>
@@ -139,8 +143,22 @@
     </section>
 
     <!-- Service Preview -->
-    <section v-if="appStore.moduleEnabled('hot_services')" :style="{ order: appStore.moduleOrder('hot_services') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
-      <h2 class="text-center text-2xl font-black text-white mb-2 tracking-wider">📊 {{ appStore.lang === 'zh' ? '热门服务预览' : 'Popular Services' }}</h2>
+    <!-- 🎭 分站热门服务：三种结构不同的版式（表格 / 榜单 / 卡片） -->
+    <section v-if="appStore.isSubsite && appStore.moduleEnabled('hot_services')"
+      :style="{ order: appStore.moduleOrder('hot_services') }"
+      class="site-section relative z-20 mx-auto max-w-5xl px-6 py-16">
+      <div class="mb-7 flex items-end justify-between">
+        <div>
+          <h2 class="text-2xl font-black tracking-tight">{{ appStore.lang === 'zh' ? '热门服务' : 'Popular Services' }}</h2>
+          <p class="mt-1 text-xs opacity-45">{{ appStore.lang === 'zh' ? '登录后可查看全部服务与实时价格' : 'Login to browse all services' }}</p>
+        </div>
+        <router-link to="/login" class="text-[11px] font-bold underline underline-offset-4 opacity-55">{{ appStore.lang === 'zh' ? '全部服务 →' : 'All services →' }}</router-link>
+      </div>
+      <SubsiteServices :variant="appStore.servicesVariant || layout.services" :services="previewServices" :loading="previewLoading" :lang="appStore.lang" />
+    </section>
+
+    <section v-else-if="appStore.moduleEnabled('hot_services')" :style="{ order: appStore.moduleOrder('hot_services') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
+      <h2 class="text-center text-2xl font-black text-white mb-2 tracking-wider">📊 {{ appStore.sectionTitle('hot_services') || (appStore.lang === 'zh' ? '热门服务预览' : 'Popular Services') }}</h2>
       <p class="text-center text-slate-500 text-sm mb-8">{{ appStore.lang === 'zh' ? '登录后可查看全部服务与实时价格' : 'Login to browse all services' }}</p>
       <div v-if="previewLoading" class="flex justify-center py-8"><div class="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div></div>
       <div v-else class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -159,7 +177,7 @@
 
     <!-- FAQ -->
     <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq') }" class="site-section relative z-20 max-w-2xl mx-auto px-6 py-16">
-      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ' }}</h2>
+      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('faq') || (appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ') }}</h2>
       <div class="space-y-3">
         <div v-for="(faq, i) in visibleFaqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <button @click="faq.open = !faq.open" class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition">
@@ -173,7 +191,7 @@
 
     <!-- Footer CTA -->
     <section v-if="appStore.moduleEnabled('cta')" :style="{ order: appStore.moduleOrder('cta') }" class="site-section relative z-20 text-center py-12 pb-20">
-      <h2 class="text-2xl font-black text-white mb-4">{{ appStore.lang === 'zh' ? '准备好让你的社媒炸裂了吗？' : 'Ready to explode your social media?' }}</h2>
+      <h2 class="text-2xl font-black text-white mb-4">{{ appStore.sectionTitle('cta') || (appStore.lang === 'zh' ? '准备好让你的社媒炸裂了吗？' : 'Ready to explode your social media?') }}</h2>
       <p class="text-slate-500 mb-8">{{ appStore.lang === 'zh' ? '注册只需30秒，即刻拥有全网最低价涨粉服务。' : 'Sign up in 30 seconds. Instant access to wholesale SMM services.' }}</p>
       <router-link to="/login" class="inline-block px-12 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '🚀 免费注册' : '🚀 Sign Up Free' }}</router-link>
     </section>
@@ -185,6 +203,8 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
 import SiteModules from '../components/SiteModules.vue';
+import SubsiteHero from '../components/site/SubsiteHero.vue';
+import SubsiteServices from '../components/site/SubsiteServices.vue';
 import { useUserStore } from '../stores/user';
 
 const appStore = useAppStore();
@@ -193,6 +213,20 @@ const route = useRoute();
 const router = useRouter();
 const vpnShopEnabled = ref(true);
 // ✍️ 首页文案：站长填了就用自己的，没填就用主站默认 —— 主站/未配置分站的外观一字不变
+// 🎭 版式映射：模板 → 结构（不是换色，是换版式）
+//   祥哥反馈「分站还是跟我的一模一样」—— 根因是以前 6 套模板只换 CSS 变量，
+//   DOM 结构完全相同。这里按模板给出**不同的首屏结构与服务列表结构**，
+//   让分站从骨架上就不是同一个站。
+const TEMPLATE_LAYOUT = {
+  classic:  { hero: 'center',    services: 'cards' },
+  saas:     { hero: 'split',     services: 'cards' },
+  minimal:  { hero: 'editorial', services: 'table' },
+  neon:     { hero: 'terminal',  services: 'table' },
+  magazine: { hero: 'editorial', services: 'ranked' },
+  glass:    { hero: 'split',     services: 'ranked' },
+};
+const layout = computed(() => TEMPLATE_LAYOUT[appStore.themeTemplate] || TEMPLATE_LAYOUT.classic);
+
 const hero = computed(() => {
   const zh = appStore.lang !== 'en'
   const s = appStore.hero || {}
@@ -252,15 +286,33 @@ const loadPreview = async () => {
       ];
       previewServices.value = [];
       for (const t of targets) {
+        // ⚠️ 老逻辑按 s.rate 过滤，但 /api/services/public 根本不返回 rate 字段
+        //    → parseFloat(undefined)=NaN → 一条都筛不出来 → 热门服务区块永远是空的。
+        //    这里**只对分站**改用 sell_price 兜底（主站保持原行为，验收前不动主站）。
+        const priceOf = (s) => {
+          const v = appStore.isSubsite ? (s.sell_price ?? s.rate) : s.rate;
+          return parseFloat(v);
+        };
         const candidates = d.data.filter(s => {
           const cat = (s.category || '').toLowerCase();
-          return cat.includes(t.kw) && parseFloat(s.rate) > 0 && parseFloat(s.rate) < 100;
+          const p = priceOf(s);
+          return cat.includes(t.kw) && p > 0 && p < 100;
         });
         if (candidates.length > 0) {
-          candidates.sort((a, b) => parseFloat(a.rate) - parseFloat(b.rate));
+          candidates.sort((a, b) => priceOf(a) - priceOf(b));
           previewServices.value.push({ ...candidates[0], _label: t.label, _labelEn: t.labelEn });
         }
         if (previewServices.value.length >= 8) break;
+      }
+      // 分站兜底：关键词一个都没命中时（服务分类名千奇百怪），
+      // 直接取最便宜的 8 条 —— 空白区块比"看起来不精准"更伤。
+      if (appStore.isSubsite && previewServices.value.length === 0) {
+        const priceOf2 = (s) => parseFloat(s.sell_price ?? s.rate);
+        previewServices.value = d.data
+          .filter(s => priceOf2(s) > 0)
+          .sort((a, b) => priceOf2(a) - priceOf2(b))
+          .slice(0, 8)
+          .map((s, i) => ({ ...s, _label: s.category || ('服务 ' + (i + 1)), _labelEn: s.category || ('Service ' + (i + 1)) }));
       }
     }
   } catch (e) {}

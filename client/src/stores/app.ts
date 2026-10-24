@@ -13,6 +13,9 @@ export const useAppStore = defineStore('app', {
     themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[],
     // 🎨 二十七期：风格细分维度（空 = 用模板默认）
     uiRadius: '', uiDensity: '', cardStyle: '', fontStyle: '', btnShape: '', heroLayout: '',
+    // 🎨 四十一期：全方位 DIY
+    heroVariant: '', servicesVariant: '', sectionTitles: {} as Record<string, { title?: string; sub?: string }>,
+    customCss: '', faviconUrl: '',
     // ✍️ 十九期：首页文案自定义（主站为空 → Home.vue 回落到默认文案）
     hero: {} as Record<string, string> }),
   actions: {
@@ -38,6 +41,18 @@ export const useAppStore = defineStore('app', {
       this.fontStyle = d.font_style || '';
       this.btnShape = d.btn_shape || '';
       this.heroLayout = d.hero_layout || '';
+      // 🎨 四十一期：结构级 DIY + 自定义 CSS + 站点图标
+      this.heroVariant = d.hero_variant || '';
+      this.servicesVariant = d.services_variant || '';
+      this.customCss = d.custom_css || '';
+      this.faviconUrl = d.favicon_url || '';
+      if (d.section_titles) {
+        try { const st = JSON.parse(d.section_titles); this.sectionTitles = (st && typeof st === 'object') ? st : {}; }
+        catch (e) { this.sectionTitles = {}; }
+      }
+      this.applyCustomCss();
+      this.applyFavicon();
+
       // ✍️ 十九期：首页文案（主站没有这些 key → 保持空对象 → 首页用默认文案）
       this.hero = {
         hero_badge: d.hero_badge || '', hero_title: d.hero_title || '',
@@ -48,7 +63,42 @@ export const useAppStore = defineStore('app', {
       };
       this.applyTheme();
     } } catch(e) {} this.fetchRate(); },
-    applyTheme() {
+    // 💅 站长自定义 CSS：注入到 <style id="xn-site-css">，只影响他自己的分站
+  applyCustomCss() {
+    if (typeof document === 'undefined') return;
+    let el = document.getElementById('xn-site-css') as HTMLStyleElement | null;
+    if (!this.customCss) { if (el) el.textContent = ''; return; }
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'xn-site-css';
+      document.head.appendChild(el);
+    }
+    el.textContent = this.customCss;
+  },
+
+  // 🖼 站点图标
+  applyFavicon() {
+    if (typeof document === 'undefined' || !this.faviconUrl) return;
+    let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = this.faviconUrl;
+  },
+
+  // 📝 区块文案：站长没填就返回空串，调用方用默认文案兜底
+  sectionTitle(key: string): string {
+    const v = (this.sectionTitles || {})[key];
+    return v && v.title ? v.title : '';
+  },
+  sectionSub(key: string): string {
+    const v = (this.sectionTitles || {})[key];
+    return v && v.sub ? v.sub : '';
+  },
+
+  applyTheme() {
     // 🏷️ 三十九期：分站要换掉浏览器标签上的平台名。
     //    站长把链接发给客户，标签栏写着「XNOW PRO」等于当场告诉客户他在哪进货。
     if (typeof document !== 'undefined' && this.isSubsite && this.siteName) {

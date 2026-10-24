@@ -134,6 +134,11 @@ const run = async () => {
     ['font_style',     'VARCHAR(12) NULL'],
     ['btn_shape',      'VARCHAR(12) NULL'],
     ['hero_layout',    'VARCHAR(12) NULL'],
+    ['hero_variant',     'VARCHAR(16) NULL'],
+    ['services_variant', 'VARCHAR(16) NULL'],
+    ['section_titles',   'TEXT NULL'],
+    ['custom_css',       'TEXT NULL'],
+    ['favicon_url',      'VARCHAR(512) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {

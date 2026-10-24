@@ -24,6 +24,14 @@ const Site = sequelize.define('Site', {
   font_style: { type: DataTypes.STRING(12), allowNull: true },  // sans | rounded | serif | mono
   btn_shape: { type: DataTypes.STRING(12), allowNull: true },   // pill | rounded | square
   hero_layout: { type: DataTypes.STRING(12), allowNull: true }, // center | split | banner
+  // 🎨 四十一期：全方位 DIY —— 首屏版式 / 服务列表版式（结构级，不只是换色）
+  hero_variant: { type: DataTypes.STRING(16), allowNull: true },     // center | split | editorial | terminal
+  services_variant: { type: DataTypes.STRING(16), allowNull: true }, // cards | table | ranked
+  // 📝 每个首页区块的自定义标题/副标题（JSON：{key:{title,sub}}，站长可逐块改文案）
+  section_titles: { type: DataTypes.TEXT, allowNull: true },
+  // 💅 站长自己的 CSS（高级功能，长度上限 8000，服务端会过滤 @import 与尖括号）
+  custom_css: { type: DataTypes.TEXT, allowNull: true },
+  favicon_url: { type: DataTypes.STRING(512), allowNull: true },
   support_url: { type: DataTypes.STRING(255), allowNull: true },       // 客服链接（TG 等）
   home_modules: { type: DataTypes.TEXT, allowNull: true },             // 首页模块 JSON:[{key,enabled,order}]
   // ✍️ 首页文案自定义（十九期·祥哥："选好模板之后在哪设计自己的网站？"）
