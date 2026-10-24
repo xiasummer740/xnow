@@ -51,6 +51,15 @@ router.beforeEach((to, from, next) => {
     return next('/');
   }
 
+  // 🏬 分站上不开放平台的运维 / 管理页面（灾备中心、用户管理、系统设置、开发者 API）。
+  //    六十二期：祥哥在分站侧边栏看到「灾备中心」—— 那是平台的服务器备份页，
+  //    出现在站长的店里既没用，又等于告诉客户"这家店背后有平台"。
+  //    即使当前登录的是平台超管，在分站域名下也不给入口（手输 URL 一样挡）。
+  if (localStorage.getItem('xnow_is_subsite') === '1'
+      && (to.path.startsWith('/admin') || to.path === '/api-doc')) {
+    return next('/');
+  }
+
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');
