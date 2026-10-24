@@ -9,7 +9,8 @@ router.get('/public', async (req, res) => {
   try {
     const configs = await Config.findAll({ where: { key: ['global_multiplier'] } });
     const conf = {}; configs.forEach(c => conf[c.key] = c.value);
-    const multiplier = parseFloat(conf.global_multiplier || 2.0);
+    // 🏬 分站：首页展示的必须是**站长定的售价**，不能用平台倍率
+    const multiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
 
     const services = await Service.findAll({ order: [['sort', 'ASC']] });
     const formatted = services.map(s => {
@@ -18,7 +19,10 @@ router.get('/public', async (req, res) => {
       const baseRate = (s.custom_rate !== null && s.custom_rate !== undefined) ? parseFloat(s.custom_rate) : parseFloat(s.rate);
       return {
         service: s.service_id, name: s.name, type: s.type, category: s.category,
-        rate: baseRate, min: s.min, max: s.max,
+        // 🔒 不再下发 `rate`（成本基价）：这是平台/站长的进货底价，
+        //    公开接口把它吐出去，等于把「你赚多少」摊开给客户看。
+        //    前端只用到 sell_price（已核实 Home.vue 唯一消费点）。
+        min: s.min, max: s.max,
         sell_price: parseFloat((baseRate * multiplier).toFixed(4)),
         description: s.description
       };
@@ -36,19 +40,33 @@ router.get('/', authenticate, async (req, res) => {
 
     const baseMultiplier = parseFloat(conf.global_multiplier || 2.0);
     const agentDiscount = parseFloat(conf.agent_discount || 0.8);
-    
+
+    // 🏬 分站：列表价必须与下单扣款同口径（站长倍率），否则客户会看到
+    //    「标价 0.05、扣款 0.33」—— 这种不一致会直接被投诉成"骗人"。
+    //    注意这里只影响"显示"，下单时的权威计算仍在 orders.js。
+    const siteMultiplier = req.site ? parseFloat(req.site.multiplier) : 0;
+
     // 💡 核心修复：永远信任数据库中的最新角色，而不是 JWT 缓存的角色
     const user = await User.findByPk(req.user.id);
     const actualRole = user ? user.role : req.user.role;
     
     let finalMultiplier = baseMultiplier;
     
-    if (actualRole === 'super_admin' || actualRole === 'admin') {
+    if (req.site) {
+      // 分站定价权归站长（管理员本人仍按原价，便于对账）
+      finalMultiplier = (actualRole === 'super_admin' || actualRole === 'admin') ? 1.0 : siteMultiplier;
+    } else if (actualRole === 'super_admin' || actualRole === 'admin') {
       finalMultiplier = 1.0;
     } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) {
       finalMultiplier = parseFloat(user.custom_multiplier);
     } else if (actualRole === 'agent') {
       finalMultiplier = baseMultiplier * agentDiscount;
+    }
+
+    // 🛡 与 orders.js 的兜底护栏一致：列表价也不得低于站长成本
+    let costMultiplier = 0;
+    if (req.site) {
+      costMultiplier = baseMultiplier * agentDiscount;
     }
 
     const services = await Service.findAll({ order: [['sort', 'ASC']] });
@@ -60,12 +78,18 @@ router.get('/', authenticate, async (req, res) => {
       const baseRate = (!isStaff && s.custom_rate !== null && s.custom_rate !== undefined)
         ? parseFloat(s.custom_rate)
         : parseFloat(s.rate);
+      // 分站：售价不得低于站长成本（与下单护栏同口径，避免"买得起卖不起"）
+      let shown = baseRate * finalMultiplier;
+      if (req.site && costMultiplier > 0) {
+        const floor = baseRate * costMultiplier;
+        if (shown < floor) shown = floor;
+      }
       return {
         service: s.service_id,
         name: s.name,
         type: s.type,
         category: s.category,
-        rate: (baseRate * finalMultiplier).toFixed(4),
+        rate: shown.toFixed(4),
         min: s.min,
         max: s.max,
         refill: s.refill,
