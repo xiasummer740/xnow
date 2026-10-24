@@ -243,7 +243,7 @@ const cleanDescription = (t) => {
                         {{ app.t('usd_desc_4') }}<strong class="text-amber-400">{{ app.t('usd_desc_5') }}</strong>{{ app.t('usd_desc_6') }}
                     </p>
                     <!-- 网址直接用可点文字露出来（对齐源头站写法），点击新窗口打开 -->
-                    <p class="mb-4">
+                    <p class="mb-4 text-center">
                         <a href="https://www.trxyes.com/" target="_blank" rel="noopener noreferrer"
                            class="text-xs font-bold text-amber-400 hover:text-amber-300 underline decoration-amber-500/50 underline-offset-2 break-all">
                             https://www.trxyes.com/
