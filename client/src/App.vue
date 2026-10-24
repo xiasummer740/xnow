@@ -37,7 +37,10 @@
         </svg>
       </div>
 
-      <a :href="appStore?.isSubsite ? appStore.supportUrl : (appStore?.tgBotLink || 'https://t.me/Xnow001Bot')" target="_blank" class="pointer-events-auto relative group flex items-center justify-center w-14 h-14 mt-1" title="联系在线客服">
+      <!-- 🏬 分站：只认站长自己填的客服链接。没填就整个按钮不出现 ——
+           以前会兜底到平台的 t.me/Xnow001Bot，等于直接把客户送到主站去。 -->
+      <a v-if="!appStore?.isSubsite || appStore?.supportUrl"
+         :href="appStore?.isSubsite ? appStore.supportUrl : (appStore?.tgBotLink || 'https://t.me/Xnow001Bot')" target="_blank" class="pointer-events-auto relative group flex items-center justify-center w-14 h-14 mt-1" title="联系在线客服">
         <div class="relative z-10 bg-gradient-to-tr from-blue-600 to-blue-400 w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.6)] group-hover:scale-110 transition-transform duration-300">
           <svg viewBox="0 0 24 24" class="w-7 h-7 fill-white transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15.15-.31.3-.46.45-1.5 1.5-3 3-4.5 4.5-.15.15-.3.3-.45.46-.3.3-.6.6-.9.9-.15.15-.3.3-.46.45l-1.5 1.5c-.15.15-.31.3-.46.46-.15.15-.31.3-.46.45-.15.15-.31.3-.46.45-.15.15-.31.3-.46.46l-1.5 1.5c-.3.3-.6.6-.91.9-.15.15-.3.3-.45.45zM21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9zM12 4.5l-8.5 7.5L12 19.5l8.5-7.5L12 4.5z"/></svg>
           <span class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-slate-900 animate-pulse">LIVE</span>

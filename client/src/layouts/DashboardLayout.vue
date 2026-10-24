@@ -71,12 +71,16 @@
             </div>
           </div>
           <div class="flex items-center space-x-1.5 md:space-x-3 text-slate-300">
-            <span class="hidden lg:inline text-slate-400 text-xs">UID: {{ userStore.userInfo?.id || '--' }}</span>
+            <!-- 🏬 分站不显示 UID 与角色徽章：那都是平台侧的账号概念，
+                 站长的客户看到「UID: 11 / 至尊代理」只会觉得这是别人家的后台。 -->
+            <span v-if="!appStore.isSubsite" class="hidden lg:inline text-slate-400 text-xs">UID: {{ userStore.userInfo?.id || '--' }}</span>
             <span class="hidden sm:inline font-bold text-xs max-w-[80px] md:max-w-none truncate">{{ userStore.userInfo?.phone || '未登录' }}</span>
+            <template v-if="!appStore.isSubsite">
             <span v-if="userStore.userInfo?.role === 'super_admin'" class="hidden md:inline-flex x-badge badge-super items-center"><span class="badge-shimmer"></span>{{ appStore.t('super_admin_badge') }}</span>
             <span v-else-if="userStore.userInfo?.role === 'admin'" class="hidden md:inline-flex x-badge badge-admin items-center"><span class="badge-shimmer"></span>{{ appStore.t('admin_badge') }}</span>
             <span v-else-if="userStore.userInfo?.role === 'agent'" class="hidden md:inline-flex x-badge badge-agent items-center"><span class="badge-shimmer"></span>{{ appStore.t('agent_badge') }}</span>
             <span v-else class="hidden md:inline-flex x-badge badge-gold items-center"><span class="badge-shimmer"></span>{{ appStore.t('gold_badge') }}</span>
+            </template>
           </div>
           <button @click="appStore.toggleLang" class="text-slate-400 hover:text-white font-bold transition text-xs select-none w-11 h-10 grid place-items-center">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
           <div class="relative flex items-center">

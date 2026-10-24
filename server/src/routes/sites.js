@@ -502,7 +502,8 @@ router.get('/:id/prices', authenticate, async (req, res) => {
         type: sv.type,
         min: sv.min,
         max: sv.max,
-        base_rate: Number(baseRate.toFixed(6)),
+        // 🔒 不返回 base_rate（平台的上游底价）：站长只需要知道自己的成本线，
+        //    知道上游多少钱等于把平台的进货价摊在桌面上。
         cost_per_1k: Number(cost.toFixed(4)),
         list_price: Number(listPrice.toFixed(4)),
         sell_price: Number(sellPrice.toFixed(4)),
