@@ -1803,3 +1803,104 @@ BASE=https://xnow.taikon.top SUB=https://<某分站> node deploy/sites/acceptanc
 
 自检过程中产生的测试订单、站长成本扣款、客户余额全部清理：
 站长余额 ¥300、客户余额 ¥50、site 25 分站订单 0 条、`custom_domain` 为空、状态 `active`。
+
+---
+
+## 三十七、未知子域名兜底：不再把平台暴露给客户（95 期）
+
+### 一、发现的问题（严重，直接踩红线）
+
+`*.taikon.top` 是泛解析。任何**没有自己 vhost** 的子域名，以前会落到 nginx 的「默认 server」，
+访客看到的是**主站首页**：
+
+```
+修复前：
+  https://fresh-never-visited-95.taikon.top/  → HTTP 200，页面里 19 处 XNOW
+```
+
+三类真实后果：
+
+| 场景 | 客户会看到什么 |
+|------|----------------|
+| 站长把子域名改掉 / 站点过期 / 被删 | 收藏的旧域名 → **平台主站** |
+| 站长把域名一个字母打错 | 客户 → **平台主站** |
+| 客户手输域名出错 | 客户 → **平台主站** |
+
+等于把「平台上还有一层」直接展示给分站客户 —— 违反「客户永远不知道主站存在」。
+
+另外还有一个 70 期记录、**从未执行**的老坑：`xnow-beta` 的 `server_name` 里有
+`*.xnow.taikon.top`，未知的 xnow 子域名会落到 **Beta 实例**（那是另一个数据库）→
+订单与余额会和生产串库。
+
+### 二、修法
+
+新增 `deploy/sites/nginx-catchall.conf`（80 + 443 各一组）：
+
+```nginx
+# 主站自己的名字：照旧 301 到 HTTPS
+server { listen 80; server_name xnow.taikon.top taikon.top www.taikon.top;
+         location ^~ /.well-known/acme-challenge/ { root /var/www/acme-challenge; }
+         location / { return 301 https://$host$request_uri; } }
+
+# 其它所有子域名（80 与 443 各一份）：中性 404
+server { listen 80;             server_name *.taikon.top *.xnow.taikon.top;  return 404 '…页面不存在…'; }
+server { listen 443 ssl http2;  server_name *.taikon.top *.xnow.taikon.top;  return 404 '…页面不存在…'; }
+```
+
+三个关键点：
+
+1. **用通配，不动 default_server** —— nginx 优先级 = 精确 > 最长通配 > default_server，
+   所以只影响「没有站点占用的子域名」，主站与每个分站的精确 vhost **一个字没改**。
+2. **80 和 443 都要写** —— Cloudflare 是连源站 443 的，只改 80 完全挡不住（本轮实测踩过：
+   改完 80 后公网仍然返回主站）。
+3. **主站名字必须显式列进 301 块** —— 80 端口上主站本来靠 default_server 兜着，
+   一旦出现 `*.taikon.top` 通配，`xnow.taikon.top` 会优先匹配通配变 404；
+   若 Cloudflare 走 Flexible 模式，主站会立刻全站挂。
+
+配套：去掉 `xnow-beta` 里的 `*.xnow.taikon.top`（由 `deploy/sites/deploy-catchall.sh` 做，
+幂等、带备份、带回滚命令）。`deploy-prod.sh` 第 6 步已改为调用它，
+并在第 7 步自检里加了一条「未分配域名必须 404」。
+
+### 三、实测
+
+```
+源站（绕过 Cloudflare）：
+  xnow.taikon.top / taikon.top / www.taikon.top       → 301 到 HTTPS ✅
+  demostore / laozhang / t1 各自的域名                  → 301 / 200 ✅
+  brand-new-never-used-95.taikon.top                  → 404 页面不存在 ✅
+
+公网（Cloudflare 全链路）：
+  pub319424.taikon.top                                → 404 · 主站痕迹 0 处 ✅
+  zz-unknown.xnow.taikon.top                          → 404 ✅
+  xnow.taikon.top                                     → 200（主站正常，19 处 XNOW 是它自己）✅
+  beta.taikon.top                                     → 200 ✅
+  demostore.taikon.top / laozhang.taikon.top          → 200 · 0 处主站痕迹 ✅
+
+删站实测（顺便验证「删站后旧域名不暴露平台」）：
+  测试二站 ziaism.taikon.top → 建成即签发 Let's Encrypt 正式证书（有效期到 2027-01）
+  → 删除该站（vhost + 证书 + 数据 + 退月费）→ 域名立刻变成中性 404，0 处主站痕迹 ✅
+```
+
+### 四、顺带验证的「开第二个站」全链路（此前没跑过）
+
+```
+代理 18800000077 再开一个站 → 已扣 ¥99、有效期到 2026/11/23、已签发正式证书
+  ziaism.taikon.top            → 200（免费子域名自动生成，泛解析可用）
+  /order  /login               → 200
+  证书                         → issuer=Let's Encrypt，CN=ziaism.taikon.top
+  租户隔离：
+    新站客户只能在新站登录            ✅
+    同一账号登主站 → 「该账号属于其他分站」 ✅
+    同一账号登另一个分站 → 同上        ✅
+    别的分站客户登新站 → 同上          ✅
+  定价独立：同一服务 新站 ¥37.50 / 老站 ¥50.625（互不影响）✅
+```
+
+测试站已完整删除（含证书、vhost、用户、订单、月费退还），Beta 恢复原状：
+站长余额 ¥300、客户余额 ¥50、站点数 3。
+
+### 五、遗留（不影响上线）
+
+- `t1.xnow.taikon.top`（站点 1，早期测试站）的 DNS 已失效 ——
+  `xnow.taikon.top` 没有泛解析。新站默认走 `*.taikon.top`（有泛解析），不受影响。
+  若要保留这个站，把域名改到 `*.taikon.top` 即可。

@@ -192,18 +192,26 @@ else
   die "后端启动失败"
 fi
 
-step "6. 堵住「未知子域名落到 Beta 实例」的坑（只影响未知 Host）"
-if [ -f "$APP/deploy/sites/fix-unknown-host.sh" ]; then
+step "6. 未知子域名兜底（只影响未知 Host，95 期）"
+if [ -f "$APP/deploy/sites/deploy-catchall.sh" ]; then
   # 🔑 74 期：让新域名能签下证书。默认 80 段必须"先放行挑战再跳转"，
 #    否则站长绑自有域名时证书永远签不下来（只能退回自签，浏览器报警告）。
 bash "$APP/deploy/sites/fix-acme-webroot.sh" || echo "  ⚠️ ACME 挑战路径没修好 —— 自有域名的自动证书会签不下来，请人工看一眼"
 
-bash "$APP/deploy/sites/fix-unknown-host.sh" || echo "  ⚠️ 这一步没成功，主站不受影响，但要人工看一眼（回滚见脚本末尾提示）"
+# 🛡 95 期：未分配 / 已删除的分站域名以前会落到主站（实测 19 处 XNOW），
+#    等于把平台暴露给分站客户。现在统一返回中性 404；
+#    同时去掉 Beta 的 *.xnow.taikon.top 通配，避免未知域名串到 Beta 的库。
+#    ⚠️ 旧脚本 fix-unknown-host.sh（70 期写的、从未执行）已被本步骤取代。
+bash "$APP/deploy/sites/deploy-catchall.sh" || echo "  ⚠️ 兜底没装上，主站不受影响，但未知域名仍会显示主站 —— 请人工看一眼"
 else
-  echo "  跳过：脚本不在"
+  echo "  跳过：deploy-catchall.sh 不在"
 fi
 
 step "7. 上线后自检"
+# 未分配域名必须 404（不能是主站）—— 顺带兜住"删站后旧域名暴露平台"的场景
+UNK="deploy-probe-$RANDOM.taikon.top"
+unkcode=$(curl -o /dev/null -sS -w '%{http_code}' --max-time 20 --resolve "$UNK:443:127.0.0.1" "https://$UNK/" 2>/dev/null)
+echo "  未分配域名 $UNK → $unkcode $([ "$unkcode" = 404 ] && echo '✅ 中性 404' || echo '⚠️ 应为 404')"
 for u in https://xnow.taikon.top/ https://xnow.taikon.top/api/public/config; do
   code=$(curl -o /dev/null -sS -w '%{http_code}' --max-time 25 "$u" 2>/dev/null)
   echo "  $u → $code"
