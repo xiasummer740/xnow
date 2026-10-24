@@ -19,7 +19,8 @@ const routes = [
       { path: 'admin', component: () => import('../views/Admin.vue') },
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: () => import('../views/ApiDoc.vue') },
-      { path: 'affiliate', component: () => import('../views/Affiliate.vue') }
+      { path: 'affiliate', component: () => import('../views/Affiliate.vue') },
+      { path: 'my-site', component: () => import('../views/SiteAdmin.vue') }
     ]
   },
   { path: '/vpn', component: VpnLayout, children: [
@@ -46,11 +47,15 @@ router.beforeEach((to, from, next) => {
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');
-  } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin')) {
+  } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin' || to.path === '/my-site')) {
       // 🔒 3. 角色守卫：后台页只许 管理员/至尊管理员（防普通用户手输 URL 直捣后台）
       try {
         const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        if (!['admin', 'super_admin'].includes(payload.role)) return next('/');
+        // 「我的分站」额外放行至尊代理（agent）—— 普通用户仍被拦
+        const allow = to.path === '/my-site'
+          ? ['admin', 'super_admin', 'agent']
+          : ['admin', 'super_admin'];
+        if (!allow.includes(payload.role)) return next('/');
         next();
       } catch {
         return next('/login');
