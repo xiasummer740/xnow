@@ -10,7 +10,7 @@ const i18nDict = {
 export const useAppStore = defineStore('app', {
   state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0,
     // 🎨 分站主题（主站为空 → 外观与改造前一致）
-    themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', homeModules: [] as { key: string; enabled: boolean; order: number }[] }),
+    themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', announcement: '', homeModules: [] as { key: string; enabled: boolean; order: number }[] }),
   actions: {
     toggleCurrency() { this.currency = this.currency === 'CNY' ? 'USD' : 'CNY'; }, toggleLang() { this.lang = this.lang === 'zh' ? 'en' : 'zh'; }, triggerRefresh() { this.globalRefreshTrigger++; }, 
     async fetchRate() { try { const resRate = await fetch('https://open.er-api.com/v6/latest/USD'); const dataRate = await resRate.json(); if(dataRate && dataRate.rates && dataRate.rates.CNY) this.exchangeRate = dataRate.rates.CNY; } catch(e) {} },
@@ -22,6 +22,7 @@ export const useAppStore = defineStore('app', {
       this.themeAccent = d.theme_accent || '';
       this.footerText = d.footer_text || '';
       this.supportUrl = d.support_url || '';
+      this.announcement = d.announcement || '';
       if (d.home_modules) { try { const m = JSON.parse(d.home_modules); if (Array.isArray(m)) this.homeModules = m; } catch(e) {} }
       this.applyTheme();
     } } catch(e) {} this.fetchRate(); },

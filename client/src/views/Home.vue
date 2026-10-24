@@ -45,6 +45,10 @@
       </div>
     </main>
 
+    <!-- 🏬 分站首页模块（公告 / 统计 / 热门服务 / FAQ / VIP / 返佣）
+         只在分站渲染，主站 homeModules 为空 → 这块完全不出现 -->
+    <SiteModules />
+
     <!-- Use cases -->
     <section class="relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 谁在用 XNOW' : '🎯 Who It’s For' }}</h2>
@@ -156,6 +160,7 @@
 import { ref, reactive, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
+import SiteModules from '../components/SiteModules.vue';
 import { useUserStore } from '../stores/user';
 
 const appStore = useAppStore();
