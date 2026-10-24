@@ -10,6 +10,7 @@ const routes = [
   { path: '/', component: Home },
   { path: '/en', component: Home }, // 英文镜像：复用 Home，按路径强制英文
   { path: '/login', component: Login },
+  { path: '/showcase', component: () => import('../views/Showcase.vue') }, // 🎨 分站风格陈列（公开，不需要登录）
   { path: '/', component: DashboardLayout, children: [
       { path: 'order', component: Order },
       { path: 'mass-order', component: () => import('../views/MassOrder.vue') },
@@ -42,7 +43,7 @@ router.beforeEach((to, from, next) => {
 
   // 💡 2. 核心加法：路由级 Token 过期/缺失拦截
   const token = localStorage.getItem('xnow_token');
-  const publicPaths = ['/', '/en', '/vpn', '/login']; // 允许免登录访问的白名单路径（/en 为英文营销镜像，/vpn 为节点商城公开页）
+  const publicPaths = ['/', '/en', '/vpn', '/login', '/showcase']; // 允许免登录访问的白名单路径（/en 为英文营销镜像，/vpn 为节点商城公开页）
 
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
