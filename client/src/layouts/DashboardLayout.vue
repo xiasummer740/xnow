@@ -45,13 +45,13 @@
 
     <div class="flex-grow flex flex-col min-w-0 md:ml-0 h-[100dvh] relative z-10">
       <header class="fixed top-0 left-0 right-0 md:relative md:top-auto md:left-auto md:right-auto h-16 flex-shrink-0 bg-slate-900/60 backdrop-blur-xl border-b border-slate-700/50 flex items-center justify-between px-3 md:px-6 z-[60] w-full md:w-auto shadow-sm">
-        <div class="flex items-center space-x-1 text-slate-300"><button @click="isSidebarOpen = true" class="md:hidden p-1 mr-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button><span class="font-bold hidden sm:block text-slate-100 tracking-widest text-sm">{{ appStore.t('console') }}</span></div>
+        <div class="flex items-center space-x-1 text-slate-300"><button @click="isSidebarOpen = true" class="md:hidden grid place-items-center w-10 h-10 -my-1 mr-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button><span class="font-bold hidden sm:block text-slate-100 tracking-widest text-sm">{{ appStore.t('console') }}</span></div>
         <div class="flex items-center space-x-2 md:space-x-5 text-sm">
           <div @click="appStore.toggleCurrency" class="hidden sm:flex bg-slate-800 border border-slate-700 rounded-full p-0.5 cursor-pointer text-xs transition hover:border-amber-400 select-none"><span :class="['px-2 py-0.5 rounded-full font-bold transition', appStore.currency === 'CNY' ? 'bg-amber-400 text-black' : 'text-slate-400']">CNY</span><span :class="['px-2 py-0.5 rounded-full font-bold transition', appStore.currency === 'USD' ? 'bg-amber-400 text-black' : 'text-slate-400']">USD</span></div>
-          <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1">{{ appStore.t('balance') }}</span><span v-if="['admin','super_admin'].includes(userStore.userInfo?.role)" class="text-green-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]">{{ upstreamHeaderBalance || '查询中...' }}</span><span v-else class="text-amber-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
+          <div class="flex items-center"><span class="text-slate-400 hidden sm:inline text-xs mr-1 whitespace-nowrap">{{ appStore.t('balance') }}</span><span v-if="['admin','super_admin'].includes(userStore.userInfo?.role)" class="text-green-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]">{{ upstreamHeaderBalance || '查询中...' }}</span><span v-else class="text-amber-400 font-mono font-black text-sm md:text-base drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">{{ appStore.formatMoney(userStore.userInfo?.balance) }}</span></div>
           <!-- 通知铃铛 -->
           <div class="relative" v-if="userStore.token && userStore.userInfo?.role !== 'super_admin'">
-            <button @click="toggleNotifPanel" class="relative text-slate-400 hover:text-white transition p-1">
+            <button @click="toggleNotifPanel" class="relative text-slate-400 hover:text-white transition grid place-items-center w-10 h-10 -my-1">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
               <span v-if="notifUnread > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow">{{ notifUnread > 99 ? '99+' : notifUnread }}</span>
             </button>
@@ -72,16 +72,16 @@
           </div>
           <div class="flex items-center space-x-1.5 md:space-x-3 text-slate-300">
             <span class="hidden lg:inline text-slate-400 text-xs">UID: {{ userStore.userInfo?.id || '--' }}</span>
-            <span class="font-bold text-xs max-w-[80px] md:max-w-none truncate">{{ userStore.userInfo?.phone || '未登录' }}</span>
-            <span v-if="userStore.userInfo?.role === 'super_admin'" class="x-badge badge-super inline-flex items-center"><span class="badge-shimmer"></span>{{ appStore.t('super_admin_badge') }}</span>
-            <span v-else-if="userStore.userInfo?.role === 'admin'" class="x-badge badge-admin inline-flex items-center"><span class="badge-shimmer"></span>{{ appStore.t('admin_badge') }}</span>
-            <span v-else-if="userStore.userInfo?.role === 'agent'" class="x-badge badge-agent inline-flex items-center"><span class="badge-shimmer"></span>{{ appStore.t('agent_badge') }}</span>
-            <span v-else class="x-badge badge-gold inline-flex items-center"><span class="badge-shimmer"></span>{{ appStore.t('gold_badge') }}</span>
+            <span class="hidden sm:inline font-bold text-xs max-w-[80px] md:max-w-none truncate">{{ userStore.userInfo?.phone || '未登录' }}</span>
+            <span v-if="userStore.userInfo?.role === 'super_admin'" class="hidden md:inline-flex x-badge badge-super items-center"><span class="badge-shimmer"></span>{{ appStore.t('super_admin_badge') }}</span>
+            <span v-else-if="userStore.userInfo?.role === 'admin'" class="hidden md:inline-flex x-badge badge-admin items-center"><span class="badge-shimmer"></span>{{ appStore.t('admin_badge') }}</span>
+            <span v-else-if="userStore.userInfo?.role === 'agent'" class="hidden md:inline-flex x-badge badge-agent items-center"><span class="badge-shimmer"></span>{{ appStore.t('agent_badge') }}</span>
+            <span v-else class="hidden md:inline-flex x-badge badge-gold items-center"><span class="badge-shimmer"></span>{{ appStore.t('gold_badge') }}</span>
           </div>
-          <button @click="appStore.toggleLang" class="text-slate-400 hover:text-white font-bold transition text-xs select-none w-6">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
+          <button @click="appStore.toggleLang" class="text-slate-400 hover:text-white font-bold transition text-xs select-none w-11 h-10 grid place-items-center">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
           <div class="relative flex items-center">
             <div v-if="isProfileMenuOpen" @click="isProfileMenuOpen = false" class="fixed inset-0 z-[90]"></div>
-            <button @click="isProfileMenuOpen = !isProfileMenuOpen" class="text-slate-400 hover:text-white transition pl-1 focus:outline-none flex items-center h-full relative z-[95]" title="设置/退出">
+            <button @click="isProfileMenuOpen = !isProfileMenuOpen" class="text-slate-400 hover:text-white transition focus:outline-none flex items-center justify-center w-11 h-10 relative z-[95]" title="设置/退出">
               <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </button>
             <div v-show="isProfileMenuOpen" class="absolute right-0 top-full mt-2 w-40 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-fade-in z-[100] py-1">

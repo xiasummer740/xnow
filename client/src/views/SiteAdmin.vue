@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-black">我的分站</h1>
         <p class="text-xs text-slate-500 mt-1">改名字、换模板、填收款、绑域名、看收益 —— 都在这里</p>
       </div>
-      <button @click="load()" class="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">刷新</button>
+      <button @click="load()" class="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">刷新</button>
     </div>
 
     <!-- 📣 推荐同行开店：站长把朋友介绍来开至尊代理/充值，他拿 10% 返佣。
@@ -180,8 +180,8 @@
                 <div v-for="(m, i) in form.modules" :key="m.key" class="flex items-center gap-2 bg-slate-950/60 rounded-lg px-3 py-2">
                   <input type="checkbox" v-model="m.enabled" class="accent-amber-400" />
                   <span class="text-xs flex-1">{{ moduleLabel(m.key) }}</span>
-                  <button @click="moveModule(i, -1)" :disabled="i === 0" class="text-xs px-1.5 text-slate-500 disabled:opacity-30">↑</button>
-                  <button @click="moveModule(i, 1)" :disabled="i === form.modules.length - 1" class="text-xs px-1.5 text-slate-500 disabled:opacity-30">↓</button>
+                  <button @click="moveModule(i, -1)" :disabled="i === 0" title="上移" class="w-9 h-9 md:w-7 md:h-7 grid place-items-center rounded-lg bg-slate-800/70 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800/70">↑</button>
+                  <button @click="moveModule(i, 1)" :disabled="i === form.modules.length - 1" title="下移" class="w-9 h-9 md:w-7 md:h-7 grid place-items-center rounded-lg bg-slate-800/70 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800/70">↓</button>
                 </div>
               </div>
             </div>
