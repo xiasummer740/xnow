@@ -58,6 +58,19 @@ chk "sites 表存在"            "1" "$(MYSQL_PWD="$DBP" mysql -N -u root -e "SE
 chk "sites.custom_domain 列"  "1" "$(has_col sites custom_domain)"
 chk "sites.home_modules 列"   "1" "$(has_col sites home_modules)"
 chk "sites.smtp_host 列"      "1" "$(has_col sites smtp_host)"
+# 🧱 后续几期新增的列：忘跑迁移时这里会红，而不是等站长保存外观时才报 500
+chk "sites.template 列"         "1" "$(has_col sites template)"
+chk "sites.color 列"            "1" "$(has_col sites color)"
+chk "sites.multiplier 列"       "1" "$(has_col sites multiplier)"
+chk "sites.agent_discount 列"   "1" "$(has_col sites agent_discount)"
+chk "sites.hero_variant 列"     "1" "$(has_col sites hero_variant)"
+chk "sites.services_variant 列" "1" "$(has_col sites services_variant)"
+chk "sites.section_titles 列"   "1" "$(has_col sites section_titles)"
+chk "sites.custom_css 列"       "1" "$(has_col sites custom_css)"
+chk "sites.favicon_url 列"      "1" "$(has_col sites favicon_url)"
+chk "sites.advantages 列"       "1" "$(has_col sites advantages)"
+chk "sites.bufpay_id 列"        "1" "$(has_col sites bufpay_id)"
+chk "sites.bufpay_key 列"       "1" "$(has_col sites bufpay_key)"
 
 # ── 业务数据健康 ──
 U=$(MYSQL_PWD="$DBP" mysql -N -u root -e "SELECT COUNT(*) FROM $DB_NAME_T.users" 2>/dev/null)
