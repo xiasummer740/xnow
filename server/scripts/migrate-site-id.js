@@ -79,6 +79,24 @@ const run = async () => {
     changed++;
   }
 
+  // 十六期：流水也记归属站 —— 分站充值进的是站长账户，平台营收必须能排除它
+  if (await columnExists('transactions', 'site_id')) {
+    console.log('  ⏭  transactions.site_id 已存在');
+  } else {
+    await sequelize.query(
+      'ALTER TABLE `transactions` ADD COLUMN site_id INT NOT NULL DEFAULT 0'
+    );
+    console.log('  ✅ transactions.site_id 已添加（历史流水默认 0 = 主站）');
+    changed++;
+  }
+  if (await indexExists('transactions', 'idx_transactions_site_id')) {
+    console.log('  ⏭  transactions 索引 idx_transactions_site_id 已存在');
+  } else {
+    await sequelize.query('ALTER TABLE `transactions` ADD INDEX `idx_transactions_site_id` (site_id)');
+    console.log('  ✅ transactions 索引已建立');
+    changed++;
+  }
+
   // 三期：分站主题字段
   const siteCols = [
     ['template',      "VARCHAR(24) NOT NULL DEFAULT 'classic'"],

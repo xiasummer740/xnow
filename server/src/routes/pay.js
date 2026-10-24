@@ -319,19 +319,23 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
 
         const user = await User.findByPk(userId, { transaction: t });
         if (user) {
-            user.balance = (parseFloat(user.balance) + realAddAmount).toFixed(6);
-            await user.save({ transaction: t });
-            
-            await Transaction.create({
-                user_id: user.id, phone: user.phone, amount: realAddAmount, balance: user.balance,
-                type: prefix, description: `${prefix} - ${sourceDesc} [单号:${orderId}]`
-            }, { transaction: t });
+          const paySiteId = parseInt(user.site_id || 0);
+          user.balance = (parseFloat(user.balance) + realAddAmount).toFixed(6);
+          await user.save({ transaction: t });
+          
+          await Transaction.create({
+            user_id: user.id, phone: user.phone, amount: realAddAmount, balance: user.balance,
+            type: prefix, description: `${prefix} - ${sourceDesc} [单号:${orderId}]`,
+            site_id: paySiteId
+          }, { transaction: t });
 
             const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
             sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(user.balance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);
 
             // 💡 裂变引擎：阶梯式全自动提成计算
-            if (user.inviter_id) {
+            // 🏬 分站客户的充值**不发平台返佣**：那笔钱进的是站长自己的商户账户，
+            //    平台一分没收到。照发等于平台凭空掏钱补贴站长的客户 —— 充得越多亏得越多。
+            if (user.inviter_id && paySiteId === 0) {
                 const inviter = await User.findByPk(user.inviter_id, { transaction: t });
                 if (inviter) {
                     // 判断上级身份，agent/admin 享受 10%，否则 5%

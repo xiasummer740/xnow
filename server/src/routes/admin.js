@@ -801,7 +801,8 @@ router.post('/orders/refund', authenticate, async (req, res) => {
 
     await Transaction.create({
       user_id: user.id, phone: user.phone, amount: refundAmount, balance: user.balance,
-      type: '退款入账', description: `管理员退款: 订单 ${order.order_no} 退还 ¥${refundAmount}`
+      type: '退款入账', description: `管理员退款: 订单 ${order.order_no} 退还 ¥${refundAmount}`,
+      site_id: parseInt(order.site_id || 0)   // 分站订单的退款不能冲减平台营收
     }, { transaction: t });
 
     order.is_refunded = true;
@@ -873,14 +874,18 @@ router.get('/finance', authenticate, async (req, res) => {
     const sq = Transaction.sequelize;
 
     // 1. 充值统计（按渠道分）
+    // 🏬 只算**平台实收**：分站充值的钱进的是站长自己的商户账户，平台一分没收到。
+    //    不排除的话，平台营收会虚高成站长的营业额 —— 老板会据此误判自己的收入。
+    //    分站部分单独出 `subsite_deposit`，需要时可以对照。
     const [deposit] = await sq.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') THEN amount ELSE 0 END), 0) as total_deposit,
-        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) as today_deposit,
-        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE()) THEN amount ELSE 0 END), 0) as month_deposit,
-        COALESCE(SUM(CASE WHEN type = '微信充值' THEN amount ELSE 0 END), 0) as wechat_deposit,
-        COALESCE(SUM(CASE WHEN type = '支付宝充值' THEN amount ELSE 0 END), 0) as alipay_deposit,
-        COALESCE(SUM(CASE WHEN type = 'USDT充值' THEN amount ELSE 0 END), 0) as usdt_deposit
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND site_id = 0 THEN amount ELSE 0 END), 0) as total_deposit,
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND site_id = 0 AND DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) as today_deposit,
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND site_id = 0 AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE()) THEN amount ELSE 0 END), 0) as month_deposit,
+        COALESCE(SUM(CASE WHEN type = '微信充值' AND site_id = 0 THEN amount ELSE 0 END), 0) as wechat_deposit,
+        COALESCE(SUM(CASE WHEN type = '支付宝充值' AND site_id = 0 THEN amount ELSE 0 END), 0) as alipay_deposit,
+        COALESCE(SUM(CASE WHEN type = 'USDT充值' AND site_id = 0 THEN amount ELSE 0 END), 0) as usdt_deposit,
+        COALESCE(SUM(CASE WHEN type IN ('在线充值','微信充值','支付宝充值','USDT充值') AND site_id > 0 THEN amount ELSE 0 END), 0) as subsite_deposit
       FROM transactions
     `, { type: sq.QueryTypes.SELECT });
 
@@ -894,10 +899,10 @@ router.get('/finance', authenticate, async (req, res) => {
       FROM orders
     `, { type: sq.QueryTypes.SELECT });
 
-    // 3. 退款统计
+    // 3. 退款统计（只看平台自己的单：分站订单的退款由站长承担，不该冲减平台营收）
     const [refund] = await sq.query(`
       SELECT COALESCE(SUM(amount), 0) as total_refund
-      FROM transactions WHERE type = '退款入账'
+      FROM transactions WHERE type = '退款入账' AND site_id = 0
     `, { type: sq.QueryTypes.SELECT });
 
     // 4. 佣金总支出

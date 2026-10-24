@@ -32,7 +32,8 @@ const refundSiteCost = async (order, ratio, { transaction, User, Transaction } =
     amount,
     balance: owner.balance,
     type: '分站成本退还',
-    description: `订单退款，退还分站成本 [单号:${order.order_no}] 比例${(r * 100).toFixed(0)}%`
+    description: `订单退款，退还分站成本 [单号:${order.order_no}] 比例${(r * 100).toFixed(0)}%`,
+    site_id: siteId
   }, { transaction });
 
   return amount;

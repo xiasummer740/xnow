@@ -77,7 +77,8 @@ export const autoSyncOrders = async () => {
                     await user.save({ transaction: t });
                     await Transaction.create({
                       user_id: user.id, phone: locked.phone, amount: refundAmount,
-                      type: '退款入账', description: `${isCancel ? '订单被取消，全额退款' : '订单部分完成，按比例退款'} [单号:${locked.order_no}]`
+                      type: '退款入账', description: `${isCancel ? '订单被取消，全额退款' : '订单部分完成，按比例退款'} [单号:${locked.order_no}]`,
+                      site_id: parseInt(locked.site_id || 0)
                     }, { transaction: t });
                   }
                   // 🏬 分站订单：站长已付的进货成本必须同步退回，
