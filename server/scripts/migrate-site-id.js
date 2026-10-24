@@ -91,6 +91,10 @@ const run = async () => {
     ['smtp_port',     'INT NULL'],
     ['smtp_user',     'VARCHAR(128) NULL'],
     ['smtp_pass',     'VARCHAR(255) NULL'],
+    ['bufpay_id',     'VARCHAR(64) NULL'],
+    ['bufpay_key',    'VARCHAR(128) NULL'],
+    ['cryptomus_id',  'VARCHAR(64) NULL'],
+    ['cryptomus_key', 'VARCHAR(160) NULL'],
   ];
   for (const [col, ddl] of siteCols) {
     if (await columnExists('sites', col)) {

@@ -22,7 +22,12 @@ const Site = sequelize.define('Site', {
   smtp_host: { type: DataTypes.STRING(128), allowNull: true },
   smtp_port: { type: DataTypes.INTEGER, allowNull: true },
   smtp_user: { type: DataTypes.STRING(128), allowNull: true },
-  smtp_pass: { type: DataTypes.STRING(255), allowNull: true }
+  smtp_pass: { type: DataTypes.STRING(255), allowNull: true },
+  // 💳 分站自有收款商户（方案②：钱直接进站长账户，平台不碰）
+  bufpay_id: { type: DataTypes.STRING(64), allowNull: true },
+  bufpay_key: { type: DataTypes.STRING(128), allowNull: true },
+  cryptomus_id: { type: DataTypes.STRING(64), allowNull: true },
+  cryptomus_key: { type: DataTypes.STRING(160), allowNull: true }
 }, {
   tableName: 'sites',
   timestamps: true,

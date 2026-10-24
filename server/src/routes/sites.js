@@ -107,6 +107,8 @@ router.get('/', authenticate, async (req, res) => {
     const safe = (rows) => rows.map(r => {
       const o = r.toJSON();
       o.smtp_pass = o.smtp_pass ? '******' : null;
+      o.bufpay_key = o.bufpay_key ? '******' : null;
+      o.cryptomus_key = o.cryptomus_key ? '******' : null;
       return o;
     });
     res.json({ status: 'success', data: safe(sites) });
@@ -198,7 +200,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const { name, logo, multiplier, agent_discount, announcement, status,
             template, color, accent, footer_text, support_url, home_modules,
-            smtp_host, smtp_port, smtp_user, smtp_pass } = req.body;
+            smtp_host, smtp_port, smtp_user, smtp_pass,
+            bufpay_id, bufpay_key, cryptomus_id, cryptomus_key } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
 
@@ -266,6 +269,12 @@ router.put('/:id', authenticate, async (req, res) => {
       // 前端回传脱敏占位符时保留原值，避免「只改别的字段却把密码清空」
       site.smtp_pass = String(smtp_pass || '') || null;
     }
+
+    // 💳 分站自有收款商户（方案②）。传 '******' 视为「不修改」，避免回显脱敏值时清空密钥。
+    if (bufpay_id !== undefined) site.bufpay_id = String(bufpay_id || '').trim() || null;
+    if (bufpay_key !== undefined && bufpay_key !== '******') site.bufpay_key = String(bufpay_key || '') || null;
+    if (cryptomus_id !== undefined) site.cryptomus_id = String(cryptomus_id || '').trim() || null;
+    if (cryptomus_key !== undefined && cryptomus_key !== '******') site.cryptomus_key = String(cryptomus_key || '') || null;
 
     await site.save();
     res.json({ status: 'success', message: '分站更新成功', data: site });

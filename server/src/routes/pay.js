@@ -1,6 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
-import { Config, Transaction, sequelize, User } from '../models/index.js';
+import { Config, Transaction, sequelize, User, Site } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import axios from 'axios';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -17,12 +17,43 @@ const getDomain = (req) => {
     return `${protocol}://${host}`;
 };
 
+// 🏬 分站自有商户（方案②）：钱直接进站长自己的 BufPay / Cryptomus 账户，平台一分不碰。
+//    —— 开票时用「当前访问域名所属分站」的商户；
+//    —— 回调时用「付款用户所属分站」的密钥验签（回调里不带站点信息，
+//       但都带 order_uid 或含 uid 的 order_id，由用户反查最可靠，也不怕被伪造）。
+//    分站没配 → 回退平台商户，行为与改造前完全一致。
+const sitePayCreds = async (siteId, kind) => {
+  if (!siteId) return null;
+  try {
+    const site = await Site.findByPk(siteId);
+    if (!site) return null;
+    if (kind === 'bufpay' && site.bufpay_id && site.bufpay_key) {
+      return { id: site.bufpay_id, key: site.bufpay_key, name: site.name, siteId: site.id };
+    }
+    if (kind === 'cryptomus' && site.cryptomus_id && site.cryptomus_key) {
+      return { id: site.cryptomus_id, key: site.cryptomus_key, name: site.name, siteId: site.id };
+    }
+    return null;
+  } catch (e) { return null; }
+};
+
+// 由付款用户反查其所属分站的商户密钥（回调验签用）
+const ownerSiteIdOfUser = async (uidRaw) => {
+  const uid = parseInt(uidRaw || 0);
+  if (!uid) return 0;
+  const u = await User.findByPk(uid).catch(() => null);
+  return u ? Number(u.site_id || 0) : 0;
+};
+
 router.post('/rmb/sign', authenticate, async (req, res) => {
     const { pay_type, amount } = req.body;
     if (!['wechat', 'alipay'].includes(pay_type) || !amount || amount <= 0) return res.json({ status: 'error', message: '参数非法' });
     try {
         const configs = await Config.findAll({ where: { key: ['bufpay_id', 'bufpay_key', 'site_name'] } });
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
+        // 🏬 分站自有商户优先：钱进站长账户，平台不碰
+        const siteCreds = req.site ? await sitePayCreds(Number(req.site.id), 'bufpay') : null;
+        if (siteCreds) { conf.bufpay_id = siteCreds.id; conf.bufpay_key = siteCreds.key; conf.site_name = siteCreds.name; }
         const cleanBufId = (val) => { if (!val) return ''; const match = val.match(/\/(\d+)$/); if (match) return match[1]; return val.replace(/[^0-9]/g, ''); };
         const realBufId = cleanBufId(conf.bufpay_id);
         if (!realBufId || !conf.bufpay_key) return res.json({ status: 'error', message: '支付配置缺失' });
@@ -100,6 +131,9 @@ router.post('/usd', authenticate, async (req, res) => {
     try {
         const configs = await Config.findAll({ where: { key: ['cryptomus_id', 'cryptomus_key'] } });
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
+        // 🏬 分站自有 Cryptomus 优先
+        const siteCredsUsd = req.site ? await sitePayCreds(Number(req.site.id), 'cryptomus') : null;
+        if (siteCredsUsd) { conf.cryptomus_id = siteCredsUsd.id; conf.cryptomus_key = siteCredsUsd.key; }
         if (!conf.cryptomus_id || !conf.cryptomus_key) return res.json({ status: 'error', message: 'USDT商户参数未配置' });
 
         const domain = getDomain(req);
@@ -171,12 +205,21 @@ router.get('/status', authenticate, async (req, res) => {
     } catch (e) { res.json({ status: 'error' }); }
 });
 
+// 回调验签用：按付款用户所属分站取 BufPay 密钥，取不到回退平台
+const resolveBufpayKey = async (orderUid) => {
+    const sid = await ownerSiteIdOfUser(orderUid);
+    const sc = await sitePayCreds(sid, 'bufpay');
+    if (sc) return sc.key;
+    const conf = await Config.findOne({ where: { key: 'bufpay_key' } });
+    return conf ? conf.value : null;
+};
+
 router.get('/return/bufpay', async (req, res) => {
     const { aoid, order_id, order_uid, price, pay_price, sign } = req.query;
     try {
-        const conf = await Config.findOne({ where: { key: 'bufpay_key' } });
-        if (conf) {
-            const localSign = md5(aoid + order_id + order_uid + price + pay_price + conf.value);
+        const key = await resolveBufpayKey(order_uid);
+        if (key) {
+            const localSign = md5(aoid + order_id + order_uid + price + pay_price + key);
             if (localSign === sign) {
               const ok = await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay返回');
               if (ok) markCompleted(order_id); // 失败不标完成，补单引擎会接手重试
@@ -189,9 +232,9 @@ router.get('/return/bufpay', async (req, res) => {
 router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req, res) => {
     const { aoid, order_id, order_uid, price, pay_price, sign } = req.body;
     try {
-        const conf = await Config.findOne({ where: { key: 'bufpay_key' } });
-        if (!conf) return res.status(500).send('No Config');
-        const localSign = md5(aoid + order_id + order_uid + price + pay_price + conf.value);
+        const key = await resolveBufpayKey(order_uid);
+        if (!key) return res.status(500).send('No Config');
+        const localSign = md5(aoid + order_id + order_uid + price + pay_price + key);
         if (localSign !== sign) return res.status(400).send('Sign Error');
         const ok = await handleSuccessPay(order_id, order_uid, pay_price, 'BufPay异步回调');
         if (!ok) return res.status(500).send('入账失败，请网关稍后重试'); // 保持 pending，等网关/补单引擎重试
@@ -217,7 +260,7 @@ router.post('/notify/cryptomus', async (req, res) => {
     }
     // 仅对「付款成功」态入账
     if (status === 'paid' || status === 'paid_over') {
-        const conf = await loadCryptomusConf();
+        const conf = (await sitePayCreds(await ownerSiteIdOfUser(pending.user_id), 'cryptomus')) || await loadCryptomusConf();
         if (conf && cryptomusVerify(data, conf.key)) {
             const ok = await handleSuccessPay(orderId, pending.user_id, pending.amount, 'Cryptomus回调');
             if (ok) markCompleted(orderId);
