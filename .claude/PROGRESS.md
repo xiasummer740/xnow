@@ -1503,3 +1503,37 @@ BetterStack / healthchecks.io。**探针基线已记：`grep -c -i uptimerobot` 
   已 `rm` → 复查残留 0，公网取不到；当前入口 `assets/index-CfnnQ9Hr.js`（指纹 `6cf8a21c…`）
 - ⚠️ **git 历史里仍有**（提交 `879c59a`）。仓库是 PUBLIC → 如需彻底清除需重写该提交并强推，**待祥哥决定**。
   教训：把用户截图里的真实账号当示例文案 = 把私隐写进公开仓库，以后一律用 `yourusername` 这类假值。
+
+---
+
+## [2026-10-24 下午] 对齐源头站：搜索框 + 平台按钮白名单（方案 B）
+
+祥哥连续指出三处"跟源头站不一样"，逐个修完：
+
+### ① 搜索服务（缺功能）
+源头站下单页顶部有搜索框，本站没有 → 2855 个服务只能翻下拉。
+新增 `🔍 搜索服务`：按 **服务 ID**（完全/前缀/包含）与**名称关键词**全平台筛选，
+最多 40 条，回车直接选中第一条。选中时把「平台 + 分类」一起切过去，
+并把 `activeService` 改为从 `rawServices` 兜底查找（否则跨平台选中会表单变空）。
+
+### ② 平台按钮（有功能但清单错误）
+源头站是 全部/TikTok/Telegram/Facebook/Instagram/Twitter/Line/Shopee/WhatsApp/Traffic/其他；
+本站 `platforms` 是**手写死的常量** → 三个真实问题：
+- `Line`(15 个服务) / `Shopee`(22) / `WhatsApp`(21) **没有按钮** → 这些服务除「全部」外**完全进不去**
+- `电报` 与源头站的 `Telegram` 叫法不一致
+- 本站有而无源头站按钮的：YouTube(205)/Spotify(35)/Snapchat(33)/LinkedIn(32)/Reddit(15)/Google(10)/Discord(1)
+
+### ③ 方案 B（祥哥拍板）：白名单 + 后台可配
+- 平台按钮改为**由真实服务数据推导**（`platformOf()` 按关键词归属），只显示"白名单内且确有服务"的
+- 白名单存 `configs.display_platforms`（默认 `TikTok,Telegram,Facebook,Instagram,Twitter,Line,Shopee,WhatsApp,Traffic`）
+  → **订单页 11 个按钮，与源头站一致**
+- 白名单外的平台 + 归属不上的分类，统一收进「其他」（实测：YouTube 205 / Spotify 35 / Snapchat 33 /
+  LinkedIn 32 / Reddit 15 / Google 10 / Discord 1 + 29 个杂分类 ≈ 543 个服务）
+- 后台「全局价格与折扣调控中枢」新增一行输入框 → **上游新增平台时只改这行字、保存即可，
+  客户刷新就生效，不用改代码也不用重新部署**（这是祥哥要的"自动跟着数据走"的落地方式：
+  平台名无法从分类名可靠推导，所以退一步做成配置项，仍是零部署）
+- `public.js` 暴露 `display_platforms`，`admin.js` 的 `ALLOWED_KEYS` 放行该键
+
+踩坑记录：给 `Admin.vue` 插卡片时多写了一个 `</div>` → `vite` 报
+`Invalid end tag (1113:5)`；删掉重复闭合即恢复。教训：改长模板必须立刻构建，别攒着改。
+

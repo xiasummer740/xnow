@@ -57,7 +57,10 @@ router.post('/config/update', authenticate, async (req, res) => {
     'upstream_url', 'upstream_key', 'upstream_login_user', 'upstream_login_pass',
     'tg_bot_token', 'tg_chat_id', 'tg_bot_link',
     'cryptomus_id', 'cryptomus_key', 'bufpay_id', 'bufpay_key',
-    'smtp_host', 'smtp_port', 'smtp_email', 'smtp_pass', 'usdt_image_url', 'ip_blacklist'];
+    'smtp_host', 'smtp_port', 'smtp_email', 'smtp_pass', 'usdt_image_url', 'ip_blacklist',
+    // 🧩 订单页显示哪些平台按钮（逗号分隔）。白名单外的平台统一收进「其他」。
+    //    新增平台时只改这一个配置，不用改代码/重新部署。
+    'display_platforms'];
   try {
     for (const [key, value] of Object.entries(req.body)) {
       if (!ALLOWED_KEYS.includes(key)) continue;

@@ -231,16 +231,24 @@ const PLATFORM_META = [
   { name: 'Line',     icon: '💬' },
   { name: 'Shopee',   icon: '🛍️' },
   { name: 'WhatsApp', icon: '💚' },
-  { name: 'Traffic',  icon: '🌐' },
-  { name: 'YouTube',  icon: '▶️' },
-  { name: 'Spotify',  icon: '🎧' },
-  { name: 'Snapchat', icon: '👻' },
-  { name: 'Google',   icon: '🔍' },
-  { name: 'Discord',  icon: '🎮' },
-  { name: 'LinkedIn', icon: '💼' },
-  { name: 'Reddit',   icon: '🤖' },
-  { name: '其他',     icon: '➕' }
+  { name: 'Traffic',  icon: '🌐' }
 ];
+
+// 🧩 显示哪些平台由后台配置 display_platforms 决定（逗号分隔）。
+//    白名单外的平台（YouTube/Spotify/…）统一收进「其他」——
+//    新增平台时只改后台那行字，不用改代码、不用重新部署。
+const platformAllow = ref('TikTok,Telegram,Facebook,Instagram,Twitter,Line,Shopee,WhatsApp,Traffic');
+const platformAllowList = computed(() =>
+  String(platformAllow.value || '').split(/[,，\s]+/).map(s => s.trim()).filter(Boolean)
+);
+// 某个分类归属于哪个平台（null = 归不进去，落到「其他」）
+const platformOf = (cat) => {
+  const lc = String(cat || '').toLowerCase();
+  for (const [p, kws] of Object.entries(platformKeywords)) {
+    if (kws.some(kw => lc.includes(kw))) return p;
+  }
+  return null;
+};
 const platformKeywords = {
   'TikTok': ['tiktok', 'tk', '抖音'],
   'Telegram': ['telegram', 'tg', '电报'],
@@ -260,24 +268,19 @@ const platformKeywords = {
   'Traffic': ['traffic', 'website', 'seo', '流量', '网站']
 };
 
-// 🧩 只显示"确实有服务"的平台，按 PLATFORM_META 的顺序排；「全部」永远第一，「其他」仅在有归不进去的分类时出现
+// 🧩 只显示"白名单内 + 确实有服务"的平台；「全部」永远第一，「其他」永远最后
 const platformList = computed(() => {
-    const cats = [...new Set(rawServices.value.map(s => s.category))];
+    const allow = platformAllowList.value;
     const has = new Set();
     let hasOther = false;
-    for (const cat of cats) {
-        const lc = String(cat || '').toLowerCase();
-        let matched = false;
-        for (const [p, kws] of Object.entries(platformKeywords)) {
-            if (kws.some(kw => lc.includes(kw))) { has.add(p); matched = true; break; }
-        }
-        if (!matched) hasOther = true;
+    for (const cat of new Set(rawServices.value.map(s => s.category))) {
+        const p = platformOf(cat);
+        if (p && allow.includes(p)) has.add(p);
+        else hasOther = true;   // 白名单外的平台 + 归不进去的分类 → 都归「其他」
     }
-    return PLATFORM_META.filter(m => {
-        if (m.name === '全部') return true;
-        if (m.name === '其他') return hasOther;
-        return has.has(m.name);
-    });
+    const out = PLATFORM_META.filter(m => m.name === '全部' || has.has(m.name));
+    if (hasOther) out.push({ name: '其他', icon: '➕' });
+    return out;
 });
 
 const platformGuideLinks = {
@@ -390,6 +393,8 @@ const fetchInitData = async () => {
     const confRes = await fetch('/api/public/config');
     const confData = await confRes.json();
     if(confData.status === 'success' && confData.data.announcement) sysAnnouncement.value = confData.data.announcement;
+    // 🧩 平台白名单（后台可改，改完刷新即生效，不用重新部署）
+    if(confData.status === 'success' && confData.data.display_platforms) platformAllow.value = confData.data.display_platforms;
   } catch(e) {}
   
   try {
@@ -412,23 +417,18 @@ const fetchInitData = async () => {
 };
 
 const availableCategories = computed(() => {
-  if (activePlatform.value === '全部') return [...new Set(rawServices.value.map(s => s.category))];
-  
-  let cats = new Set();
-  rawServices.value.forEach(s => {
-    const catStr = String(s.category).toLowerCase();
-    let matched = false;
-    for (const [plat, keywords] of Object.entries(platformKeywords)) {
-      if (keywords.some(kw => catStr.includes(kw))) {
-        matched = true;
-        if (plat === activePlatform.value) cats.add(s.category);
-        break;
-      }
-    }
-    if (!matched && activePlatform.value === '其他') {
+  const allow = platformAllowList.value;
+  const cats = new Set();
+  for (const s of rawServices.value) {
+    if (activePlatform.value === '全部') { cats.add(s.category); continue; }
+    const p = platformOf(s.category);
+    if (activePlatform.value === '其他') {
+      // 白名单外的平台 + 归不进去的分类，全部收进「其他」
+      if (!p || !allow.includes(p)) cats.add(s.category);
+    } else if (p === activePlatform.value) {
       cats.add(s.category);
     }
-  });
+  }
   return [...cats];
 });
 

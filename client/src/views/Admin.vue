@@ -31,7 +31,10 @@ const form = ref({
     global_multiplier: 2.0, agent_discount: 0.8, announcement: '', site_name: 'XNOW', site_logo: '/logo.png',
     upstream_url: '', upstream_key: '', tg_bot_token: '', tg_chat_id: '', tg_bot_link: 'https://t.me/Xnow001Bot',
     cryptomus_id: '', cryptomus_key: '', bufpay_id: '', bufpay_key: '', smtp_host: '', smtp_port: '', smtp_email: '', smtp_pass: '', usdt_image_url: '',
-    ip_blacklist: '' // 💡 新增 WAF 黑名单配置绑定
+    ip_blacklist: '', // 💡 新增 WAF 黑名单配置绑定
+    // 🧩 订单页显示哪些平台按钮（逗号分隔）。白名单外的平台自动收进「其他」——
+    //    新增平台只改这里，不用改代码/重新部署
+    display_platforms: 'TikTok,Telegram,Facebook,Instagram,Twitter,Line,Shopee,WhatsApp,Traffic'
 });
 
 const fundModal = ref({ show: false, userId: null, phone: '', type: 'add', amount: 100 });
@@ -605,6 +608,16 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                     <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 space-y-3">
                         <div class="flex justify-between items-center"><span class="badge-agent px-2 py-0.5 text-[10px]">至尊代理 ({{ Math.round(form.agent_discount * 100) }}%)</span><span class="font-mono font-bold text-emerald-400">x {{ (form.global_multiplier * form.agent_discount).toFixed(2) }}</span></div>
                         <div class="flex justify-between items-center"><span class="badge-gold px-2 py-0.5 text-[10px]">黄金用户</span><span class="font-mono font-bold text-slate-300">x {{ parseFloat(form.global_multiplier).toFixed(2) }}</span></div>
+                    </div>
+                    <!-- 🧩 订单页平台按钮白名单（改完刷新即生效，无需重新部署） -->
+                    <div class="mt-8 pt-6 border-t border-slate-700">
+                        <div class="flex justify-between items-end mb-2">
+                            <span class="text-sm text-slate-400">订单页显示的平台按钮（逗号分隔）</span>
+                            <span class="text-[10px] text-slate-500">白名单外的平台自动收进「其他」</span>
+                        </div>
+                        <input type="text" v-model="form.display_platforms" placeholder="TikTok,Telegram,Facebook,Instagram,Twitter,Line,Shopee,WhatsApp,Traffic"
+                            class="w-full bg-slate-900/80 border border-slate-600 rounded-lg p-3 text-white outline-none focus:border-amber-400 transition font-mono text-sm">
+                        <p class="text-[10px] text-slate-500 mt-2">💡 平台上游新增入口后，在这里加上名字（如 <span class="text-amber-400 font-mono">Pinterest</span>）保存即可，客户刷新就能看到，不用改代码</p>
                     </div>
                 </div>
                 <div class="border-t border-slate-700 pt-6">

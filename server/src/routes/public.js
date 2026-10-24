@@ -7,7 +7,7 @@ router.get('/config', async (req, res) => {
   try {
     const configs = await Config.findAll({
       where: {
-        key: ['site_name', 'site_logo', 'tg_bot_link', 'announcement', 'agent_discount', 'global_multiplier', 'usdt_image_url']
+        key: ['site_name', 'site_logo', 'tg_bot_link', 'announcement', 'agent_discount', 'global_multiplier', 'usdt_image_url', 'display_platforms']
       }
     });
 
