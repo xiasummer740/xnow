@@ -197,6 +197,38 @@
                     <option value="solid">实心（厚实）</option>
                   </select>
                 </div>
+
+              <!-- 71期：背景与字号（站长不动代码也要能改；与首页悬浮编辑器同一套选项）-->
+              <div class="col-span-2 mt-1">
+                <label class="block text-[10px] text-slate-500 mb-1">页面背景</label>
+                <div class="flex flex-wrap gap-2">
+                  <button v-for="b in BG_PRESETS" :key="b.key" type="button"
+                    class="w-9 h-9 rounded-lg border-2 transition"
+                    :class="form.bg_color === b.key ? 'border-amber-400 scale-110' : 'border-slate-700'"
+                    :style="{ background: b.css }" :title="b.name"
+                    @click="form.bg_color = b.key"></button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 mt-2">
+                  <button type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-amber-400"
+                    :disabled="uploading === 'bg_image'" @click="pickImage('bg_image')">
+                    {{ uploading === 'bg_image' ? '上传中…' : '上传自己的背景图' }}
+                  </button>
+                  <button v-if="form.bg_image" type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400"
+                    @click="form.bg_image = ''">去掉背景图</button>
+                  <span v-if="form.bg_image" class="text-[10px] text-emerald-400">已选背景图（选纯色会让图片失效）</span>
+                </div>
+              </div>
+
+              <div class="col-span-2">
+                <label class="block text-[10px] text-slate-500 mb-1">字号</label>
+                <div class="flex gap-2">
+                  <button v-for="f in FONT_SCALES" :key="f.key" type="button"
+                    class="flex-1 py-1.5 rounded-lg text-xs border transition"
+                    :class="(form.font_scale || 'md') === f.key ? 'bg-amber-400 text-slate-900 border-amber-400 font-bold' : 'bg-slate-950 border-slate-700 text-slate-400'"
+                    @click="form.font_scale = f.key">{{ f.name }}</button>
+                </div>
+                <p class="text-[10px] text-slate-600 mt-1">字小一点能多放信息；字大一点更好读。</p>
+              </div>
                 <div>
                   <label class="block text-[10px] text-slate-500 mb-1">字体</label>
                   <select v-model="form.font_style" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
@@ -844,6 +876,9 @@ const form = ref({
   name: '', multiplier: 2.5, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
   ui_radius: '', ui_density: '', card_style: '', font_style: '', btn_shape: '', hero_layout: '',
+  // 71期：背景色 / 背景图 / 字号 —— 之前只有首页悬浮编辑器能改，
+  // 站长在后台面板里找不到，等于「设置里配不全」。
+  bg_color: '', bg_image: '', font_scale: '',
   bufpay_id: '', bufpay_key: '', cryptomus_id: '', cryptomus_key: '',
   smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '',
   logo: '', hero_badge: '', hero_title: '', hero_subtitle: '', hero_desc: '',
@@ -913,6 +948,19 @@ const SECTION_KEYS = [
 ]
 
 const uploading = ref('')
+// 71期：与首页悬浮编辑器保持同一套选项（两套说法会让站长以为是两个功能）
+const BG_PRESETS = [
+  { key: '',       name: '跟随模板', css: 'linear-gradient(135deg,#1e293b,#0f172a)' },
+  { key: '#04070f', name: '纯黑',    css: '#04070f' },
+  { key: '#0b1220', name: '深蓝',    css: '#0b1220' },
+  { key: '#12081a', name: '暗紫',    css: '#12081a' },
+  { key: 'grad1',  name: '深空渐变', css: 'linear-gradient(160deg,#0b1220,#131a2e,#1b1030)' },
+  { key: 'grad2',  name: '深海渐变', css: 'linear-gradient(160deg,#04070f,#0d1b2a,#10243a)' },
+  { key: 'grad3',  name: '紫夜渐变', css: 'linear-gradient(160deg,#120a1f,#1d1030,#2a1033)' }
+]
+const FONT_SCALES = [
+  { key: 'sm', name: '小' }, { key: 'md', name: '标准' }, { key: 'lg', name: '大' }
+]
 const pickImage = (field) => {
   const input = document.createElement('input')
   input.type = 'file'
@@ -990,6 +1038,7 @@ const load = async () => {
         announcement: s.announcement || '',
         template: s.template || 'classic', color: s.color || 'cyan', accent: s.accent || '',
         ui_radius: s.ui_radius || '', ui_density: s.ui_density || '',
+        bg_color: s.bg_color || '', bg_image: s.bg_image || '', font_scale: s.font_scale || '',
         card_style: s.card_style || '', font_style: s.font_style || '',
         btn_shape: s.btn_shape || '', hero_layout: s.hero_layout || '',
       // 🎨 四十一期：结构级 DIY
@@ -1072,6 +1121,7 @@ const save = async (silent = false) => {
       announcement: form.value.announcement,
       template: form.value.template, color: form.value.color, accent: form.value.accent,
       ui_radius: form.value.ui_radius, ui_density: form.value.ui_density,
+      bg_color: form.value.bg_color || '', bg_image: form.value.bg_image || '', font_scale: form.value.font_scale || '',
       card_style: form.value.card_style, font_style: form.value.font_style,
       btn_shape: form.value.btn_shape, hero_layout: form.value.hero_layout,
       home_modules: JSON.stringify(form.value.modules.map((m, i) => ({ key: m.key, enabled: !!m.enabled, order: i }))),

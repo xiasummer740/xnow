@@ -497,3 +497,79 @@ html[data-template] { font-size: calc(16px * var(--site-font-scale, 1)) !importa
    text-wrap: balance 让两行长度更均匀；仅分站生效。 */
 html[data-template] h1,
 html[data-template] h2 { text-wrap: balance; }
+/* ==========================================================================
+   71 期：祥哥在演示站上当场指出的三个问题（全部只在分站生效，主站一个字不动）
+   ① CTA 那一块「字跑到最左边」—— minimal/magazine 模板给 .site-section > h2 设了
+      text-align:left !important，但 CTA 里的说明文字和按钮是居中的，结果标题孤零零
+      贴在左边缘。这里把 CTA 整块统一居中。
+   ② 方框全是直角 —— minimal/magazine 的 .site-card 设了 border-radius:0，
+      看着像半成品。改成小圆角（仍保留"极简"的味道，但不是直角）。
+   ③ 首页太长 —— 各 section 上下留白太大（py-16 / py-20），一屏一屏全是空气。
+      分站把留白压到合理值，页面短一截，客户才愿意往下翻。
+   ========================================================================== */
+
+/* ① CTA 整块居中（标题 + 说明 + 按钮方向一致）*/
+html[data-template] [data-module="cta"] > h2,
+html[data-template] [data-module="cta"] > p,
+html[data-template] [data-module="cta"] > a,
+html[data-template] [data-module="cta"] > .text-center {
+  text-align: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* ② 直角改小圆角：模板原本 0 / 2px，看着像没做完 */
+html[data-template="minimal"] .site-card,
+html[data-template="magazine"] .site-card {
+  border-radius: 12px !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+}
+html[data-template="saas"] .site-card { border-radius: 10px; }
+
+/* ③ 压缩首页留白（只对分站；hero 单独控制不动）*/
+html[data-template] .site-section:not(.hero-wrap) {
+  padding-top: 2rem !important;
+  padding-bottom: 2rem !important;
+}
+@media (max-width: 640px) {
+  html[data-template] .site-section:not(.hero-wrap) {
+    padding-top: 1.4rem !important;
+    padding-bottom: 1.4rem !important;
+  }
+}
+/* 区块标题下边距也收一点（原来 mb-10 / mb-8 太松）*/
+html[data-template] .site-section > h2 { margin-bottom: 1.1rem !important; }
+/* FAQ 条目之间的间距收紧，一屏能看到更多问题 */
+html[data-template] [data-module="faq"] .space-y-3 > * + * { margin-top: 0.5rem !important; }
+
+/* ==========================================================================
+   71 期（续）：terminal / split 版式会把「每个区块小标题」都加上 $ 前缀、强制左对齐、
+   换等宽字体 —— 结果整页标题歪在左边，那个 $ 还被等宽字体渲染成了一个怪符号（₴）。
+   这种"终端感"只该出现在 Hero 上，不该污染整页。这里把它收回到 Hero。
+   （Hero 标题是 h1，不受下面这些 h2 规则影响，所以视觉上 Hero 仍然是终端风格）
+   ========================================================================== */
+html[data-block="terminal"] .site-section > h2 {
+  text-align: inherit !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+html[data-block="terminal"] .site-section > h2::before { content: none !important; }
+html[data-block="split"] .site-section > h2 { padding-left: 0 !important; }
+
+/* 区块标题统一居中：客户扫一眼就知道这是新的一段（左对齐在深色底上像没排好版）*/
+html[data-template] .site-section > h2,
+html[data-template] .site-section > h2.text-center,
+html[data-template] .site-section > .text-center {
+  text-align: center !important;
+  font-family: inherit;
+}
+/* Hero 里的文字保持各自版式的对齐方式，这里不动 */
+
+/* 71 期（续）：首页再短一点 —— Hero 上下留白也收一收（原来 pt-32 在深色底上太空）*/
+html[data-template] .subsite-hero { padding-top: 2rem !important; padding-bottom: 1.6rem !important; }
+@media (max-width: 640px) {
+  html[data-template] .subsite-hero { padding-top: 1rem !important; padding-bottom: 1.2rem !important; }
+}
