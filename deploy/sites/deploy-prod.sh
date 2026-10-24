@@ -257,7 +257,13 @@ echo ""
 echo "════════════════════════════════════════"
 echo "✅ 部署完成。备份: $BAK"
 echo ""
-echo "最省事的回滚（推荐，脚本已就绪）:"
+# 🔴 99 期：这里以前推荐的是不带 --code-only 的命令 —— 那条会把数据库一起还原，
+#    上线后已经产生的真实订单/用户/充值会全部消失。出问题时的第一反应必须是
+#    「只回滚代码」，库只在代码回滚仍不能解决时才动，且要人工确认。
+echo "回滚第一步（绝大多数情况只做这一步，不动数据库）:"
+echo "  bash $APP/deploy/sites/rollback-sites.sh --env prod --stamp $STAMP --code-only"
+echo ""
+echo "⚠️ 只有在代码回滚后仍然坏掉时，才考虑连库一起还原（会丢上线后新增的订单/用户）:"
 echo "  bash $APP/deploy/sites/rollback-sites.sh --env prod --stamp $STAMP"
 echo ""
 echo "手动回滚办法（四选一，都在 $BAK 里）:"

@@ -94,7 +94,10 @@ pm2 restart "$PM2_APP" --update-env >/dev/null 2>&1
 sleep 8
 pm2 list | grep -E "$PM2_APP" | sed 's/^/    /'
 echo
-echo -n "  主站首页 -> "; curl -sk -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 -H "Host: $CHECK_HOST" https://127.0.0.1/ --resolve "$CHECK_HOST:443:127.0.0.1"
-echo -n "  主站 API -> "; curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 8 "http://127.0.0.1:$CHECK_PORT/api/public/config"
+# 99 期：标签跟着 $ENV 走。以前写死「主站」，--env beta 演练时会让人以为探错了环境。
+echo -n "  首页（$CHECK_HOST） -> "; curl -sk -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 -H "Host: $CHECK_HOST" https://127.0.0.1/ --resolve "$CHECK_HOST:443:127.0.0.1"
+# ⚠️ 只看首页会误判：静态 HTML 由 nginx 直接给，后端挂了首页照样 200（演练实测：首页 200 / API 502）。
+#    所以必须探 API —— 这条才是"后端真的活着"。
+echo -n "  后端 API -> "; curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 8 "http://127.0.0.1:$CHECK_PORT/api/public/config"
 echo
 echo "回滚流程执行完毕，请人工确认首页、登录、下单三项。"
