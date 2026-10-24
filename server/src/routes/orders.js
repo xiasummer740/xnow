@@ -250,7 +250,9 @@ router.post('/add', authenticate, async (req, res) => {
     }
     
     if (upRes.data && upRes.data.order) {
-      const orderNo = 'XN' + Date.now() + Math.floor(Math.random()*100);
+      // 🏬 订单号前缀：主站沿用 XN；分站不要带平台首字母 —— 这个号会出现在客户的
+    //    历史订单、邮件和客服对话里，'XN' 三个字母等于在每张单子上盖平台的章。
+    const orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random()*100);
       const newOrder = await Order.create({
         order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
         // 🏬 分站归属与站主成本（主站订单固定为 0）
@@ -448,7 +450,7 @@ router.post('/batch', authenticate, async (req, res) => {
       });
 
       if (upRes.data && upRes.data.order) {
-        const orderNo = 'XN' + Date.now() + Math.floor(Math.random() * 100);
+        const orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random() * 100);
         const newOrder = await Order.create({
           order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
           site_id: req.site ? Number(req.site.id) : 0,
