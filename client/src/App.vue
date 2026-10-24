@@ -1,6 +1,6 @@
 <template>
   <div id="app-root" class="relative min-h-screen bg-[#060b18]">
-    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden"><div v-for="n in 30" :key="n" class="quantum-formula" :style="getQuantumStyle(n)">{{ getFormula() }}</div></div>
+    <!-- 🧹 分站：关掉主站招牌的飘动公式背景（那是 XNOW 的视觉标识，分站不能有）--><div v-if="!appStore?.isSubsite" class="fixed inset-0 pointer-events-none z-0 overflow-hidden"><div v-for="n in 30" :key="n" class="quantum-formula" :style="getQuantumStyle(n)">{{ getFormula() }}</div></div>
     
     <router-view class="relative z-10" />
     

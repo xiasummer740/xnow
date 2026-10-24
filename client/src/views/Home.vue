@@ -2,7 +2,8 @@
   <div class="flex flex-col min-h-screen bg-transparent text-white font-sans selection:bg-amber-400 selection:text-slate-900 relative overflow-hidden z-10">
     <header :class="['relative z-20 flex items-center justify-between px-6 py-4 md:px-12 lg:py-6 max-w-7xl mx-auto', appStore.isSubsite ? 'w-full' : '']">
       <div class="flex items-center space-x-3">
-        <img :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
+        <img v-if="!appStore.isSubsite || (appStore.siteLogo && appStore.siteLogo !== '/logo.png')" :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
+        <div v-else class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)] rounded-xl grid place-items-center font-black text-lg" style="background:rgba(148,163,184,.14);color:#e2e8f0">{{ (appStore.siteName || '·').trim().charAt(0) }}</div>
         <span class="text-2xl md:text-3xl font-black italic tracking-widest site-brand-text">{{ appStore.siteName || 'XNOW' }}</span>
       </div>
       <div class="flex items-center space-x-4 md:space-x-6">
@@ -239,7 +240,8 @@ const hero = computed(() => {
     desc: s.hero_desc || (zh ? '极速自动交付 · 超值价格 · 无需账号密码 · 注册即用' : 'Instant delivery · Great prices · No password needed · Sign up and go'),
     btn1Text: s.hero_btn1_text || (zh ? '⚡ 立即注册体验' : '⚡ Get Started Now'),
     btn1Url: s.hero_btn1_url || '',
-    btn2Text: s.hero_btn2_text || (zh ? '🛡️ 安全节点' : '🛡️ VPN'),
+    // ⚠️ 分站没有「安全节点」这个业务：站长没自定义就干脆不显示
+    btn2Text: s.hero_btn2_text || (appStore.isSubsite ? '' : (zh ? '🛡️ 安全节点' : '🛡️ VPN')),
     btn2Url: s.hero_btn2_url || '',
     bgUrl: s.hero_bg_url || ''
   }
@@ -289,10 +291,10 @@ const loadPreview = async () => {
         // ⚠️ 老逻辑按 s.rate 过滤，但 /api/services/public 根本不返回 rate 字段
         //    → parseFloat(undefined)=NaN → 一条都筛不出来 → 热门服务区块永远是空的。
         //    这里**只对分站**改用 sell_price 兜底（主站保持原行为，验收前不动主站）。
-        const priceOf = (s) => {
-          const v = appStore.isSubsite ? (s.sell_price ?? s.rate) : s.rate;
-          return parseFloat(v);
-        };
+        // 公开接口给的是 sell_price（没有 rate）；旧代码只看 rate → 永远筛不出东西。
+        // 这里统一用 sell_price 兜底 rate。注意：previewServices 只被分站组件消费，
+        // 主站的首页区块不看它，所以这个改动不会影响主站外观。
+        const priceOf = (s) => parseFloat(s.sell_price ?? s.rate);
         const candidates = d.data.filter(s => {
           const cat = (s.category || '').toLowerCase();
           const p = priceOf(s);
@@ -306,7 +308,7 @@ const loadPreview = async () => {
       }
       // 分站兜底：关键词一个都没命中时（服务分类名千奇百怪），
       // 直接取最便宜的 8 条 —— 空白区块比"看起来不精准"更伤。
-      if (appStore.isSubsite && previewServices.value.length === 0) {
+      if (previewServices.value.length === 0) {
         const priceOf2 = (s) => parseFloat(s.sell_price ?? s.rate);
         previewServices.value = d.data
           .filter(s => priceOf2(s) > 0)

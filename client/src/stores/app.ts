@@ -64,6 +64,12 @@ export const useAppStore = defineStore('app', {
       this.applyTheme();
     } } catch(e) {} this.fetchRate(); },
     // 💅 站长自定义 CSS：注入到 <style id="xn-site-css">，只影响他自己的分站
+  // 🖼 分站没上传 logo 时，用站名首字做图标 —— 绝不能回落成主站 logo
+  get siteInitial(): string {
+    const n = (this.siteName || '').trim();
+    return n ? n.replace(/^[A-Za-z0-9\s]+$/, n).charAt(0).toUpperCase() : 'X';
+  },
+
   applyCustomCss() {
     if (typeof document === 'undefined') return;
     let el = document.getElementById('xn-site-css') as HTMLStyleElement | null;

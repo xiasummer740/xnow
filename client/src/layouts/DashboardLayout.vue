@@ -5,7 +5,8 @@
     <aside :class="['fixed md:relative z-[9999] md:z-50 h-full w-60 bg-slate-900/95 border-r border-slate-800 flex flex-col backdrop-blur-xl transition-transform duration-300 ease-in-out', isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0']">
       <div class="h-16 flex items-center px-5 border-b border-slate-800">
         <a href="/" class="flex items-center w-full hover:opacity-80 transition" title="返回首页">
-          <img :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-8 w-8 object-contain mr-2.5" alt="Logo">
+          <img v-if="!appStore.isSubsite || (appStore.siteLogo && appStore.siteLogo !== '/logo.png')" :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-8 w-8 object-contain mr-2.5" alt="Logo">
+          <div v-else class="h-8 w-8 object-contain mr-2.5 rounded-xl grid place-items-center font-black text-lg" style="background:rgba(148,163,184,.14);color:#e2e8f0">{{ (appStore.siteName || '·').trim().charAt(0) }}</div>
           <span class="text-lg font-black tracking-wide truncate bg-gradient-to-r from-amber-300 to-amber-500 bg-clip-text text-transparent">{{ appStore.siteName }}</span>
         </a>
         <button @click="isSidebarOpen = false" class="md:hidden text-slate-400 hover:text-white ml-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>

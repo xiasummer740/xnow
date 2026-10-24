@@ -39,7 +39,7 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
 
     <div class="mb-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <router-link :to="hero.btn1Url || '/login'" class="site-btn px-9 py-4 text-base font-black">{{ hero.btn1Text }}</router-link>
-      <router-link :to="hero.btn2Url || '/vpn'" class="site-btn px-7 py-4 text-sm font-bold opacity-80">{{ hero.btn2Text }}</router-link>
+      <router-link v-if="hero.btn2Text" :to="hero.btn2Url || '/vpn'" class="site-btn px-7 py-4 text-sm font-bold opacity-80">{{ hero.btn2Text }}</router-link>
     </div>
 
     <div class="mx-auto grid max-w-2xl grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-7">
@@ -66,7 +66,7 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
       <p class="mb-8 max-w-lg text-sm leading-relaxed opacity-50">{{ hero.desc }}</p>
       <div class="mb-9 flex flex-wrap items-center gap-3">
         <router-link :to="hero.btn1Url || '/login'" class="site-btn px-8 py-3.5 text-sm font-black">{{ hero.btn1Text }}</router-link>
-        <router-link :to="hero.btn2Url || '/vpn'" class="site-btn px-6 py-3.5 text-xs font-bold opacity-80">{{ hero.btn2Text }}</router-link>
+        <router-link v-if="hero.btn2Text" :to="hero.btn2Url || '/vpn'" class="site-btn px-6 py-3.5 text-xs font-bold opacity-80">{{ hero.btn2Text }}</router-link>
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-wider opacity-45">
         <span>● 24/7 自动交付</span><span>● 无需账号密码</span><span>● 掉粉可补</span>
@@ -121,7 +121,7 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
 
     <div class="mb-10 flex flex-wrap items-center gap-4">
       <router-link :to="hero.btn1Url || '/login'" class="site-btn px-7 py-3 text-sm font-black">{{ hero.btn1Text }}</router-link>
-      <router-link :to="hero.btn2Url || '/vpn'" class="text-xs font-bold underline underline-offset-4 opacity-60">{{ hero.btn2Text }}</router-link>
+      <router-link v-if="hero.btn2Text" :to="hero.btn2Url || '/vpn'" class="text-xs font-bold underline underline-offset-4 opacity-60">{{ hero.btn2Text }}</router-link>
     </div>
 
     <div class="grid grid-cols-1 gap-x-8 gap-y-4 border-t pt-6 sm:grid-cols-3" style="border-color: color-mix(in srgb, currentColor 16%, transparent)">
@@ -165,7 +165,7 @@ const price = (s) => (s && s.sell_price != null ? Number(s.sell_price).toFixed(2
 
     <div class="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <router-link :to="hero.btn1Url || '/login'" class="site-btn px-9 py-3.5 text-sm font-black">{{ hero.btn1Text }}</router-link>
-      <router-link :to="hero.btn2Url || '/vpn'" class="site-btn px-6 py-3.5 text-xs font-bold opacity-75">{{ hero.btn2Text }}</router-link>
+      <router-link v-if="hero.btn2Text" :to="hero.btn2Url || '/vpn'" class="site-btn px-6 py-3.5 text-xs font-bold opacity-75">{{ hero.btn2Text }}</router-link>
     </div>
     <p class="mt-5 text-center text-[11px] font-mono opacity-35">{{ hero.desc }}</p>
   </main>
