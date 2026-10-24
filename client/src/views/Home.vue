@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-transparent text-white font-sans selection:bg-amber-400 selection:text-slate-900 relative overflow-hidden z-10">
+  <div class="flex flex-col min-h-screen bg-transparent text-white font-sans selection:bg-amber-400 selection:text-slate-900 relative overflow-hidden z-10">
     <header class="relative z-20 flex items-center justify-between px-6 py-4 md:px-12 lg:py-6 max-w-7xl mx-auto">
       <div class="flex items-center space-x-3">
         <img :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
@@ -74,20 +74,20 @@
     <SiteModules />
 
     <!-- Use cases -->
-    <section class="relative z-20 max-w-5xl mx-auto px-6 py-16">
+    <section v-if="appStore.moduleEnabled('audience')" :style="{ order: appStore.moduleOrder('audience') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 谁在用 XNOW' : '🎯 Who It’s For' }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+        <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">🎬</div>
           <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'TikTok创作者':'TikTok Creators' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'0播放、限流、Shadow Ban？独享原生IP，让算法认为你是本地用户。' : 'Zero views? Shadow ban? Dedicated residential IPs make the algorithm see you as local.' }}</p>
         </router-link>
-        <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+        <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">📺</div>
           <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'直播带货':'Live Streamers' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'直播卡顿掉帧丢单？CN2 GIA/CMIN2优化线路，跨国直播稳60帧。' : 'Laggy streams losing sales? Premium routes for stable 60fps cross-border streaming.' }}</p>
         </router-link>
-        <router-link to="/vpn" class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+        <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">👥</div>
           <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'矩阵运营':'Multi-Account' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'多号同IP=批量送死。每号独立IP，矩阵稳如磐石。' : 'Same IP for multiple accounts = mass ban. Dedicated IP per account.' }}</p>
@@ -96,20 +96,20 @@
     </section>
 
     <!-- How it works -->
-    <section class="relative z-20 max-w-4xl mx-auto px-6 py-8">
+    <section v-if="appStore.moduleEnabled('steps')" :style="{ order: appStore.moduleOrder('steps') }" class="site-section relative z-20 max-w-4xl mx-auto px-6 py-8">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '📋 三步开始' : '📋 How It Works' }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
+        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition">1</div>
           <h3 class="text-white font-black text-lg mb-2">{{ appStore.lang === 'zh' ? '注册账号' : 'Sign Up' }}</h3>
           <p class="text-slate-500 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '手机号注册，无需实名，30秒完成。注册即享全网底价。' : 'Sign up with phone number in 30 seconds. Instant access to wholesale pricing.' }}</p>
         </div>
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
+        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition">2</div>
           <h3 class="text-white font-black text-lg mb-2">{{ appStore.lang === 'zh' ? '充值下单' : 'Top Up & Order' }}</h3>
           <p class="text-slate-500 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '微信/支付宝/USDT 充值，选服务填链接，一键提交。系统全自动处理。' : 'Top up via WeChat/Alipay/USDT. Pick a service, paste your link, submit. Fully automated.' }}</p>
         </div>
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
+        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-green-500/10 text-green-400 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition">3</div>
           <h3 class="text-white font-black text-lg mb-2">{{ appStore.lang === 'zh' ? '坐等效果' : 'Watch It Grow' }}</h3>
           <p class="text-slate-500 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '秒级启动，几分钟到几小时完成。随时查看订单进度，掉了自动补。' : 'Starts in seconds. Track progress anytime. Auto-refill on drops.' }}</p>
@@ -118,19 +118,19 @@
     </section>
 
     <!-- Why us -->
-    <section class="relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
+    <section v-if="appStore.moduleEnabled('advantages')" :style="{ order: appStore.moduleOrder('advantages') }" class="site-section relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
       <div class="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div class="bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
+        <div class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">⚡</div>
           <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? '秒级自动交付' : 'Instant Auto-Delivery' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '系统全自动API对接，订单秒级响应，无需人工等待。' : 'Fully automated API. Orders processed in milliseconds.' }}</p>
         </div>
-        <div class="bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
+        <div class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">💎</div>
           <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? '全网最低价' : 'Wholesale Pricing' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '直连源头渠道，无中间商加价。TikTok千粉最低 ¥6.5起。' : 'Direct to source. TikTok followers from ¥6.5/1K.' }}</p>
         </div>
-        <div class="bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
+        <div class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-green-500/10 text-green-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">🔒</div>
           <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? '安全无需密码' : 'No Password Needed' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '只要目标链接，不需要提供账号密码，100%保障你的隐私安全。' : 'Only need the target link. No account password required. 100% privacy.' }}</p>
@@ -139,7 +139,7 @@
     </section>
 
     <!-- Service Preview -->
-    <section class="relative z-20 max-w-5xl mx-auto px-6 py-16">
+    <section v-if="appStore.moduleEnabled('hot_services')" :style="{ order: appStore.moduleOrder('hot_services') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-2 tracking-wider">📊 {{ appStore.lang === 'zh' ? '热门服务预览' : 'Popular Services' }}</h2>
       <p class="text-center text-slate-500 text-sm mb-8">{{ appStore.lang === 'zh' ? '登录后可查看全部服务与实时价格' : 'Login to browse all services' }}</p>
       <div v-if="previewLoading" class="flex justify-center py-8"><div class="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div></div>
@@ -158,10 +158,10 @@
     </section>
 
     <!-- FAQ -->
-    <section class="relative z-20 max-w-2xl mx-auto px-6 py-16">
+    <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq') }" class="site-section relative z-20 max-w-2xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ' }}</h2>
       <div class="space-y-3">
-        <div v-for="(faq, i) in faqs" :key="i" class="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div v-for="(faq, i) in faqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <button @click="faq.open = !faq.open" class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition">
             <span class="text-white font-bold text-sm">{{ faq[appStore.lang].q }}</span>
             <span :class="['text-amber-400 transition-transform', faq.open ? 'rotate-45' : '']">+</span>
@@ -172,7 +172,7 @@
     </section>
 
     <!-- Footer CTA -->
-    <section class="relative z-20 text-center py-12 pb-20">
+    <section v-if="appStore.moduleEnabled('cta')" :style="{ order: appStore.moduleOrder('cta') }" class="site-section relative z-20 text-center py-12 pb-20">
       <h2 class="text-2xl font-black text-white mb-4">{{ appStore.lang === 'zh' ? '准备好让你的社媒炸裂了吗？' : 'Ready to explode your social media?' }}</h2>
       <p class="text-slate-500 mb-8">{{ appStore.lang === 'zh' ? '注册只需30秒，即刻拥有全网最低价涨粉服务。' : 'Sign up in 30 seconds. Instant access to wholesale SMM services.' }}</p>
       <router-link to="/login" class="inline-block px-12 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '🚀 免费注册' : '🚀 Sign Up Free' }}</router-link>

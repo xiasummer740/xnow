@@ -423,7 +423,12 @@ router.put('/:id', authenticate, async (req, res) => {
       let mods = home_modules;
       if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { return res.json({ status: 'error', message: '首页模块格式错误' }); } }
       if (!Array.isArray(mods)) return res.json({ status: 'error', message: '首页模块必须是数组' });
-      const ALLOWED = ['announce', 'stats', 'hot_services', 'faq', 'vip', 'affiliate'];
+      // 🧩 二十八期：白名单必须与 Home.vue 里真实存在的区块一致，
+      //    否则站长在后台配了「谁在用 / 三步开始 / 优势 / 底部号召」也会被这里丢掉
+      //    （表现为：后台勾了、首页没变 —— 这类静默丢弃最难查）。
+      //    旧键（announce/stats/vip/affiliate）保留，避免已保存的配置失效。
+      const ALLOWED = ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta',
+                       'announce', 'stats', 'vip', 'affiliate'];
       const clean = mods
         .filter(m => m && ALLOWED.includes(m.key))
         .map((m, i) => ({ key: m.key, enabled: m.enabled !== false, order: Number.isFinite(+m.order) ? +m.order : i }))

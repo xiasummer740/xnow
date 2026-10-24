@@ -722,7 +722,16 @@ const colors = [
   { key: 'green', label: '绿', hex: '#22c55e' }, { key: 'red', label: '红', hex: '#ef4444' },
   { key: 'orange', label: '橙', hex: '#f97316' }, { key: 'blue', label: '蓝', hex: '#3b82f6' }
 ]
-const MODULES = { announce: '公告条', stats: '数据统计', hot_services: '热门服务', faq: '教程 FAQ', vip: 'VIP 入口', affiliate: '返佣横幅' }
+// 🧩 二十八期：这里的键必须与 Home.vue 里真实的区块一一对应，
+//    否则站长在后台关了「教程 FAQ」，首页照样显示（之前就是这个 bug）。
+const MODULES = {
+  audience: '谁在用（客户案例）',
+  steps: '三步开始',
+  advantages: '优势介绍',
+  hot_services: '热门服务预览',
+  faq: '常见问题 FAQ',
+  cta: '底部行动号召'
+}
 const moduleLabel = (k) => MODULES[k] || k
 
 const cards = computed(() => {

@@ -72,6 +72,17 @@ export const useAppStore = defineStore('app', {
       const m = this.homeModules.find(x => x.key === key);
       return m ? m.enabled !== false : false;
     },
+    // 🧩 二十八期：首页区块排序。用 CSS order 实现，不改 DOM 顺序 → 主站默认顺序不变。
+    //    未配置的分站或未出现的键，回落到主站默认顺序，保证老配置不会把页面搞乱。
+    moduleOrder(key: string) {
+      const DEFAULT_ORDER = ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta'];
+      const def = DEFAULT_ORDER.indexOf(key);
+      const fallback = def < 0 ? 99 : def;
+      if (!this.homeModules || this.homeModules.length === 0) return fallback;
+      const m = this.homeModules.find(x => x.key === key);
+      if (!m) return fallback;
+      return typeof m.order === 'number' ? m.order : fallback;
+    },
     t(key) { return i18nDict[this.lang][key] || key; }, 
     formatMoney(cnyAmount) { const amt = parseFloat(cnyAmount || 0); if (this.currency === 'CNY') return `¥ ${(amt).toFixed(2)}`; return `$ ${(amt / this.exchangeRate).toFixed(4)}`; }
   }
