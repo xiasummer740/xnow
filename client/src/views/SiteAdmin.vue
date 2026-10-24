@@ -142,8 +142,21 @@
         <div class="grid md:grid-cols-2 gap-3 items-start">
           <div>
             <input v-model.number="form.markup_pct" type="number" step="10" min="0" max="2000" inputmode="numeric"
-              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-lg font-bold text-right" />
             <p class="text-[10px] text-slate-500 mt-1">可填 0 ~ 2000；0 = 按进货价卖（不赚不亏），低于 0 就是亏本，系统不让填。</p>
+
+            <!-- 💾 102 期：祥哥在这里找不到保存 —— 全局按钮在整页最底部，手机上要滑很久。
+                 现在输入框下面直接一个保存按钮，带「未保存/已保存」状态。 -->
+            <div class="flex items-center gap-2 mt-2">
+              <button type="button" @click="saveMarkup" :disabled="saving"
+                      class="flex-1 py-2.5 rounded-lg font-black text-sm bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
+                {{ saving ? '保存中…' : '保存加价率' }}
+              </button>
+              <span v-if="markupDirty" class="text-[11px] text-amber-400 whitespace-nowrap">● 未保存</span>
+              <span v-else class="text-[11px] text-emerald-400 whitespace-nowrap">✓ 已保存</span>
+            </div>
+            <p v-if="markupMsg" class="text-[11px] mt-1.5" :class="markupOk ? 'text-emerald-400' : 'text-rose-400'">{{ markupMsg }}</p>
+            <p class="text-[10px] text-slate-600 mt-1">客户看到的价格 = 你的进货价 ×（1 + 加价率）。改完点上面的按钮就生效。</p>
           </div>
           <p class="text-[11px] text-slate-400 leading-relaxed bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2">
             加价率越高，客户看到的价格越高、你每单赚得越多。系统有底线：售价低于你的进货价会直接拦住。
@@ -876,6 +889,27 @@ const moveModule = (i, dir) => {
   if (j < 0 || j >= arr.length) return
   const t = arr[i]; arr[i] = arr[j]; arr[j] = t
   arr.forEach((m, idx) => (m.order = idx))
+}
+
+// 💾 加价率就地保存（见模板注释）
+const markupMsg = ref('')
+const markupOk = ref(true)
+const markupDirty = computed(() => {
+  if (!site.value) return false
+  return Number(form.value.markup_pct || 0) !== Number(site.value.markup_pct || 0)
+})
+const saveMarkup = async () => {
+  const v = Number(form.value.markup_pct)
+  if (!Number.isFinite(v) || v < 0 || v > 2000) {
+    markupOk.value = false
+    markupMsg.value = '加价率要填 0 ~ 2000 之间的数字'
+    return
+  }
+  markupOk.value = true
+  markupMsg.value = ''
+  const ok = await save(true)   // 静默保存，不要弹 alert（手机上很烦）
+  markupOk.value = ok
+  markupMsg.value = ok ? `✅ 已保存：加价率 ${v}%，客户刷新即可看到新价格` : '❌ 保存失败，请再点一次'
 }
 
 const save = async (silent = false) => {

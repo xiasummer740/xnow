@@ -1,30 +1,39 @@
 <template>
-  <!-- 🏬 分站首页模块：只有分站才渲染（主站 homeModules 为空 → 整块不出现） -->
-  <div v-if="isSubsite" class="relative z-20 max-w-5xl mx-auto px-6">
+  <!-- 🏬 分站首页模块：只有分站才渲染（主站 homeModules 为空 → 整块不出现）
+       ⚠️ 102 期：这里**不能**再套一层自己的容器。
+       原来本组件有一个 max-w-5xl 的外壳，而热门服务 / FAQ / 优势 / CTA 在 Home.vue 里，
+       两者不在同一个父元素下 —— CSS 的 order 只在同一父容器的兄弟之间生效，
+       于是站长把「热门服务」拖到最上面根本没反应（实测确认，改完等 70 秒越过缓存也一样）。
+       现在每块都直接作为 Home 根容器的子元素（外面套一层只为对齐宽度），order 才真正生效。 -->
+  <template v-if="isSubsite">
     <template v-for="m in ordered" :key="m.key">
       <!-- 公告条 -->
-      <div v-if="m.key === 'announce' && announcement" class="site-card mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
-        <p class="text-amber-200 text-sm leading-relaxed" v-html="announcement"></p>
+      <div v-if="m.key === 'announce' && announcement" class="relative z-20 w-full max-w-5xl mx-auto px-6" :style="{ order: m.order }">
+        <div class="site-card mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
+          <p class="text-amber-200 text-sm leading-relaxed" v-html="announcement"></p>
+        </div>
       </div>
 
       <!-- 数据统计 -->
-      <div v-else-if="m.key === 'stats'" class="mb-10 grid grid-cols-3 gap-3">
-        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
-          <p class="text-xl font-black text-white">{{ number(stats.services) }}</p>
+      <div v-else-if="m.key === 'stats'" class="relative z-20 w-full max-w-5xl mx-auto px-6" :style="{ order: m.order }">
+        <div class="mb-10 grid grid-cols-3 gap-3">
+          <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
+            <p class="text-xl font-black text-white">{{ number(stats.services) }}</p>
           <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '在售服务' : 'Services' }}</p>
         </div>
-        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
-          <p class="text-xl font-black text-white">{{ number(stats.orders) }}</p>
+          <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
+            <p class="text-xl font-black text-white">{{ number(stats.orders) }}</p>
           <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '累计订单' : 'Orders' }}</p>
         </div>
-        <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
-          <p class="text-xl font-black text-white">{{ number(stats.users) }}</p>
-          <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '服务用户' : 'Users' }}</p>
+          <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl py-4 text-center">
+            <p class="text-xl font-black text-white">{{ number(stats.users) }}</p>
+            <p class="text-[11px] text-slate-400 mt-1">{{ zh ? '服务用户' : 'Users' }}</p>
+          </div>
         </div>
       </div>
 
-      <!-- 热门服务 -->
-      <div v-else-if="m.key === 'hot_services' && hot.length" class="site-section mb-12">
+      <!-- 热门服务（实际由 Home.vue 渲染，这里保留兜底） -->
+      <div v-else-if="m.key === 'hot_services' && hot.length" class="relative z-20 w-full max-w-5xl mx-auto px-6 site-section mb-12" :style="{ order: m.order }">
         <h2 class="text-center text-xl font-black text-white mb-6 tracking-wider">{{ zh ? '🔥 热门服务' : '🔥 Popular' }}</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <router-link v-for="s in hot" :key="s.id" to="/order"
@@ -40,8 +49,8 @@
         </div>
       </div>
 
-      <!-- 教程 FAQ -->
-      <div v-else-if="m.key === 'faq'" class="site-section mb-12">
+      <!-- 教程 FAQ（实际由 Home.vue 渲染，这里保留兜底） -->
+      <div v-else-if="m.key === 'faq'" class="relative z-20 w-full max-w-5xl mx-auto px-6 site-section mb-12" :style="{ order: m.order }">
         <h2 class="text-center text-xl font-black text-white mb-6 tracking-wider">{{ zh ? '❓ 常见问题' : '❓ FAQ' }}</h2>
         <div class="space-y-2">
           <details v-for="(f, i) in faqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-xl px-4 py-3">
@@ -52,18 +61,22 @@
       </div>
 
       <!-- VIP 入口 -->
-      <router-link v-else-if="m.key === 'vip'" to="/vip"
-        class="site-card mb-6 block rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 hover:border-emerald-400/60 transition">
-        <p class="text-emerald-300 font-black text-sm">{{ zh ? '💎 开通 VIP，享受专属折扣与优先队列' : '💎 Go VIP for discounts & priority' }}</p>
-      </router-link>
+      <div v-else-if="m.key === 'vip'" class="relative z-20 w-full max-w-5xl mx-auto px-6" :style="{ order: m.order }">
+        <router-link to="/vip"
+          class="site-card mb-6 block rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 hover:border-emerald-400/60 transition">
+          <p class="text-emerald-300 font-black text-sm">{{ zh ? '💎 开通 VIP，享受专属折扣与优先队列' : '💎 Go VIP for discounts & priority' }}</p>
+        </router-link>
+      </div>
 
       <!-- 返佣横幅 -->
-      <router-link v-else-if="m.key === 'affiliate'" to="/affiliate"
-        class="site-card mb-10 block rounded-2xl border border-sky-500/30 bg-sky-500/10 px-5 py-4 hover:border-sky-400/60 transition">
-        <p class="text-sky-300 font-black text-sm">{{ zh ? '💰 推荐好友下单，赚取持续返佣' : '💰 Refer friends and earn ongoing commission' }}</p>
-      </router-link>
+      <div v-else-if="m.key === 'affiliate'" class="relative z-20 w-full max-w-5xl mx-auto px-6" :style="{ order: m.order }">
+        <router-link to="/affiliate"
+          class="site-card mb-10 block rounded-2xl border border-sky-500/30 bg-sky-500/10 px-5 py-4 hover:border-sky-400/60 transition">
+          <p class="text-sky-300 font-black text-sm">{{ zh ? '💰 推荐好友下单，赚取持续返佣' : '💰 Refer friends and earn ongoing commission' }}</p>
+        </router-link>
+      </div>
     </template>
-  </div>
+  </template>
 </template>
 
 <script setup>
