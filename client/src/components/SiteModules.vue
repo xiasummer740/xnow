@@ -76,8 +76,16 @@ const announcement = computed(() => appStore.announcement || '')
 
 const isSubsite = computed(() => !!appStore.themeTemplate)
 
+// ⚠️ 这里要排除 Home.vue 已经负责的模块（faq / hot_services）：
+//    两处都渲染会出现"两个常见问题区块"，站长在后台关掉一个，另一个还在 ——
+//    他会以为开关坏了。同一模块只能有一个渲染方：
+//    · faq / hot_services 归 Home.vue（它有卡片/表格/榜单三种版式）
+//    · announce / stats / vip / affiliate 归本组件
+const OWNED_BY_HOME = ['faq', 'hot_services']
+
 const ordered = computed(() => {
-  const mods = (appStore.homeModules || []).filter(m => m && m.enabled !== false)
+  const mods = (appStore.homeModules || [])
+    .filter(m => m && m.enabled !== false && !OWNED_BY_HOME.includes(m.key))
   return mods.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 })
 

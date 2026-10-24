@@ -132,8 +132,8 @@
         </div>
         <div class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">💎</div>
-          <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? '全网最低价' : 'Wholesale Pricing' }}</h3>
-          <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '直连源头渠道，无中间商加价。TikTok千粉最低 ¥6.5起。' : 'Direct to source. TikTok followers from ¥6.5/1K.' }}</p>
+          <h3 class="text-xl font-bold text-white mb-3">{{ appStore.lang === 'zh' ? (appStore.isSubsite ? '超值价格' : '全网最低价') : 'Wholesale Pricing' }}</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? (appStore.isSubsite ? '下单即自动处理，进度随时可查，价格以下单页为准。' : '直连源头渠道，无中间商加价。TikTok千粉最低 ¥6.5起。') : 'Direct to source. TikTok followers from ¥6.5/1K.' }}</p>
         </div>
         <div class="site-card bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50 hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-green-500/10 text-green-400 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition">🔒</div>
@@ -193,7 +193,7 @@
     <!-- Footer CTA -->
     <section v-if="appStore.moduleEnabled('cta')" :style="{ order: appStore.moduleOrder('cta') }" class="site-section relative z-20 text-center py-12 pb-20">
       <h2 class="text-2xl font-black text-white mb-4">{{ appStore.sectionTitle('cta') || (appStore.lang === 'zh' ? '准备好让你的社媒炸裂了吗？' : 'Ready to explode your social media?') }}</h2>
-      <p class="text-slate-500 mb-8">{{ appStore.lang === 'zh' ? '注册只需30秒，即刻拥有全网最低价涨粉服务。' : 'Sign up in 30 seconds. Instant access to wholesale SMM services.' }}</p>
+      <p class="text-slate-500 mb-8">{{ appStore.lang === 'zh' ? (appStore.isSubsite ? '注册只需 30 秒，马上就能下单。' : '注册只需30秒，即刻拥有全网最低价涨粉服务。') : 'Sign up in 30 seconds. Instant access to wholesale SMM services.' }}</p>
       <router-link to="/login" class="inline-block px-12 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '🚀 免费注册' : '🚀 Sign Up Free' }}</router-link>
     </section>
   </div>
