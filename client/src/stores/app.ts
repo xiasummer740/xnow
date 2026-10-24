@@ -28,6 +28,8 @@ export const useAppStore = defineStore('app', {
       const d = data.data;
       // 是否分站（供客户侧隐藏平台专属元素，如 PRO 徽标）
     this.isSubsite = !!d.is_subsite;
+    // 落到 localStorage 供路由守卫用（守卫读不到 store，只能读本地存储）
+    try { localStorage.setItem('xnow_is_subsite', this.isSubsite ? '1' : '0'); } catch (e) {}
     this.siteId = d.site_id || 0;
     if (d.theme_template) this.themeTemplate = d.theme_template;
       if (d.theme_color) this.themeColor = d.theme_color;

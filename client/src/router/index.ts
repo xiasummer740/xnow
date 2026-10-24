@@ -45,6 +45,12 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('xnow_token');
   const publicPaths = ['/', '/en', '/vpn', '/login', '/showcase']; // 允许免登录访问的白名单路径（/en 为英文营销镜像，/vpn 为节点商城公开页）
 
+  // 🏬 分站屏蔽「至尊代理」页：那是平台自己的招代理页面（¥99/月、8 折进货、佣金翻倍），
+  //    出现在站长的店里替他拉代理，也等于告诉客户"站长是二级代理"。手输 URL 也挡掉。
+  if (to.path === '/vip' && localStorage.getItem('xnow_is_subsite') === '1') {
+    return next('/');
+  }
+
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');

@@ -32,7 +32,9 @@
             <p class="text-white text-sm font-bold line-clamp-2">{{ s.name }}</p>
             <div class="flex items-baseline justify-between mt-3">
               <span class="text-amber-400 font-black">¥{{ s.pricePerK }}<span class="text-[10px] text-slate-500 font-normal">/千</span></span>
-              <span class="text-[10px] text-slate-500">{{ zh ? '已售' : 'Sold' }} {{ number(s.sold) }}</span>
+              <!-- 新站还没有成交时后台会返回"平台在售"的兜底列表，销量是 0：
+                   显示「已售 0」比不显示更像坏了一角，所以 0 就不显示 -->
+              <span v-if="Number(s.sold) > 0" class="text-[10px] text-slate-500">{{ zh ? '已售' : 'Sold' }} {{ number(s.sold) }}</span>
             </div>
           </router-link>
         </div>
@@ -81,11 +83,14 @@ const isSubsite = computed(() => !!appStore.themeTemplate)
 //    他会以为开关坏了。同一模块只能有一个渲染方：
 //    · faq / hot_services 归 Home.vue（它有卡片/表格/榜单三种版式）
 //    · announce / stats / vip / affiliate 归本组件
+//    · vip（至尊代理）在分站上一律不渲染：那是平台招代理的入口，
+//      出现在站长店里等于替平台拉代理、还暴露"站长是二级代理"。
 const OWNED_BY_HOME = ['faq', 'hot_services']
 
 const ordered = computed(() => {
   const mods = (appStore.homeModules || [])
     .filter(m => m && m.enabled !== false && !OWNED_BY_HOME.includes(m.key))
+    .filter(m => !(appStore.isSubsite && m.key === 'vip'))
   return mods.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 })
 

@@ -21,7 +21,10 @@
         <p class="px-3 pt-4 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">资金</p>
         <router-link to="/recharge" @click="handleNav('/recharge')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg><span>{{ appStore.t('menu_recharge') }}</span></router-link>
         <router-link to="/affiliate" @click="handleNav('/affiliate')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg><span>{{ appStore.lang === 'zh' ? '推广赚钱' : 'Affiliate' }}</span></router-link>
-        <router-link to="/vip" @click="handleNav('/vip')" class="nav-item" active-class="nav-active-vip"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg><span>{{ appStore.t('menu_vip') }}</span></router-link>
+        <!-- 🏬 分站不显示「至尊代理」入口：那是平台招代理的页面（¥99/月、8 折进货、
+             佣金翻倍），挂在站长店里等于告诉他的客户"这家是二级代理"，而且等于在
+             他的店里给他的客户推销你的代理业务。站长自己也不用在自己站上升级。 -->
+        <router-link v-if="!appStore.isSubsite" to="/vip" @click="handleNav('/vip')" class="nav-item" active-class="nav-active-vip"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg><span>{{ appStore.t('menu_vip') }}</span></router-link>
 
         <template v-if="['admin', 'super_admin', 'agent'].includes(userStore.userInfo?.role)">
           <p class="px-3 pt-4 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">管理</p>

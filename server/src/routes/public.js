@@ -23,7 +23,10 @@ router.get('/config', async (req, res) => {
     if (req.site) {
       data.site_name = req.site.name || data.site_name;
       data.site_logo = req.site.logo || data.site_logo;
-      data.agent_discount = String(req.site.agent_discount || data.agent_discount);
+      // 🔒 分站上不要下发 agent_discount：主站那边它是"公开营销折扣"没问题，
+      //    但在站长的店里，它等于把「平台给代理打 8 折」这条分销关系摊给客户看 ——
+      //    客户一算就明白站长是二级代理。分站零售价与它无关，前端也不消费它。
+      delete data.agent_discount;
       data.announcement = req.site.announcement || data.announcement;
       data.site_id = String(req.site.id);
       data.is_subsite = 'true';
@@ -91,21 +94,15 @@ router.get('/site-stats', async (req, res) => {
 });
 
 // 🏬 分站首页「热门服务」：按该站真实成交单数取前 6，价格按该站倍率换算
-//   新站没有成交记录 → 返回空数组，前端整块隐藏（不展示假数据）
+//   新站没有成交记录 → 退回「平台在售、按排序靠前」的 6 个，价格仍按该站倍率算。
+//   为什么不返回空：空数组会让新站长的首页「热门服务」区块整块消失/空白，
+//   开站第一天看起来像坏了一半。退回来的都是真实在售商品，只是热度来源不同。
 router.get('/hot-services', async (req, res) => {
   try {
     const { sequelize } = await import('../models/index.js');
     const siteId = req.site ? Number(req.site.id) : 0;
     const multiplier = req.site ? Number(req.site.multiplier) || 1 : 1;
-    const [rows] = await sequelize.query(
-      `SELECT s.service_id, s.name, s.type, s.rate, s.custom_rate, COUNT(o.id) AS cnt
-         FROM orders o JOIN services s ON s.service_id = o.service_id
-        WHERE o.site_id = ?
-        GROUP BY s.service_id, s.name, s.type, s.rate, s.custom_rate
-        ORDER BY cnt DESC LIMIT 6`,
-      { replacements: [siteId] }
-    );
-    const data = rows.map(r => {
+    const toRow = (r) => {
       const base = parseFloat(r.custom_rate != null && r.custom_rate !== '' ? r.custom_rate : r.rate) || 0;
       return {
         id: Number(r.service_id),
@@ -114,8 +111,24 @@ router.get('/hot-services', async (req, res) => {
         sold: Number(r.cnt || 0),
         pricePerK: Number((base * multiplier).toFixed(4))
       };
-    });
-    res.json({ status: 'success', data });
+    };
+    const [rows] = await sequelize.query(
+      `SELECT s.service_id, s.name, s.type, s.rate, s.custom_rate, COUNT(o.id) AS cnt
+         FROM orders o JOIN services s ON s.service_id = o.service_id
+        WHERE o.site_id = ?
+        GROUP BY s.service_id, s.name, s.type, s.rate, s.custom_rate
+        ORDER BY cnt DESC LIMIT 6`,
+      { replacements: [siteId] }
+    );
+    if (rows.length > 0) {
+      return res.json({ status: 'success', data: rows.map(toRow) });
+    }
+    // 还没成交：拿排序靠前的在售服务兜底（sold=0，前端不会显示假销量）
+    const [fallback] = await sequelize.query(
+      `SELECT service_id, name, type, rate, custom_rate
+         FROM services ORDER BY sort ASC LIMIT 6`
+    );
+    res.json({ status: 'success', data: fallback.map(toRow), fallback: true });
   } catch (e) {
     res.json({ status: 'error', message: '查询失败' });
   }
