@@ -214,8 +214,9 @@ router.post('/add', authenticate, async (req, res) => {
         await t.rollback(); return res.json({ status: 'error', message: '本站暂未开放，请联系客服' });
       }
       if (parseFloat(siteOwner.balance) < siteCost) {
-        // 客户可见文案：不提平台/上游，只给可执行的动作
-        await t.rollback(); return res.json({ status: 'error', message: '本站当前无法接单，请联系客服补充库存' });
+        // 客户可见文案：不提平台/上游，也不用「补充库存」这种只有站长看得懂的说法
+        // （客户不可能给站长补库存，让他去做这件事只会一脸懵）
+        await t.rollback(); return res.json({ status: 'error', message: '本站暂时无法接单，请稍后再试或联系客服' });
       }
     }
 
