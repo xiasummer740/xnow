@@ -504,7 +504,19 @@ router.post('/batch', authenticate, async (req, res) => {
 
 router.get('/', authenticate, async (req, res) => {
   try {
-    const orders = await Order.findAll({ where: { user_id: req.user.id }, order: [['created_at', 'DESC']] });
+    // 🔒 只返回客户该看的字段。
+    //    原来直接 `findAll` 返回整行，把 `upstream_charge`（平台进货成本）
+    //    和 `site_cost`（站长进货价）一起吐给了客户 —— 任何人打开接口
+    //    就能算出"平台每一单赚我多少"。这类数字一旦外泄，
+    //    客户立刻明白自己头上压着几层加价。
+    const orders = await Order.findAll({
+      where: { user_id: req.user.id },
+      order: [['created_at', 'DESC']],
+      attributes: [
+        'id', 'order_no', 'service_id', 'service_name', 'link', 'quantity',
+        'charge', 'status', 'remains', 'start_count', 'is_refunded', 'created_at'
+      ]
+    });
     res.json({ status: 'success', data: orders });
   } catch(e) {
     res.json({ status: 'error' });

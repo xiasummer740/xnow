@@ -224,8 +224,14 @@ router.get('/orders', authenticate, async (req, res) => {
 
 router.get('/', authenticate, async (req, res) => {
   try {
+    // 🔒 分站只属于「至尊代理」这一个角色。普通客户连入口都不该拿到，
+    //    否则他会从 200 响应里推断出"这套系统支持开分站"，进而去问站长。
+    const isStaff = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaff && req.user.role !== 'agent') {
+      return res.status(403).json({ status: 'error', message: '仅至尊代理可使用分站功能' });
+    }
     let sites;
-    if (['admin', 'super_admin'].includes(req.user.role)) {
+    if (isStaff) {
       sites = await Site.findAll({ order: [['created_at', 'DESC']] });
     } else {
       sites = await Site.findAll({ where: { owner_id: req.user.id }, order: [['created_at', 'DESC']] });

@@ -5,9 +5,14 @@ const router = express.Router();
 
 router.get('/config', async (req, res) => {
   try {
+    // 🔒 `global_multiplier`（平台倍率）绝不下发：
+    //    代理知道自己的报价，再知道平台倍率，一除就能倒推出平台的进货成本。
+    //    祥哥定调：站长只能看到他自己的价格，绝对不能看到平台成本。
+    //    `agent_discount` 可以留着 —— 它是公开的营销折扣，且主站零售价本来就公开，
+    //    单凭它推不出成本（还需要那个被藏起来的倍率）。
     const configs = await Config.findAll({
       where: {
-        key: ['site_name', 'site_logo', 'tg_bot_link', 'announcement', 'agent_discount', 'global_multiplier', 'usdt_image_url', 'display_platforms']
+        key: ['site_name', 'site_logo', 'tg_bot_link', 'announcement', 'agent_discount', 'usdt_image_url', 'display_platforms']
       }
     });
 
@@ -18,7 +23,6 @@ router.get('/config', async (req, res) => {
     if (req.site) {
       data.site_name = req.site.name || data.site_name;
       data.site_logo = req.site.logo || data.site_logo;
-      data.global_multiplier = String(req.site.multiplier || data.global_multiplier);
       data.agent_discount = String(req.site.agent_discount || data.agent_discount);
       data.announcement = req.site.announcement || data.announcement;
       data.site_id = String(req.site.id);
