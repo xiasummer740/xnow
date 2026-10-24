@@ -35,11 +35,26 @@ try:
     print(", ".join(f"{x[\"name\"]}={x[\"pm2_env\"][\"status\"]}" for x in d))
 except Exception: print("读不到")' 2>/dev/null)"
 
-step "1. 备份（数据库 + 前端 + nginx）"
+step "1. 备份（数据库 + 前端 + nginx + 代码快照）"
 mkdir -p "$BAK" || die "备份目录建不出来"
+# 🔴 74 期：备份必须有两种命名，缺一不可 ——
+#    BAK/<时间戳>/...            人看得懂的目录（祥哥要看也能找到）
+#    prod-<时间戳>.sql.gz 等      rollback-sites.sh 认这套名字
+# 只产出前一种时，回滚脚本会报"备份文件不存在" —— 最要紧的退路等于断的。
+ROLLBACK_BAK="${XNOW_BACKUP_DIR:-/var/backups/xnow}"
+STAMP=$(date +%Y%m%d-%H%M%S)
 MYSQL_PWD="$DBP" mysqldump -u root --single-transaction --routines xnow_db > "$BAK/xnow_db.sql" 2>/dev/null \
-  || die "数据库备份失败 —— 不备份就绝不动生产"
-echo "  ✅ 数据库 → $BAK/xnow_db.sql ($(du -h "$BAK/xnow_db.sql" | cut -f1))"
+  || die "数据库备份失败（不要继续）"
+gzip -c "$BAK/xnow_db.sql" > "$ROLLBACK_BAK/prod-$STAMP.sql.gz" \
+  || die "数据库备份压缩失败（不要继续）"
+git rev-parse HEAD > "$ROLLBACK_BAK/prod-$STAMP.head" 2>/dev/null
+echo "  ✅ 数据库 → $BAK/xnow_db.sql"
+echo "  ✅ 回滚脚本可用 → $ROLLBACK_BAK/prod-$STAMP.sql.gz（锚点 $(cat "$ROLLBACK_BAK/prod-$STAMP.head" 2>/dev/null | cut -c1-8)）"
+# 代码快照（生产目录不是 git 仓库的可能性要兜住；有快照就一定能回滚）
+# 快照里必须带上 client/dist —— 前端炸掉是最常见的失败形态之一，
+# 回滚脚本只会展开这个 tar，不把 dist 放进去，回滚完页面还是坏的。
+tar czf "$ROLLBACK_BAK/prod-$STAMP-code.tar.gz" -C "$APP" server/src server/scripts client/dist 2>/dev/null \
+  && echo "  ✅ 代码+前端快照 → $ROLLBACK_BAK/prod-$STAMP-code.tar.gz ($(du -h "$ROLLBACK_BAK/prod-$STAMP-code.tar.gz" | cut -f1))"
 tar czf "$BAK/client-dist.tgz" -C "$APP" client/dist 2>/dev/null && echo "  ✅ 前端 dist → $BAK/client-dist.tgz"
 tar czf "$BAK/nginx-sites.tgz" -C /etc/nginx sites-enabled 2>/dev/null && echo "  ✅ nginx 配置 → $BAK/nginx-sites.tgz"
 cp "$APP/server/.env" "$BAK/server.env" 2>/dev/null && echo "  ✅ server/.env → $BAK/server.env"
@@ -105,7 +120,10 @@ echo ""
 echo "════════════════════════════════════════"
 echo "✅ 部署完成。备份: $BAK"
 echo ""
-echo "回滚办法（三选一，都在 $BAK 里）:"
+echo "最省事的回滚（推荐，脚本已就绪）:"
+echo "  bash $APP/deploy/sites/rollback-sites.sh --env prod --stamp $STAMP"
+echo ""
+echo "手动回滚办法（四选一，都在 $BAK 里）:"
 echo "  1) 只回滚代码:  cd $APP && git checkout <上一个提交> && pm2 restart xnow-backend"
 echo "  2) 回滚数据库:  MYSQL_PWD=... mysql -u root xnow_db < $BAK/xnow_db.sql"
 echo "  3) 回滚前端:    tar xzf $BAK/client-dist.tgz -C $APP"

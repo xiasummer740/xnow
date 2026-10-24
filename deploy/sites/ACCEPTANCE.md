@@ -695,3 +695,63 @@ GET /api/sites/stats?site_id=11   → 「无权查看该分站」  ✅（站长�
 | `EADDRINUSE` | 49 | 重启时旧进程未退净，pm2 自动处理，非业务错误 |
 | `SyntaxError ... JSON` | 7 | 我手工 curl 时引号转义写错，非产品问题 |
 | `Email Send Error`（SMTP 不存在/配置缺失）| 5 | 故意做的负向测试 |
+
+## 十五、上线退路的实弹演练（74 期）
+
+### 先修掉一个致命不一致
+
+| | 部署脚本写的 | 回滚脚本读的 |
+|---|---|---|
+| 数据库 | `/var/backups/xnow/<时间戳>/xnow_db.sql` | `/var/backups/xnow/prod-<时间戳>.sql.gz` |
+| 代码 | 无 | `/var/backups/xnow/prod-<时间戳>-code.tar.gz` |
+| 锚点 | 无 | `/var/backups/xnow/prod-<时间戳>.head` |
+
+**两套命名完全对不上** —— 上线后真出事，`rollback-sites.sh --env prod --stamp X` 会直接报
+「备份文件不存在」，也就是最要紧的那条退路是断的。
+
+已让部署脚本同时产出回滚脚本认得的三样文件（`.sql.gz` / `.head` / `-code.tar.gz`），
+并且在收尾提示里把「一条命令回滚」放在第一位。
+
+另外把 `client/dist` 也塞进了代码快照 —— 前端炸掉是最常见的失败形态之一，
+回滚脚本只会展开那个 tar，里面没有 dist 的话回滚完页面还是坏的。
+
+### 实弹演练（Beta 环境，用仓库自带的回滚脚本）
+
+```
+① 按新格式备份        → beta-<stamp>.sql.gz(75K) / .head / -code.tar.gz(801K)
+② 故意破坏             → 站名改成「【被搞坏了】」+ 删掉 client/dist/site.html
+                        访问立刻变 403（跟真事故一样）
+③ 跑 rollback-sites.sh --env beta --stamp <stamp>
+④ 核对                → 站名恢复「阿明涨粉工作室」✅
+                        site.html 回来了 ✅
+                        演示站 200 ✅
+                        用户 7 / 服务 2839 / sites 53 列 全部完好 ✅
+                        xnow-backend + xnow-beta 均 online ✅
+```
+
+结论：**备份 → 破坏 → 一条命令回滚 → 全部复原**，这条链是通的，不是只写在文档里的承诺。
+
+演练备份留在 `/var/backups/xnow/beta-20261024-184917*` 作为样本。
+
+## 十六、自有域名（自定义域名）的实测边界（74 期）
+
+能测的都测了，**唯一测不了的是"真签下 Let's Encrypt 证书"这一步**，原因很具体：
+`*.taikon.top` 全部走 Cloudflare 橙云，解析出来是 CF 的 IP，不是本机 IP ——
+验证逻辑会（正确地）判成"还没指向本机"。要真正跑通签发，需要**一个不经过 CF 的域名**把它
+的 A 记录指到本机。
+
+已实测的部分：
+
+| 场景 | 结果 |
+|---|---|
+| 填一个没指向本机的域名（`example.com`） | 返回 `pending`，明确告知 A 记录现状 + 给 TXT 令牌<br>`custom_domain=example.com / domain_status=pending` |
+| **失败后原站点是否还活着** | **免费子域名仍在 → HTTP 200** ✅ 没生成任何 vhost，证书目录 0 残留 |
+| 抢别人已绑的域名 | 「该域名已被其他分站使用」✅ |
+| 绑平台自己的域名 `xnow.taikon.top` | 「该域名不可绑定」✅ |
+| 绑别人站的免费子域名 `laozhang.taikon.top` | 「免费子域名无需绑定，请填写你自己的域名」✅ |
+| 格式乱填 | 「域名格式不正确」✅ |
+| 清理 | 两站的 `custom_domain`/`domain_token` 已清空，nginx 与证书目录 0 残留，站点 200 ✅ |
+
+**待办（需要祥哥给一个域名）**：随便给一个他名下的域名（不要 taikon.top），
+把 A 记录指到 `192.129.210.52`，10 分钟内能把「自动签发 Let's Encrypt + 强制 HTTPS + 回退自签」
+整条链跑给他看。
