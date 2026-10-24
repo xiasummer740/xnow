@@ -6,6 +6,7 @@ import './style.css'
 import './assets/vpn-theme.css'
 import './styles/site-theme.css'
 import { useUserStore } from './stores/user'
+import { useAppStore } from './stores/app'
 import { applySeo } from './utils/seo'
 import { trackVisit } from './utils/analytics'
 
@@ -108,5 +109,12 @@ router.afterEach((to) => {
   applySeo(to.path);
   trackVisit(to.fullPath);
 });
+
+// 🏬 启动即拉一次站点配置（关键）：
+// 原来只有首页 Home.vue 和工作台 DashboardLayout 才调，导致客户直接打开 /order、/login
+// 这类深链接时 isSubsite=false —— 主站 logo、飘动公式背景、XNOW PRO 标题全冒出来，
+// 等于当场告诉客户"你这站是套的"。现在放在启动阶段，任何入口都先认清自己是谁。
+const appStore = useAppStore(pinia);
+appStore.fetchConfig();
 
 app.mount('#app')

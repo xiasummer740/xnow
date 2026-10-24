@@ -3,6 +3,7 @@
 // 双语结构：`/` = 中文主版，`/en` = 英文镜像（同组件强制英文），互相 hreflang alternate；x-default 指回中文。
 // 元信息数据源 = ./seo-config.json（构建期 scripts/prerender.mjs 共用同一份，避免两处漂移）
 import seoConfig from './seo-config.json';
+import { useAppStore } from '../stores/app';
 
 export const SITE_URL = seoConfig.siteUrl;
 
@@ -67,7 +68,8 @@ export function applySeo(path: string) {
   const conf = INDEXABLE[path];
   if (conf) {
     document.documentElement.lang = conf.lang;
-    document.title = conf.title;
+    // 🏬 分站：标题必须是站长的站名，不能被主站 SEO 文案覆盖（祥哥 2026-10-24 反馈）
+  document.title = appStore.isSubsite && appStore.siteName ? appStore.siteName : conf.title;
     setMeta('name', 'description', conf.description);
     setMeta('name', 'robots', 'index, follow, max-image-preview:large');
     setCanonical(path);
@@ -75,7 +77,7 @@ export function applySeo(path: string) {
     applyHreflang(path);
   } else {
     document.documentElement.lang = 'zh-CN';
-    document.title = BRAND_TITLE;
+    document.title = appStore.isSubsite && appStore.siteName ? appStore.siteName : BRAND_TITLE;
     setMeta('name', 'robots', 'noindex, nofollow');
     document.head.querySelectorAll('link[rel="canonical"]').forEach((el) => el.remove());
     applyHreflang(path); // 清除残留 alternate

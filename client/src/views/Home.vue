@@ -82,17 +82,17 @@
     <section v-if="appStore.moduleEnabled('audience')" :style="{ order: appStore.moduleOrder('audience') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('audience') || (appStore.lang === 'zh' ? '🎯 谁在用 ' + (appStore.siteName || '我们') : '🎯 Who It’s For') }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+        <router-link :to="appStore.isSubsite ? '/order' : '/vpn'" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">🎬</div>
           <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'TikTok创作者':'TikTok Creators' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'0播放、限流、Shadow Ban？独享原生IP，让算法认为你是本地用户。' : 'Zero views? Shadow ban? Dedicated residential IPs make the algorithm see you as local.' }}</p>
         </router-link>
-        <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+        <router-link :to="appStore.isSubsite ? '/order' : '/vpn'" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">📺</div>
           <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'直播带货':'Live Streamers' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'直播卡顿掉帧丢单？CN2 GIA/CMIN2优化线路，跨国直播稳60帧。' : 'Laggy streams losing sales? Premium routes for stable 60fps cross-border streaming.' }}</p>
         </router-link>
-        <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
+        <router-link :to="appStore.isSubsite ? '/order' : '/vpn'" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">👥</div>
           <h3 class="text-white font-black mb-1">{{ appStore.lang==='zh'?'矩阵运营':'Multi-Account' }}</h3>
           <p class="text-slate-400 text-sm leading-relaxed">{{ appStore.lang==='zh'?'多号同IP=批量送死。每号独立IP，矩阵稳如磐石。' : 'Same IP for multiple accounts = mass ban. Dedicated IP per account.' }}</p>
@@ -232,10 +232,10 @@ const hero = computed(() => {
   const zh = appStore.lang !== 'en'
   const s = appStore.hero || {}
   return {
-    badge: s.hero_badge || (zh ? '🚀 TikTok / IG / YouTube / Telegram 涨粉涨量平台' : '🚀 SMM Panel for TikTok / IG / YT / TG'),
+    badge: s.hero_badge || (zh ? (appStore.isSubsite ? '🚀 涨粉 · 涨量 · 一键下单' : '🚀 TikTok / IG / YouTube / Telegram 涨粉涨量平台') : '🚀 SMM Panel for TikTok / IG / YT / TG'),
     title: s.hero_title || '',
     subtitle: s.hero_subtitle || (zh
-      ? 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 全平台社媒增长一次搞定'
+      ? (appStore.isSubsite ? 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 多平台增长，一站下单' : 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 全平台社媒增长一次搞定')
       : 'Buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook & X followers, website traffic — all platforms in one SMM panel'),
     desc: s.hero_desc || (zh ? '极速自动交付 · 超值价格 · 无需账号密码 · 注册即用' : 'Instant delivery · Great prices · No password needed · Sign up and go'),
     btn1Text: s.hero_btn1_text || (zh ? '⚡ 立即注册体验' : '⚡ Get Started Now'),
