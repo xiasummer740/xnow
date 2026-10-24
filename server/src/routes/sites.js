@@ -432,7 +432,8 @@ router.put('/:id', authenticate, async (req, res) => {
             smtp_host, smtp_port, smtp_user, smtp_pass,
             hero_badge, hero_title, hero_subtitle, hero_desc,
             hero_btn1_text, hero_btn1_url, hero_btn2_text, hero_btn2_url, hero_bg_url,
-            bufpay_id, bufpay_key, cryptomus_id, cryptomus_key } = req.body;
+            bufpay_id, bufpay_key, cryptomus_id, cryptomus_key,
+    bg_color, bg_image, font_scale } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
 
@@ -452,7 +453,24 @@ router.put('/:id', authenticate, async (req, res) => {
       if (hex && !/^#[0-9a-fA-F]{6}$/.test(hex)) return res.json({ status: 'error', message: '自定义主色需为 #RRGGBB 格式' });
       site.accent = hex || null;
     }
-    if (footer_text !== undefined) site.footer_text = String(footer_text || '').slice(0, 255);
+    // 🎨 背景色：只接受 #RRGGBB 或三套内置渐变（grad1/grad2/grad3），其余一律拒绝
+  if (bg_color !== undefined) {
+    const v = String(bg_color || '').trim();
+    const GRADS = ['grad1', 'grad2', 'grad3'];
+    if (v && !/^#[0-9a-fA-F]{6}$/.test(v) && !GRADS.includes(v)) {
+      return res.json({ status: 'error', message: '背景色格式不支持' });
+    }
+    site.bg_color = v || null;
+  }
+  // 🎨 背景图：只接受本站上传目录里的相对路径
+  if (bg_image !== undefined) {
+    const v = String(bg_image || '').trim();
+    if (v && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(v)) {
+      return res.json({ status: 'error', message: '背景图地址不合法' });
+    }
+    site.bg_image = v || null;
+  }
+  if (footer_text !== undefined) site.footer_text = String(footer_text || '').slice(0, 255);
     // 🎨 二十七期：风格细分维度。空字符串 = 用模板默认，非法值直接拒绝（不静默改默认）。
     const STYLE_FIELDS = {
       ui_radius: ['square', 'soft', 'round', 'pill'],
@@ -463,7 +481,9 @@ router.put('/:id', authenticate, async (req, res) => {
       hero_layout: ['center', 'split', 'banner'],
       // 🎨 四十一期：结构级 DIY（换版式，不只是换色）
       hero_variant: ['center', 'split', 'editorial', 'terminal'],
-      services_variant: ['cards', 'table', 'ranked']
+      services_variant: ['cards', 'table', 'ranked'],
+      // 🎨 六十三期：可视化编辑器的字号档位（不给 px，只给小 / 标准 / 大）
+      font_scale: ['sm', 'md', 'lg']
     };
     for (const [field, allowed] of Object.entries(STYLE_FIELDS)) {
       const raw = req.body[field];

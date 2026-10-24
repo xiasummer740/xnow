@@ -47,6 +47,10 @@ router.get('/config', async (req, res) => {
       data.font_style = req.site.font_style || '';
       data.btn_shape = req.site.btn_shape || '';
       data.hero_layout = req.site.hero_layout || '';
+      // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）
+      data.bg_color = req.site.bg_color || '';
+      data.bg_image = req.site.bg_image || '';
+      data.font_scale = req.site.font_scale || '';
       // ✍️ 十九期：首页文案自定义（空则前端回落到主站默认文案）
       data.logo_url = req.site.logo || '';
       data.hero_badge = req.site.hero_badge || '';

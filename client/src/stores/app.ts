@@ -15,6 +15,8 @@ export const useAppStore = defineStore('app', {
     advantages: [] as { icon?: string; title?: string; body?: string }[],
     // 🎨 二十七期：风格细分维度（空 = 用模板默认）
     uiRadius: '', uiDensity: '', cardStyle: '', fontStyle: '', btnShape: '', heroLayout: '',
+    // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）
+    bgColor: '', bgImage: '', fontScale: '',
     // 🎨 四十一期：全方位 DIY
     heroVariant: '', servicesVariant: '', sectionTitles: {} as Record<string, { title?: string; sub?: string }>,
     customCss: '', faviconUrl: '',
@@ -47,6 +49,10 @@ export const useAppStore = defineStore('app', {
       this.fontStyle = d.font_style || '';
       this.btnShape = d.btn_shape || '';
       this.heroLayout = d.hero_layout || '';
+    // 🎨 六十三期：背景色 / 背景图 / 字号档位
+    this.bgColor = d.bg_color || '';
+    this.bgImage = d.bg_image || '';
+    this.fontScale = d.font_scale || '';
       // 🎨 四十一期：结构级 DIY + 自定义 CSS + 站点图标
       this.heroVariant = d.hero_variant || '';
       this.servicesVariant = d.services_variant || '';
@@ -152,6 +158,31 @@ export const useAppStore = defineStore('app', {
       for (const [attr, val] of Object.entries(styleMap)) {
         if (val) el.dataset[attr] = val; else delete el.dataset[attr];
       }
+
+      // 🎨 六十三期：外观三板斧（背景色 / 背景图 / 字号）。只在分站生效。
+      //    背景色支持 #RRGGBB 或三套内置渐变（grad1/2/3），其余一律忽略。
+      const GRADS: Record<string, string> = {
+        grad1: 'linear-gradient(160deg, #0b1220 0%, #131a2e 55%, #1b1030 100%)',
+        grad2: 'linear-gradient(160deg, #04070f 0%, #0d1b2a 60%, #10243a 100%)',
+        grad3: 'linear-gradient(160deg, #120a1f 0%, #1d1030 55%, #2a1033 100%)'
+      };
+      const bg = String(this.bgColor || '').trim();
+      if (bg && /^#[0-9a-fA-F]{6}$/.test(bg)) {
+        el.style.setProperty('--site-bg', bg);
+        el.style.setProperty('--site-bg-image', 'none');
+      } else if (bg && GRADS[bg]) {
+        el.style.setProperty('--site-bg', GRADS[bg]);
+        el.style.setProperty('--site-bg-image', 'none');
+      } else {
+        el.style.removeProperty('--site-bg');
+        el.style.removeProperty('--site-bg-image');
+      }
+      if (!bg && this.bgImage && /^\/uploads\/[A-Za-z0-9._-]+$/.test(this.bgImage)) {
+        el.style.setProperty('--site-bg-image', `url("${this.bgImage}")`);
+      }
+      const scale = { sm: '0.94', md: '1', lg: '1.08' }[String(this.fontScale || '')];
+      if (scale && scale !== '1') el.style.setProperty('--site-font-scale', scale);
+      else el.style.removeProperty('--site-font-scale');
     },
     moduleEnabled(key: string) {
       // 未配置模块的分站：全部显示（保持与主站一致）

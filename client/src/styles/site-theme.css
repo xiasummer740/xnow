@@ -472,3 +472,24 @@ html[data-block="split"] .site-section > h2 {
 }
 
 /* ── 居中版式：保持原样（不覆盖任何东西）── */
+
+/* ══════════════════════════════════════════════════════════════
+   六十三期：可视化编辑器的「外观三板斧」
+   —— 站长在首页点「🎨 外观」，选背景色 / 背景图 / 字号，
+      前端通过 --site-bg / --site-bg-image / --site-font-scale 生效。
+   只在分站生效（主站不设 data-template，这些变量也不存在 → 无影响）。
+   ══════════════════════════════════════════════════════════════ */
+html[data-template="classic"] #app-root,
+html[data-template="saas"] #app-root,
+html[data-template="minimal"] #app-root,
+html[data-template="neon"] #app-root,
+html[data-template="magazine"] #app-root,
+html[data-template="glass"] #app-root {
+  background: var(--site-bg, #04070f) !important;
+  background-image: var(--site-bg-image, none) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+/* 字号档位：小 0.94 / 标准 1 / 大 1.08（用根字号缩放，rem 单位全套跟着变）*/
+html[data-template] { font-size: calc(16px * var(--site-font-scale, 1)) !important; }

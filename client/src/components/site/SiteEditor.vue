@@ -13,11 +13,58 @@
       <div class="site-edit-bar">
         <span class="site-edit-tip">✏️ 编辑中 · 点区块标题改文案，用 ↑ ↓ 换位置，🙈 隐藏</span>
         <div class="site-edit-actions">
+          <button class="site-edit-btn ghost" @click="openLook">🎨 外观</button>
           <button class="site-edit-btn ghost" @click="reset">恢复默认</button>
           <button class="site-edit-btn ghost" @click="cancel">放弃</button>
           <button class="site-edit-btn primary" :disabled="saving" @click="save">
             {{ saving ? '保存中…' : '保存' }}
           </button>
+        </div>
+      </div>
+
+
+      <!-- 🎨 外观抽屉：只有三组，每组一句人话建议（不出现 HEX / px）-->
+      <div v-if="lookOpen" class="site-sheet-mask" @click.self="lookOpen = false">
+        <div class="site-sheet site-look">
+          <p class="site-look-title">外观</p>
+
+          <p class="site-look-label">① 主色 <span class="site-look-hint">决定按钮、价格、链接的颜色</span></p>
+          <div class="site-swatches">
+            <button v-for="c in COLORS" :key="c.key" class="site-swatch" :class="{ on: look.color === c.key }"
+                    :style="{ background: c.hex }" :title="c.name" @click="look.color = c.key"></button>
+          </div>
+
+          <p class="site-look-label">② 背景 <span class="site-look-hint">深色最显专业；想特别一点就换渐变或上传图</span></p>
+          <div class="site-swatches">
+            <button v-for="b in BACKS" :key="b.key" class="site-swatch back" :class="{ on: look.bgColor === b.key }"
+                    :style="{ background: b.css }" :title="b.name" @click="look.bgColor = b.key"></button>
+          </div>
+          <div class="site-look-row">
+            <button class="site-edit-btn ghost" :disabled="uploadingBg" @click="pickBg">
+              {{ uploadingBg ? '上传中…' : '📤 上传自己的背景图' }}
+            </button>
+            <button v-if="look.bgImage" class="site-edit-btn ghost" @click="look.bgImage = ''">去掉背景图</button>
+            <span v-if="look.bgImage" class="site-look-hint">已选图片（选纯色会让图片失效）</span>
+          </div>
+
+          <p class="site-look-label">③ 字号 <span class="site-look-hint">客户多是手机上看的，标准就够</span></p>
+          <div class="site-look-seg">
+            <button v-for="f in FONTS" :key="f.key" class="site-seg" :class="{ on: look.fontScale === f.key }"
+                    @click="look.fontScale = f.key">{{ f.name }}</button>
+          </div>
+
+          <p class="site-look-label">④ 圆角 <span class="site-look-hint">方 = 严肃；圆 = 亲和</span></p>
+          <div class="site-look-seg">
+            <button v-for="r in RADII" :key="r.key" class="site-seg" :class="{ on: look.radius === r.key }"
+                    @click="look.radius = r.key">{{ r.name }}</button>
+          </div>
+
+          <div class="site-sheet-actions">
+            <button class="site-edit-btn ghost" @click="lookOpen = false">先不保存</button>
+            <button class="site-edit-btn primary" :disabled="savingLook" @click="saveLook">
+              {{ savingLook ? '保存中…' : '应用' }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -169,6 +216,118 @@ const paintToolbars = () => {
   });
 };
 
+
+// ── 🎨 外观三板斧 ───────────────────────────────────────────────
+const lookOpen = ref(false);
+const savingLook = ref(false);
+const uploadingBg = ref(false);
+const COLORS = [
+  { key: 'cyan',   name: '青',   hex: '#22d3ee' },
+  { key: 'blue',   name: '蓝',   hex: '#3b82f6' },
+  { key: 'purple', name: '紫',   hex: '#a855f7' },
+  { key: 'green',  name: '绿',   hex: '#22c55e' },
+  { key: 'orange', name: '橙',   hex: '#f97316' },
+  { key: 'red',    name: '红',   hex: '#ef4444' },
+  { key: 'pink',   name: '粉',   hex: '#ec4899' },
+  { key: 'gold',   name: '金',   hex: '#eab308' },
+  { key: 'teal',   name: '青绿', hex: '#14b8a6' },
+  { key: 'indigo', name: '靛',   hex: '#6366f1' },
+  { key: 'lime',   name: '黄绿', hex: '#84cc16' },
+  { key: 'slate',  name: '灰蓝', hex: '#64748b' }
+];
+const BACKS = [
+  { key: '',      name: '跟随模板', css: 'linear-gradient(135deg,#1e293b,#0f172a)' },
+  { key: '#04070f', name: '纯黑',   css: '#04070f' },
+  { key: '#0b1220', name: '深蓝',   css: '#0b1220' },
+  { key: '#12081a', name: '暗紫',   css: '#12081a' },
+  { key: 'grad1',  name: '深空渐变', css: 'linear-gradient(160deg,#0b1220,#131a2e,#1b1030)' },
+  { key: 'grad2',  name: '深海渐变', css: 'linear-gradient(160deg,#04070f,#0d1b2a,#10243a)' },
+  { key: 'grad3',  name: '紫夜渐变', css: 'linear-gradient(160deg,#120a1f,#1d1030,#2a1033)' }
+];
+const FONTS = [
+  { key: 'sm', name: '小' },
+  { key: 'md', name: '标准' },
+  { key: 'lg', name: '大' }
+];
+const RADII = [
+  { key: 'square', name: '方' },
+  { key: 'soft', name: '微圆' },
+  { key: 'round', name: '圆' }
+];
+const look = ref({ color: '', bgColor: '', bgImage: '', fontScale: '', radius: '' });
+
+const openLook = () => {
+  look.value = {
+    color: appStore.themeColor || '',
+    bgColor: appStore.bgColor || '',
+    bgImage: appStore.bgImage || '',
+    fontScale: appStore.fontScale || '',
+    radius: appStore.uiRadius || ''
+  };
+  lookOpen.value = true;
+};
+
+const pickBg = () => {
+  if (uploadingBg.value) return;
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/png,image/jpeg,image/webp';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { alert('图片太大了，请选 5MB 以内的'); return; }
+    uploadingBg.value = true;
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const res = await fetch(`/api/sites/${appStore.siteId || ''}/upload`, {
+        method: 'POST', headers: { 'Authorization': `Bearer ${userStore.token}` }, body: fd
+      });
+      const j = await res.json();
+      if (j.status !== 'success') throw new Error(j.message || '上传失败');
+      look.value.bgImage = j.data.url;
+      look.value.bgColor = '';
+    } catch (e) {
+      alert('上传失败：' + e.message);
+    } finally {
+      uploadingBg.value = false;
+    }
+  };
+  inp.click();
+};
+
+const saveLook = async () => {
+  savingLook.value = true;
+  try {
+    const payload = {
+      color: look.value.color || undefined,
+      bg_color: look.value.bgColor || '',
+      bg_image: look.value.bgImage || '',
+      font_scale: look.value.fontScale || '',
+      ui_radius: look.value.radius || ''
+    };
+    const res = await fetch(`/api/sites/${appStore.siteId || ''}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify(payload)
+    });
+    const j = await res.json();
+    if (j.status !== 'success') throw new Error(j.message || '保存失败');
+    // 立刻生效：不等刷新
+    appStore.themeColor = look.value.color || appStore.themeColor;
+    appStore.bgColor = look.value.bgColor || '';
+    appStore.bgImage = look.value.bgImage || '';
+    appStore.fontScale = look.value.fontScale || '';
+    appStore.uiRadius = look.value.radius || '';
+    appStore.applyTheme();
+    lookOpen.value = false;
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  } finally {
+    savingLook.value = false;
+  }
+};
+
 const save = async () => {
   saving.value = true;
   try {
@@ -247,6 +406,19 @@ onBeforeUnmount(exit);
   border-radius: 10px; padding: 12px; font-size: 15px;
 }
 .site-sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+.site-look { max-height: 82vh; overflow-y: auto; }
+.site-look-title { color: #f8fafc; font-weight: 800; font-size: 16px; margin-bottom: 14px; }
+.site-look-label { color: #cbd5e1; font-size: 13px; font-weight: 700; margin: 14px 0 8px; }
+.site-look-hint { color: #64748b; font-weight: 400; font-size: 11px; margin-left: 6px; }
+.site-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.site-swatch { width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(148,163,184,.45); cursor: pointer; }
+.site-swatch.back { width: 46px; }
+.site-swatch.on { border-color: #22d3ee; box-shadow: 0 0 0 3px rgba(34,211,238,.18); }
+.site-look-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.site-look-seg { display: flex; gap: 8px; }
+.site-seg { padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(148,163,184,.35); background: transparent; color: #cbd5e1; font-size: 13px; cursor: pointer; }
+.site-seg.on { background: var(--brand, #22d3ee); color: #04070f; border-color: transparent; font-weight: 800; }
 </style>
 
 <style>

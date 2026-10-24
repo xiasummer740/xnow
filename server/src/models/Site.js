@@ -32,6 +32,10 @@ const Site = sequelize.define('Site', {
   // 💅 站长自己的 CSS（高级功能，长度上限 8000，服务端会过滤 @import 与尖括号）
   custom_css: { type: DataTypes.TEXT, allowNull: true },
   favicon_url: { type: DataTypes.STRING(512), allowNull: true },
+  // 🎨 六十三期：站长可视化编辑器的"外观三板斧"（祥哥：小白只想选颜色和背景）
+  bg_color: { type: DataTypes.STRING(64), allowNull: true },   // #RRGGBB 或 grad1/grad2/grad3
+  bg_image: { type: DataTypes.STRING(512), allowNull: true },  // 页面背景图（/uploads/xxx）
+  font_scale: { type: DataTypes.STRING(12), allowNull: true }, // sm | md | lg
   support_url: { type: DataTypes.STRING(255), allowNull: true },       // 客服链接（TG 等）
   home_modules: { type: DataTypes.TEXT, allowNull: true },             // 首页模块 JSON:[{key,enabled,order}]
   advantages: { type: DataTypes.TEXT, allowNull: true },               // 优势三卡片 JSON:[{icon,title,body}]
