@@ -167,6 +167,7 @@
 
       <!-- 💰 定价体系：单服务改价 + 折扣促销（组件自取自存，保存后回读本站配置） -->
       <SitePricing v-if="page === 'pricing' && site && site.id" :site-id="site.id" @saved="load()" />
+          <SiteCustomers v-if="page === 'customers' && site && site.id" :site-id="site.id" @saved="load()" />
 
       <!-- 🎨 装修页（92 期）：实时预览 + 可视化配色/模板/模块拖拽/细节风格 -->
       <DesignStudio v-if="page === 'design'" :form="form" :site="site" :pv="pv" :templates="templates"
@@ -350,7 +351,7 @@
         <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的成本</p>
       </section>
 
-      <div v-if="page !== 'orders'" class="flex gap-3">
+      <div v-if="page !== 'orders' && page !== 'customers'" class="flex gap-3">
         <button @click="save()" :disabled="saving" class="flex-1 py-3 rounded-xl font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
           {{ saving ? '保存中…' : '保存全部修改' }}
         </button>
@@ -368,6 +369,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import SiteBilling from '../components/site/SiteBilling.vue'
 import SitePricing from '../components/site/SitePricing.vue'
+import SiteCustomers from '../components/site/SiteCustomers.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -380,6 +382,7 @@ const PAGE_TABS = [
   { key: 'design',   icon: '🎨', label: '装修', hint: '模板 / 色系 / 首页模块排序 + 实时预览' },
   { key: 'copy',     icon: '✍️', label: '文案', hint: '首屏版式、每块标题、按钮与图片' },
   { key: 'pricing',  icon: '💰', label: '售价', hint: '倍率 / 单服务改价 / 折扣促销' },
+  { key: 'customers', icon: '👥', label: '客户价', hint: '分组折扣 / 单个客户单独定价' },
   { key: 'payment',  icon: '💳', label: '收款', hint: '填自己的商户，客户付款直接进你账户' },
   { key: 'email',    icon: '📧', label: '邮件', hint: '客户收到的验证码用你的品牌' },
   { key: 'domain',   icon: '🌐', label: '域名', hint: '绑定自己的域名 + 证书状态' },

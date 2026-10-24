@@ -1,5 +1,6 @@
 import express from 'express';
 import { Service, Config, User, SiteServicePrice } from '../models/index.js';
+import { customerDiscountMultiplier } from '../utils/customerPrice.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -82,6 +83,24 @@ router.get('/', authenticate, async (req, res) => {
     } else if (actualRole === 'agent') {
       finalMultiplier = baseMultiplier * agentDiscount;
     }
+
+    // 🏷 93 期（顺带修）：站点「活动折扣」以前只在扣费时算，列表价没算 ——
+    //    客户看到的价和真正扣的价不一致（显示 62.5 / 实扣 56.25）。
+    //    现在显示链路补齐这一步，与 orders.js 的乘算顺序完全一致：
+    //      站长倍率 → 站点活动折扣 → 客户分组价/单独定价 → 成本下限
+    if (req.site) {
+      const dr0 = parseFloat(req.site.discount_rate);
+      const du0 = parseInt(req.site.discount_until || 0);
+      const discountActive = isFinite(dr0) && dr0 > 0 && dr0 < 1 && !(du0 > 0 && Math.floor(Date.now() / 1000) > du0);
+      if (discountActive) finalMultiplier = finalMultiplier * dr0;
+    }
+
+    // 👥 93 期：客户分组价（显示价必须与 orders.js 的扣费口径一致）
+    let customerMult = 1;
+    if (req.site && user) {
+      try { customerMult = await customerDiscountMultiplier(req.site.id, user) || 1; } catch (e) { customerMult = 1; }
+    }
+    if (customerMult > 0 && customerMult < 1) finalMultiplier = finalMultiplier * customerMult;
 
     // 🛡 与 orders.js 的兜底护栏一致：列表价也不得低于站长成本
     let costMultiplier = 0;

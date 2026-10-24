@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
-import { sequelize, Site, User, Config, Service, SiteServicePrice } from '../models/index.js';
+import { sequelize, Site, User, Config, Service, SiteServicePrice, SiteCustomerGroup, Order } from '../models/index.js';
 import { getBillingConfig, chargeBalance, genSubdomain, renewSite } from '../utils/siteBilling.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -14,6 +14,8 @@ import { clearSiteCache } from '../middleware/site.js';
 
 // 站点数据一变就让 Host→站点 的缓存失效，避免「新绑域名 60 秒内仍显示主站」
 const bustSiteCache = () => { try { clearSiteCache(); } catch (e) {} };
+
+import { customerDiscountMultiplier, normalizeGroupMultiplier } from '../utils/customerPrice.js';
 
 const router = express.Router();
 
@@ -1256,6 +1258,232 @@ router.delete('/:id', authenticate, async (req, res) => {  if (!['admin', 'super
     });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '删除失败' });
+  }
+});
+
+// ============================================================
+// 👥 客户分组价（93 期，祥哥要求"不同客户不同价，可自定义可百分比"）
+//
+//   GET    /api/sites/:id/customer-groups        分组列表（含每个组的人数）
+//   POST   /api/sites/:id/customer-groups        新建分组 {name, multiplier, note}
+//   PUT    /api/sites/:id/customer-groups/:gid   改分组
+//   DELETE /api/sites/:id/customer-groups/:gid   删分组（组内客户回落原价）
+//   GET    /api/sites/:id/customers?q=           客户列表（含分组、单独定价、消费额）
+//   PUT    /api/sites/:id/customers/:uid         指定分组 / 单独倍率
+//
+//   🔒 口径：只影响"这个分站的客户看到和付的价"，不动平台给站长的进货价；
+//      任何折扣叠加后由下单链路与站长成本取大，站长永不亏钱。
+// ============================================================
+const ensureSiteOwner = async (req, res) => {
+  const site = await Site.findByPk(req.params.id);
+  if (!site) { res.status(404).json({ status: 'error', message: '分站不存在' }); return null; }
+  const isStaff = ['admin', 'super_admin'].includes(req.user.role);
+  if (!isStaff && site.owner_id !== req.user.id) {
+    res.status(403).json({ status: 'error', message: '无权管理此分站' });
+    return null;
+  }
+  return site;
+};
+
+router.get('/:id/customer-groups', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const groups = await SiteCustomerGroup.findAll({ where: { site_id: site.id }, order: [['id', 'ASC']] });
+    const counts = await User.findAll({
+      attributes: ['site_group_id', [User.sequelize.fn('COUNT', User.sequelize.col('id')), 'n']],
+      where: { site_id: site.id },
+      group: ['site_group_id'],
+      raw: true,
+    });
+    const cmap = new Map(counts.map((r) => [Number(r.site_group_id || 0), Number(r.n || 0)]));
+    res.json({
+      status: 'success',
+      data: {
+        groups: groups.map((g) => ({
+          id: g.id, name: g.name,
+          multiplier: Number(g.multiplier),
+          note: g.note || '',
+          members: cmap.get(Number(g.id)) || 0,
+        })),
+        ungrouped: cmap.get(0) || 0,
+        total_customers: [...cmap.values()].reduce((a, b) => a + b, 0),
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '读取分组失败：' + (e.message || e) });
+  }
+});
+
+router.post('/:id/customer-groups', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.json({ status: 'error', message: '给这个客户分组起个名字（例如 VIP）' });
+    const mult = normalizeGroupMultiplier(req.body.multiplier);
+    if (mult === null) return res.json({ status: 'error', message: '折扣倍率要在 0.30 ~ 1.00 之间（0.95 = 95 折）' });
+    const exists = await SiteCustomerGroup.findOne({ where: { site_id: site.id, name } });
+    if (exists) return res.json({ status: 'error', message: '已经有同名分组了' });
+    const g = await SiteCustomerGroup.create({
+      site_id: site.id, name, multiplier: mult,
+      note: String(req.body.note || '').slice(0, 120) || null,
+    });
+    res.json({ status: 'success', data: { id: g.id, name: g.name, multiplier: Number(g.multiplier), note: g.note || '', members: 0 } });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '创建分组失败：' + (e.message || e) });
+  }
+});
+
+router.put('/:id/customer-groups/:gid', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const g = await SiteCustomerGroup.findOne({ where: { id: req.params.gid, site_id: site.id } });
+    if (!g) return res.status(404).json({ status: 'error', message: '分组不存在' });
+    if (req.body.name !== undefined) {
+      const name = String(req.body.name || '').trim();
+      if (!name) return res.json({ status: 'error', message: '分组名不能为空' });
+      g.name = name.slice(0, 40);
+    }
+    if (req.body.multiplier !== undefined) {
+      const mult = normalizeGroupMultiplier(req.body.multiplier);
+      if (mult === null) return res.json({ status: 'error', message: '折扣倍率要在 0.30 ~ 1.00 之间' });
+      g.multiplier = mult;
+    }
+    if (req.body.note !== undefined) g.note = String(req.body.note || '').slice(0, 120) || null;
+    await g.save();
+    res.json({ status: 'success', data: { id: g.id, name: g.name, multiplier: Number(g.multiplier), note: g.note || '' } });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '保存分组失败：' + (e.message || e) });
+  }
+});
+
+router.delete('/:id/customer-groups/:gid', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const g = await SiteCustomerGroup.findOne({ where: { id: req.params.gid, site_id: site.id } });
+    if (!g) return res.status(404).json({ status: 'error', message: '分组不存在' });
+    await User.update({ site_group_id: null }, { where: { site_id: site.id, site_group_id: g.id } });
+    await g.destroy();
+    res.json({ status: 'success', message: '已删除，组内客户恢复原价' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '删除分组失败：' + (e.message || e) });
+  }
+});
+
+router.get('/:id/customers', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const { Op } = (await import('sequelize')).default;
+    const q = String(req.query.q || '').trim();
+    const gid = String(req.query.group || '').trim();
+    const where = { site_id: site.id };
+    if (q) where[Op.or] = [{ phone: { [Op.like]: `%${q}%` } }, { email: { [Op.like]: `%${q}%` } }];
+    if (gid === 'none') where.site_group_id = null;
+    else if (gid && /^\d+$/.test(gid)) where.site_group_id = Number(gid);
+
+    const rows = await User.findAll({
+      where,
+      attributes: ['id', 'phone', 'email', 'balance', 'custom_multiplier', 'site_group_id', 'created_at', 'last_login_at', 'is_banned'],
+      order: [['id', 'DESC']],
+      limit: 200,
+    });
+
+    const ids = rows.map((u) => u.id);
+    let spent = new Map();
+    let cnt = new Map();
+    if (ids.length) {
+      const agg = await Order.findAll({
+        attributes: ['user_id',
+          [Order.sequelize.fn('SUM', Order.sequelize.col('charge')), 'sum'],
+          [Order.sequelize.fn('COUNT', Order.sequelize.col('id')), 'n']],
+        where: { user_id: { [Op.in]: ids }, site_id: site.id },
+        group: ['user_id'],
+        raw: true,
+      });
+      spent = new Map(agg.map((r) => [Number(r.user_id), Number(r.sum || 0)]));
+      cnt = new Map(agg.map((r) => [Number(r.user_id), Number(r.n || 0)]));
+    }
+    const groups = await SiteCustomerGroup.findAll({ where: { site_id: site.id } });
+    const gmap = new Map(groups.map((g) => [Number(g.id), { name: g.name, multiplier: Number(g.multiplier) }]));
+
+    res.json({
+      status: 'success',
+      data: {
+        total: rows.length,
+        groups: groups.map((g) => ({ id: g.id, name: g.name, multiplier: Number(g.multiplier) })),
+        items: rows.map((u) => {
+          const g = gmap.get(Number(u.site_group_id || 0)) || null;
+          const cm = (u.custom_multiplier === null || u.custom_multiplier === undefined) ? null : Number(u.custom_multiplier);
+          return {
+            id: u.id,
+            phone: u.phone || '',
+            email: u.email || '',
+            balance: Number(u.balance || 0),
+            group_id: g ? Number(u.site_group_id) : null,
+            group_name: g ? g.name : '',
+            group_multiplier: g ? g.multiplier : null,
+            custom_multiplier: cm,
+            effective: (cm && cm > 0 && cm < 1) ? cm : (g ? g.multiplier : 1),
+            orders: cnt.get(u.id) || 0,
+            spent: Number((spent.get(u.id) || 0).toFixed(4)),
+            banned: !!u.is_banned,
+            created_at: u.created_at,
+            last_login_at: u.last_login_at,
+          };
+        }),
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '读取客户失败：' + (e.message || e) });
+  }
+});
+
+router.put('/:id/customers/:uid', authenticate, async (req, res) => {
+  try {
+    const site = await ensureSiteOwner(req, res);
+    if (!site) return;
+    const u = await User.findOne({ where: { id: req.params.uid, site_id: site.id } });
+    if (!u) return res.status(404).json({ status: 'error', message: '这个客户不属于本分站' });
+
+    if (req.body.group_id !== undefined) {
+      const gidRaw = req.body.group_id;
+      if (gidRaw === null || gidRaw === '' || gidRaw === 0 || gidRaw === '0') {
+        u.site_group_id = null;
+      } else {
+        const g = await SiteCustomerGroup.findOne({ where: { id: gidRaw, site_id: site.id } });
+        if (!g) return res.json({ status: 'error', message: '分组不存在' });
+        u.site_group_id = g.id;
+      }
+    }
+    if (req.body.custom_multiplier !== undefined) {
+      const raw = req.body.custom_multiplier;
+      if (raw === null || raw === '') {
+        u.custom_multiplier = null;
+      } else {
+        const m = parseFloat(raw);
+        if (!isFinite(m) || m < 0.3 || m > 1) {
+          return res.json({ status: 'error', message: '单独折扣要在 0.30 ~ 1.00 之间（1 = 取消折扣）' });
+        }
+        u.custom_multiplier = Math.round(m * 1000) / 1000;
+      }
+    }
+    await u.save();
+    const eff = await customerDiscountMultiplier(site.id, u);
+    res.json({
+      status: 'success',
+      data: {
+        id: u.id,
+        group_id: u.site_group_id || null,
+        custom_multiplier: (u.custom_multiplier === null || u.custom_multiplier === undefined) ? null : Number(u.custom_multiplier),
+        effective: eff,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '保存客户价失败：' + (e.message || e) });
   }
 });
 

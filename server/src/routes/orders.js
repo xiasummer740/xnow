@@ -1,6 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import { sequelize, Order, Service, Config, User, Transaction, SiteServicePrice } from '../models/index.js';
+import { customerDiscountMultiplier } from '../utils/customerPrice.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 
@@ -178,6 +179,13 @@ router.post('/add', authenticate, async (req, res) => {
       const du = parseInt(req.site.discount_until || 0);
       const discountActive = isFinite(dr) && dr > 0 && dr < 1 && !(du > 0 && Math.floor(Date.now() / 1000) > du);
       if (discountActive) sellRate = sellRate * dr;
+
+      // 👥 93 期：客户分组价 / 单个客户单独定价（祥哥要的"不同客户不同价"）
+      //    优先级：单独定价 > 分组价 > 不打折；叠完仍会被下面的成本护栏抬平。
+      try {
+        const gm = await customerDiscountMultiplier(req.site.id, user, { transaction: t });
+        if (gm && gm > 0 && gm < 1) sellRate = sellRate * gm;
+      } catch (e) { /* 降级：按原价，不影响下单 */ }
     }
     // 🔑 方案 A（2026-10-24 祥哥拍板）：订阅型按"投喂次数"计价。
     //    上游会为客户的每一条新帖各投喂一次、每次单独扣上游余额；

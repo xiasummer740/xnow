@@ -22,6 +22,11 @@ const User = sequelize.define('User', {
   // 🏬 分站归属：0 = 主站，>0 = sites.id。
   //    分站注册的用户只能在那个分站域名登录（超管、管理员、该分站主本人例外）。
   site_id: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // 👥 93 期：客户分组价（不同客户不同价）。指向 site_customer_groups.id，
+  //    只有该项目属于同一个分站时才生效；null = 未分组（按站长全场倍率）。
+  //    ⚠️ 必须在这里声明，否则 Sequelize 不认这个列 —— 读出来永远是 undefined，
+  //       分组价就静默失效了（本轮实测踩过）。
+  site_group_id: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null },
   total_commission: { type: DataTypes.DECIMAL(14, 6), defaultValue: 0.000000 },
   is_banned: { type: DataTypes.BOOLEAN, defaultValue: false },
   ban_reason: { type: DataTypes.STRING(255), allowNull: true },

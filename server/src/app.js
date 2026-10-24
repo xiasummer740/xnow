@@ -104,6 +104,21 @@ const initDatabase = async () => {
     try { await sequelize.query("ALTER TABLE vpn_products ADD COLUMN protocols TEXT"); } catch (e) { /* 字段已存在则忽略 */ }
     // 🎫 分站折扣促销（老库补列；sync({alter:false}) 只建表、不给已有表加列）
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_rate FLOAT NOT NULL DEFAULT 1"); } catch (e) {}
+
+  // 👥 93 期：分站客户分组价（不同客户不同价）。生产库自动补齐，无需手工迁移。
+  try {
+    await sequelize.query(`CREATE TABLE IF NOT EXISTS site_customer_groups (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      site_id INT NOT NULL,
+      name VARCHAR(40) NOT NULL,
+      multiplier DECIMAL(5,3) NOT NULL DEFAULT 1,
+      note VARCHAR(120) DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_scg_site (site_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  } catch (e) { /* 表已存在或无权限 */ }
+  try { await sequelize.query("ALTER TABLE users ADD COLUMN site_group_id INT DEFAULT NULL"); } catch (e) { /* 已存在 */ }
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_label VARCHAR(40) DEFAULT NULL"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_until BIGINT NOT NULL DEFAULT 0"); } catch (e) {}
     // 💳 87 期：分站到期要把 status 置为 'expired'，但老库的 ENUM 只有 active/suspended，
