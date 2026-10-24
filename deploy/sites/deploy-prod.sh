@@ -71,6 +71,25 @@ tar czf "$BAK/client-dist.tgz" -C "$APP" client/dist 2>/dev/null && echo "  ✅ 
 tar czf "$BAK/nginx-sites.tgz" -C /etc/nginx sites-enabled 2>/dev/null && echo "  ✅ nginx 配置 → $BAK/nginx-sites.tgz"
 cp "$APP/server/.env" "$BAK/server.env" 2>/dev/null && echo "  ✅ server/.env → $BAK/server.env"
 
+# 🌐 91 期：自有域名的两处依赖 SERVER_PUBLIC_IP（告诉站长 A 记录指向哪 + DNS 校验比对值）。
+#   代码里有兜底（读 configs.server_public_ip），但生产 .env 从来没这个键 ——
+#   不补的话上线后站长绑自有域名只能走 TXT 校验，体验差一截。
+#   取法用本机路由（不发外网请求，机器不通外网也能取到），并且幂等：已有就不动。
+if grep -q '^SERVER_PUBLIC_IP=' "$APP/server/.env" 2>/dev/null; then
+  echo "  ✅ server/.env 已有 SERVER_PUBLIC_IP=$(grep '^SERVER_PUBLIC_IP=' "$APP/server/.env" | cut -d= -f2-)"
+else
+  DETECT_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+  [ -z "$DETECT_IP" ] && DETECT_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then
+    echo "  [dry-run] 会往 server/.env 追加 SERVER_PUBLIC_IP=${DETECT_IP:-（没取到）}（自有域名解析与校验要用）"
+  elif [ -n "$DETECT_IP" ]; then
+    printf '\n# 分站自有域名：A 记录目标 + DNS 归属校验（91 期自动补）\nSERVER_PUBLIC_IP=%s\n' "$DETECT_IP" >> "$APP/server/.env"
+    echo "  ✅ server/.env 补上 SERVER_PUBLIC_IP=$DETECT_IP"
+  else
+    echo "  ⚠️ 没取到本机公网 IP —— 自有域名将只能走 TXT 校验（不影响上线）"
+  fi
+fi
+
 step "2. 拉代码（$BRANCH）"
 git fetch origin "$BRANCH" || die "fetch 失败"
 

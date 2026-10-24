@@ -6,7 +6,7 @@ import { getBillingConfig, chargeBalance, genSubdomain, renewSite } from '../uti
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
 import multer from 'multer';
 import fs from 'fs';
@@ -269,6 +269,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     // 🔒 不把 SMTP 密码吐给前端：只回一个占位符，站长要改才填新的
     const gMult = await getGlobalMultiplier();
+    const dnsTargetIp = await getPublicIp();
     const safe = (rows) => rows.map(r => {
       const o = r.toJSON();
       o.smtp_pass = o.smtp_pass ? '******' : null;
@@ -279,7 +280,7 @@ router.get('/', authenticate, async (req, res) => {
       // 🧭 六十五期：自有域名要填的 A 记录目标地址。
       //    这个值来自环境变量 SERVER_PUBLIC_IP（不进代码库，仓库是 PUBLIC）。
       //    没配就留空 —— 前端会变成"问平台要地址"，不会指一个错的 IP 让站长白折腾。
-      o.dns_target_ip = String(process.env.SERVER_PUBLIC_IP || '').trim();
+      o.dns_target_ip = dnsTargetIp;
       return o;
     });
     res.json({ status: 'success', data: safe(sites) });

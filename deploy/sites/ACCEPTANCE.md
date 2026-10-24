@@ -1458,3 +1458,51 @@ Beta 域名 `beta.xnow.taikon.top` 在内网解析不到，本轮用
 ```
 
 样本数据验完已删除；`uid103` 恢复为「普通用户 / ¥200 / 未开通」，留给祥哥点开通。
+
+---
+
+## 三十一、自有域名：生产 .env 从来没有 SERVER_PUBLIC_IP（91 期补上）
+
+### 隐患
+
+「自有域名自动证书」这条链路有两处依赖机器公网 IP：
+
+| 用途 | 代码位置 | 没配的后果 |
+|---|---|---|
+| 告诉站长 A 记录该解析到哪 | `GET /api/sites` 的 `dns_target_ip` | 面板上不显示 IP，站长不知道往哪指 |
+| 判断"域名是否已指向本机" | `verifyDomainOwnership()` | 只能走 TXT 校验，走不了"A 记录已就绪就自动签证书"这条顺路 |
+
+而**生产的 `server/.env` 里根本没有 `SERVER_PUBLIC_IP`**（Beta 有）。上线脚本
+`deploy-prod.sh` 也从来不会写它 —— 上线当天这条链路就是"半跛"的。
+（历史原因：65 期为了不让公网 IP 进 PUBLIC 仓库，把源码里的硬编码 IP 拿掉了，
+改成只认环境变量，但没人负责把它写进生产 .env。）
+
+### 改法（三层兜底，IP 不进代码库）
+
+1. **代码**：`siteDomain.js` 新增 `getPublicIp()`，取值顺序
+   `process.env.SERVER_PUBLIC_IP` → `configs.server_public_ip`（后台可改）→ 空字符串。
+   `verifyDomainOwnership()` 与 `/api/sites` 的 `dns_target_ip` 都改用它。
+   取不到就返回空 —— 前端提示"问平台要地址"，不编一个错 IP 让站长白折腾，
+   也不影响 TXT 校验这条路。
+2. **上线脚本**：`deploy-prod.sh` 在备份 .env 之后幂等补一次：
+   已有就跳过；没有就用 `ip route get 1.1.1.1`（**不发外网请求**，机器不通外网也能取）取本机出口 IP
+   写进 `server/.env`，取不到只告警、不中断上线。`--dry-run` 下只打印将要写入的值。
+3. **后台兜底**：换机/漏配时，往 `configs` 写一行 `server_public_ip` 即可生效，不用重启。
+
+### 实测（Beta，三种取值情况都跑了）
+
+```
+① 环境变量在时        → "192.129.210.52"
+② 删掉环境变量、无配置 → ""                （前端改成"问平台要地址"，不瞎指）
+③ 后台配置里写上 IP    → "203.0.113.9"      （兜底生效）
+④ 配置也删掉          → ""
+```
+
+Beta 重启后：`[migrate] 自动补列完成：新增 0 列`（幂等）、`/api/sites` 返回
+`dns_target_ip=192.129.210.52`、三个分站公网仍 200。
+
+### 上线后的预期
+
+`deploy-prod.sh` 会打印 `✅ server/.env 补上 SERVER_PUBLIC_IP=<本机 IP>`，
+之后站长在「我的分站 → 绑定域名」里能直接看到"A 记录指向 xxx"，
+域名解析生效后点绑定就能自动签 Let's Encrypt 证书。

@@ -101,12 +101,32 @@ export const isValidDomain = (domain) => {
 export const vhostPath = (siteId, domain) =>
   path.join(NGINX_DIR, `xnow-site-${siteId}-${String(domain).replace(/[^a-z0-9.-]/gi, '')}`);
 
+// 🌐 91 期：本机公网 IP —— 「自有域名」的两处要用到它
+//   ① verifyDomainOwnership：拿 DNS 的 A 记录跟它比对，判断域名是否已指向本机
+//   ② /api/sites 返回 dns_target_ip：站长照着这个 IP 去配 A 记录
+// 取值顺序：环境变量 SERVER_PUBLIC_IP → configs.server_public_ip（运维可在后台写）→ 空。
+// 之所以不写死在源码里：本仓库是 PUBLIC，公网 IP 不能进代码。
+// 之所以两级兜底：deploy-prod.sh 上线时会自动补环境变量，万一漏了/换机了，
+// 后台改一行配置也能救回来，不用重启进程。（取不到就返回空 —— 前端会提示"问平台要地址"，
+// 绝不编一个 IP 让站长白折腾，也不会因为空值把 TXT 校验这条路堵掉。）
+export const getPublicIp = async () => {
+  const fromEnv = String(process.env.SERVER_PUBLIC_IP || '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const { Config } = await import('../models/index.js');
+    const row = await Config.findOne({ where: { key: 'server_public_ip' } });
+    return String((row && row.value) || '').trim();
+  } catch (e) {
+    return '';
+  }
+};
+
 // 归属验证：返回 { ok, reason, detail }
 export const verifyDomainOwnership = async (domain, token) => {
   // 🔒 六十五期：这里原来写死了 VPS 公网 IP 作为兜底值 —— 本仓库是 PUBLIC，
   //    公网 IP 不该出现在源码里。改成只认环境变量 SERVER_PUBLIC_IP；
   //    没配时不做 IP 比对，只走 TXT 令牌校验（令牌是每个站点随机的，同样能证明归属）。
-  const expectedIp = String(process.env.SERVER_PUBLIC_IP || '').trim();
+  const expectedIp = await getPublicIp();
   let aRecords = [];
   try { aRecords = await dns.resolve4(domain); } catch (e) { aRecords = []; }
   if (expectedIp && aRecords.includes(expectedIp)) {
