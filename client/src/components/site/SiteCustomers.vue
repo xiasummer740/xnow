@@ -117,17 +117,65 @@ async function saveCustomer(c, patch) {
   flash(`已更新 ${c.phone || c.email || '客户'}`);
 }
 
-const pickGroup = (c, ev) => {
-  const v = ev.target.value;
-  saveCustomer(c, { group_id: v === '' ? null : Number(v) });
-};
-const pickCustom = (c, ev) => {
-  const v = String(ev.target.value || '').trim();
-  if (v === '') { saveCustomer(c, { custom_multiplier: null }); return; }
-  saveCustomer(c, { custom_multiplier: fromDiscount(v) });
-};
-
 const groupedCount = computed(() => groups.value.reduce((n, g) => n + (g.members || 0), 0));
+
+// ✏️ 客户面板（97 期）：点一个客户 → 底部弹出，大按钮选折扣
+const sheetC = ref(null);          // 正在编辑的客户
+const sheetGid = ref('');          // 选中的分组 id（'' = 未分组）
+const sheetCust = ref('');         // 单独折扣（'折' 单位字符串，'' = 不单独定价）
+
+// 常用折扣档：一按即填，不用自己换算
+const DISCOUNT_TIERS = [
+  { zhe: 10, label: '原价' },
+  { zhe: 9.5, label: '9.5 折' },
+  { zhe: 9, label: '9 折' },
+  { zhe: 8.5, label: '8.5 折' },
+  { zhe: 8, label: '8 折' },
+  { zhe: 7, label: '7 折' },
+];
+
+function openCustomer(c) {
+  sheetC.value = c;
+  sheetGid.value = c.group_id ? String(c.group_id) : '';
+  sheetCust.value = (c.custom_multiplier && Number(c.custom_multiplier) < 1)
+    ? String(Math.round(Number(c.custom_multiplier) * 100) / 10)
+    : '';
+}
+function closeCustomer() { sheetC.value = null; sheetGid.value = ''; sheetCust.value = ''; }
+
+// 面板里的实时预览：单独定价 > 分组 > 原价
+const sheetPreview = computed(() => {
+  const own = Number(sheetCust.value);
+  if (isFinite(own) && own > 0 && own < 10) return { text: asDiscount(fromDiscount(own)), from: '单独定价' };
+  if (sheetGid.value) {
+    const g = groups.value.find((x) => String(x.id) === String(sheetGid.value));
+    if (g) return { text: asDiscount(g.multiplier), from: '分组「' + g.name + '」' };
+  }
+  return { text: '原价', from: '不打折' };
+});
+
+async function saveCustomerSheet() {
+  if (!sheetC.value || saving.value) return;
+  const c = sheetC.value;
+  const payload = { group_id: sheetGid.value === '' ? null : Number(sheetGid.value) };
+  const own = String(sheetCust.value || '').trim();
+  payload.custom_multiplier = own === '' ? null : fromDiscount(own);
+  saving.value = true;
+  try {
+    const r = await fetch(`/api/sites/${props.siteId}/customers/${c.id}`, {
+      method: 'PUT', headers: auth(), body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.status !== 'success') { flash(d.message || '保存失败', false); return; }
+    closeCustomer();
+    await load(); emit('saved');
+    flash(`已更新 ${c.phone || c.email || '客户'}`);
+  } catch (e) {
+    flash('保存失败：' + e.message, false);
+  } finally {
+    saving.value = false;
+  }
+}
 
 onMounted(load);
 </script>
@@ -162,12 +210,19 @@ onMounted(load);
               </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
-              <input type="number" min="3" max="10" step="0.5" :value="Math.round(g.multiplier * 100) / 10"
-                     @change="updateGroup(g, { multiplier: fromDiscount($event.target.value) })"
-                     class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-right" />
-              <span class="text-[10px] text-slate-500">折</span>
-              <button @click="removeGroup(g)" class="px-2 py-1.5 text-[10px] text-slate-500 hover:text-red-400">删除</button>
+              <button @click="removeGroup(g)" class="px-2 py-2 text-[10px] text-slate-500 hover:text-red-400">删除</button>
             </div>
+          </div>
+          <!-- 🎚 一排折扣档，点一下就生效（原来是 16px 宽的小输入框，手机上很难点准） -->
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button v-for="t in DISCOUNT_TIERS" :key="'gt' + g.id + t.zhe" type="button"
+                    @click="updateGroup(g, { multiplier: fromDiscount(t.zhe) })"
+                    class="px-2.5 py-1.5 rounded-lg text-[11px] border"
+                    :class="Math.round(g.multiplier * 100) / 10 === t.zhe
+                      ? 'bg-amber-500 text-slate-900 border-amber-400 font-bold'
+                      : 'bg-slate-900 text-slate-300 border-slate-700'">
+              {{ t.label }}
+            </button>
           </div>
         </div>
       </div>
@@ -179,10 +234,19 @@ onMounted(load);
           <input v-model="newName" placeholder="组名，例如 VIP / 老客户"
                  class="flex-grow min-w-[8rem] bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
           <div class="flex items-center gap-1.5 shrink-0">
-            <input v-model.number="newMult" type="number" min="3" max="10" step="0.5"
+            <input v-model.number="newMult" type="number" min="3" max="10" step="0.5" inputmode="decimal"
                    class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-right" />
             <span class="text-[11px] text-slate-500">折</span>
           </div>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <button v-for="t in DISCOUNT_TIERS" :key="'nt' + t.zhe" type="button" @click="newMult = t.zhe"
+                  class="px-2.5 py-1.5 rounded-lg text-[11px] border"
+                  :class="Number(newMult) === t.zhe
+                    ? 'bg-amber-500 text-slate-900 border-amber-400 font-bold'
+                    : 'bg-slate-900 text-slate-300 border-slate-700'">
+            {{ t.label }}
+          </button>
         </div>
         <div class="flex gap-2 items-center">
           <input v-model="newNote" placeholder="备注（可留空）"
@@ -228,7 +292,8 @@ onMounted(load);
       </div>
 
       <div v-else class="space-y-2 max-h-[28rem] overflow-y-auto custom-scrollbar pr-1">
-        <div v-for="c in customers" :key="c.id" class="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+        <button v-for="c in customers" :key="c.id" type="button" @click="openCustomer(c)"
+                class="w-full text-left rounded-xl border border-slate-800 bg-slate-950/60 p-3 active:scale-[0.995]">
           <div class="flex items-start justify-between gap-2 flex-wrap">
             <div class="min-w-0">
               <div class="text-xs text-slate-200 truncate">
@@ -238,37 +303,92 @@ onMounted(load);
               <div class="text-[10px] text-slate-500 mt-0.5">
                 余额 ¥{{ c.balance.toFixed(2) }} · 消费 ¥{{ c.spent.toFixed(2) }} · {{ c.orders }} 单
               </div>
-            </div>
-            <div class="text-[10px] shrink-0 px-2 py-1 rounded-md"
-                 :class="c.effective < 1 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-800 text-slate-400'">
-              {{ asDiscount(c.effective) }}
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2 mt-2">
-            <label class="block">
-              <span class="text-[10px] text-slate-500">分组</span>
-              <select :value="c.group_id || ''" @change="pickGroup(c, $event)"
-                      class="w-full mt-0.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs">
-                <option value="">未分组（原价）</option>
-                <option v-for="g in groups" :key="'o' + g.id" :value="g.id">{{ g.name }}（{{ asDiscount(g.multiplier) }}）</option>
-              </select>
-            </label>
-            <label class="block">
-              <span class="text-[10px] text-slate-500">单独定价（覆盖分组）</span>
-              <div class="flex items-center gap-1 mt-0.5">
-                <input type="number" min="3" max="10" step="0.5"
-                       :value="c.custom_multiplier ? Math.round(c.custom_multiplier * 100) / 10 : ''"
-                       @change="pickCustom(c, $event)" placeholder="留空"
-                       class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-right" />
-                <span class="text-[10px] text-slate-500 shrink-0">折</span>
+              <div class="text-[10px] text-slate-500 mt-1">
+                {{ c.custom_multiplier && c.custom_multiplier < 1 ? '单独定价' : (c.group_id ? '按分组' : '未分组') }}
               </div>
-            </label>
+            </div>
+            <div class="shrink-0 text-right">
+              <div class="text-[11px] px-2 py-1 rounded-md"
+                   :class="c.effective < 1 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-800 text-slate-400'">
+                {{ asDiscount(c.effective) }}
+              </div>
+              <div class="text-[10px] text-amber-400 mt-1.5">改折扣 ›</div>
+            </div>
           </div>
-        </div>
+        </button>
       </div>
     </section>
 
     <p class="text-[10px] text-center" :class="msgOk ? 'text-emerald-400' : 'text-red-400'">{{ msg }}</p>
+
+    <!-- ✏️ 客户折扣面板（97 期）：大按钮点选，不用自己换算折扣 -->
+    <div v-if="sheetC" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div class="absolute inset-0 bg-black/70" @click="closeCustomer"></div>
+      <div class="relative w-full sm:max-w-md bg-slate-900 border-t sm:border border-slate-700
+                  rounded-t-2xl sm:rounded-2xl p-4 pb-6 max-h-[88vh] overflow-y-auto custom-scrollbar">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div class="min-w-0">
+            <div class="text-sm font-bold text-slate-100 truncate">{{ sheetC.phone || sheetC.email || '客户' }}</div>
+            <div class="text-[10px] text-slate-500 mt-1">
+              余额 ¥{{ sheetC.balance.toFixed(2) }} · 消费 ¥{{ sheetC.spent.toFixed(2) }} · {{ sheetC.orders }} 单
+            </div>
+          </div>
+          <button @click="closeCustomer" class="text-slate-500 text-lg leading-none px-2 py-1 shrink-0">✕</button>
+        </div>
+
+        <!-- 分组 -->
+        <div class="mb-3">
+          <div class="text-[11px] text-slate-400 mb-1.5">按分组的折扣</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" @click="sheetGid = ''"
+                    class="px-3 py-2 rounded-lg text-[11px] border"
+                    :class="sheetGid === '' ? 'bg-amber-500 text-slate-900 border-amber-400 font-bold' : 'bg-slate-950 text-slate-300 border-slate-700'">
+              未分组（原价）
+            </button>
+            <button v-for="g in groups" :key="'sg' + g.id" type="button" @click="sheetGid = String(g.id)"
+                    class="px-3 py-2 rounded-lg text-[11px] border"
+                    :class="sheetGid === String(g.id) ? 'bg-amber-500 text-slate-900 border-amber-400 font-bold' : 'bg-slate-950 text-slate-300 border-slate-700'">
+              {{ g.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 单独定价 -->
+        <div class="mb-3">
+          <div class="text-[11px] text-slate-400 mb-1.5">单独给这个客户定价（覆盖分组）</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" @click="sheetCust = ''"
+                    class="px-3 py-2 rounded-lg text-[11px] border"
+                    :class="sheetCust === '' ? 'bg-emerald-500 text-slate-900 border-emerald-400 font-bold' : 'bg-slate-950 text-slate-300 border-slate-700'">
+              不单独定价
+            </button>
+            <button v-for="t in DISCOUNT_TIERS" :key="'sc' + t.zhe" type="button" @click="sheetCust = String(t.zhe)"
+                    class="px-3 py-2 rounded-lg text-[11px] border"
+                    :class="String(sheetCust) === String(t.zhe) ? 'bg-emerald-500 text-slate-900 border-emerald-400 font-bold' : 'bg-slate-950 text-slate-300 border-slate-700'">
+              {{ t.label }}
+            </button>
+          </div>
+          <div class="flex items-center gap-2 mt-2">
+            <span class="text-[11px] text-slate-500">自定义</span>
+            <input v-model="sheetCust" type="text" inputmode="decimal" placeholder="例：8.8"
+                   class="w-24 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-lg font-bold text-right" />
+            <span class="text-[11px] text-slate-500">折</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-slate-950/70 border border-slate-800 p-3 text-[11px] text-emerald-400/85">
+          这位客户看到的价：<b>{{ sheetPreview.text }}</b>
+          <span class="text-slate-500">（{{ sheetPreview.from }}）</span>
+        </div>
+
+        <div class="flex gap-2 mt-4">
+          <button @click="closeCustomer" class="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 text-sm">取消</button>
+          <button @click="saveCustomerSheet" :disabled="saving"
+                  class="flex-[2] py-3 rounded-xl bg-amber-500 text-slate-900 text-sm font-bold disabled:opacity-50">
+            {{ saving ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
