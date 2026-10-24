@@ -88,3 +88,61 @@ bash deploy/sites/rollback-sites.sh --env prod --stamp XXX              # 最后
 
 > 这张表的意义：这四项都**不是代码问题**，而是"环境或人类判断"的问题。
 > 我能保证的是代码逻辑与账务正确；不能保证的是"它看起来够不够像一个独立的站"。
+
+## 七、生产现状勘验（2026-10-24 只读核查）
+
+上线前必须知道的三件事，全部为只读核查结果：
+
+### 1. 分站的「骨架」在生产上早已存在（2026-08-28 建表）
+
+| 事实 | 值 |
+|---|---|
+| `sites` 表创建时间 | 2026-08-28 16:55 |
+| `sites` 表行数 | 0 |
+| `users.site_id <> 0` 的用户 | 0 |
+| 生产 `server/src/routes/sites.js` | 存在（旧版，7818 字节），已挂载 `/api/sites` |
+| 生产旧接口 | `GET /`、`GET /current`、`POST /`（管理员与 agent 可建站）、`PUT /:id`、`DELETE /:id` |
+| 生产前端 | **无**分站页面产物（`SiteAdmin` 未构建） |
+
+结论：生产有一个**从未启用**的分站骨架 —— 数据库空表、后端旧接口在、前端没有页面。
+本次上线是把这套骨架**升级为完整体系**（域名/主题/支付/SMTP/预存扣费），不是从零加功能。
+副作用提示：现在若有 `agent` 角色用户直接调 `POST /api/sites`，能建出一条空分站记录（无界面、无域名、无支付），属于已存在的老行为。
+
+### 2. 生产代码与仓库 `main` 的关系（是否会被部署覆盖）
+
+生产不是 git 仓库，逐个文件核对结果：
+
+| 文件 | 与 `main` 对比 |
+|---|---|
+| `app.js`、`routes/sites.js`、`routes/public.js`、`routes/admin.js`、`routes/orderSync.js`、`models/Site.js`、`models/Transaction.js`、`middleware/site.js` | **字节完全一致** |
+| `routes/orders.js`、`routes/pay.js`、`routes/services.js` | 字节不同，但**逐行内容差异 0 行**（纯空白/缩进差异） |
+
+结论：**生产没有任何未入库的功能性热修** → 部署不会覆盖掉别人手工做的修复。
+（曾担心这点，因为文件修改时间就在今天；核查后确认内容与 `main` 等价。）
+
+### 3. 我的分站代码从未写入生产（可验证）
+
+在生产这 3 个文件里检索本轮专属标记，全部为 **0 处**：
+`paySiteId`、`resolveBufpayKey`、`sitePayCreds`、`siteCost`、`chargeFinal`、`req.site`、`site_id`。
+
+数据侧同样未变：`users 5 / orders 31 / services 2839 / sites 0`，
+`orders.site_cost`、`transactions.site_id`、`sites.custom_domain / smtp_host / template` 等新列**均不存在**。
+
+### 4. 一个仍需知情的异常
+
+生产 `orders.js` 的修改时间（13:46:45 +0100）与 `xnow-backend` 进程创建时间（12:46:45Z）**完全一致**，
+说明今天曾有"改文件 + 重启服务"的动作。核查后**内容与 `main` 逐行一致**、服务健康、数据未变，
+因此**未造成任何功能变化**；但这次动作不是本会话所为（本会话只写 `/var/www/xnow-beta`），
+也无法归因到具体人或进程。如实记录，供你判断是否需要排查其他会话/自动化脚本。
+
+## 八、本轮（二十六期）主题静态核验
+
+| 检查 | 结果 |
+|---|---|
+| 6 套模板在**线上实际加载的 CSS** 中 | 全部存在（classic/saas/minimal/neon/magazine/glass）|
+| 6 个色系 | 全部存在（cyan/purple/green/red/orange/blue）|
+| 8 个主题变量（`--brand` 等） | 全部定义 |
+| 运行时是否真的写到 `<html>` | ✅ `applyTheme()` 设置 `document.documentElement.dataset.template/color` |
+| 预览端口引用的 CSS 是否含主题规则 | ✅ 命中 |
+
+作用：排除"模板名打错 → 站长选了看着没反应"这类静默失效。
