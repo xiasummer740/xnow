@@ -53,13 +53,15 @@ const siteCostMultiplier = (agentDiscount, globalMult) => {
 
 const pricingError = (multiplier, agentDiscount, globalMult) => {
   const m = parseFloat(multiplier);
-  if (!isFinite(m) || m <= 0) return '分站倍率必须为大于 0 的数字';
-  // 祥哥定调：站主可自定义 1~100 倍
-  if (m > 100) return `分站倍率上限 100 倍（当前 ${m}）`;
+  // 🔒 103 期：下面这几句可能被站长看到（老页面/手工调接口传 multiplier 时会走到这里），
+  //    所以一律只说「价格 / 亏不亏」，不提倍率、不提平台还有一层。
+  if (!isFinite(m) || m <= 0) return '价格设置有误，请重新填写加价率';
+  // 祥哥定调：站主可自定义的价格上限（内部按 1~100 倍算）
+  if (m > 100) return '价格定得太高了，请调低加价率';
   // 🔒 倍率下界必须单独拦：普通/黄金用户成交价 = 倍率本身（orders.js 里只有 agent 才乘折扣），
   // 所以倍率 < 1 时这些用户每单都让平台倒贴。
   // 不独立拦的话，可拿「倍率 0.05 + 折扣 100」凑出 0.05×100=5 骗过下面的乘积校验。
-  if (m < 1) return `定价过低：分站倍率 ${m} 低于成本倍率 1.0，普通用户下单平台每单将亏损`;
+  if (m < 1) return '定价过低：这个价格卖出去会亏本，请调高加价率';
   // 🔒 只有「没传」才回落到默认值；传了值就必须合法。
   // 不能把非法值悄悄换成默认值拿去校验 —— 那样校验会通过，而下面落库的仍是原始非法值，
   // 结果是「响应说更新成功、库里存着 NaN/-1」，此后该分站所有代理下单都被 orders.js
@@ -67,7 +69,7 @@ const pricingError = (multiplier, agentDiscount, globalMult) => {
   let discount = DEFAULT_AGENT_DISCOUNT;
   if (agentDiscount !== undefined && agentDiscount !== null && agentDiscount !== '') {
     const d = parseFloat(agentDiscount);
-    if (!isFinite(d) || d <= 0) return '代理折扣必须为大于 0 的数字';
+    if (!isFinite(d) || d <= 0) return '折扣设置有误';
     discount = d;
   }
   // 平台侧：成交价不能低于上游成本
@@ -975,6 +977,12 @@ router.put('/:id', authenticate, async (req, res) => {
 
     // 🔒 两个价格字段可单独修改，但必须按"改完之后"的组合校验，
     // 否则可先压低倍率、再压低折扣绕过单字段检查。
+    // 🔒 103 期：倍率式入参只留给平台侧。站长一律走「加价率」，
+    //    免得老页面或手工调接口把倍率/折扣直接塞进来（既能绕过加价率，报错时还会看到倍率）。
+    const isStaffCaller = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaffCaller && (multiplier !== undefined || agent_discount !== undefined)) {
+      return res.json({ status: 'error', message: '请在「全站价」页用加价率修改价格' });
+    }
     if (multiplier !== undefined || agent_discount !== undefined) {
       const nextMultiplier = multiplier !== undefined ? parseFloat(multiplier) : parseFloat(site.multiplier);
       const nextDiscount = agent_discount !== undefined ? parseFloat(agent_discount) : parseFloat(site.agent_discount);
@@ -1007,9 +1015,12 @@ router.put('/:id', authenticate, async (req, res) => {
         if (nextRate > 1) return res.json({ status: 'error', message: '折扣不能大于 1（1 = 不打折，0.85 = 八五折）' });
         const floorRate = Number((costMult / nextMult).toFixed(4));
         if (nextRate < floorRate - 0.0001) {
+          // 🔒 103 期：这段话必须只说「进货价 / 亏不亏」。
+          //    以前写的是「你的倍率 5 × 折扣 0.3 = 1.50，低于成本保护线 2 倍」——
+          //    站长一看就知道平台在他上面还压了一层，等于把平台的加价摊在他面前。
           return res.json({
             status: 'error',
-            message: `折扣太深：你的倍率 ${nextMult} × 折扣 ${nextRate} = ${(nextMult * nextRate).toFixed(2)}，低于成本保护线 ${costMult} 倍，每单会倒亏。最低只能打到 ${floorRate}（约 ${(floorRate * 10).toFixed(1)} 折）。`
+            message: `折扣太深了：打完折每卖一单都是亏的（低于你的进货价）。最低只能打到 ${(floorRate * 10).toFixed(1)} 折，请把折扣调高一点。`
           });
         }
         site.discount_rate = nextRate;

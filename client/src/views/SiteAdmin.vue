@@ -142,7 +142,7 @@
       <div v-if="page === 'pricing'" class="rounded-xl border border-amber-400/30 bg-amber-400/5 px-3.5 py-3 mb-1">
         <p class="text-[11px] text-amber-300 font-bold mb-1">这一页 = 全站统一价（所有客户都按这里的价买）</p>
         <p class="text-[11px] text-slate-400 leading-relaxed">
-          加价率决定基础价；可以给单个服务单独定价；最下面的「限时折扣」是<b class="text-slate-200">临时</b>降价，到期自动恢复。
+          加价率决定基础价；可以给单个服务单独定价；最下面的「折扣促销」是临时降价 —— 选了天数就到期自动恢复，不选就长期有效。
           <span class="block mt-1 text-slate-500">想给某个人或某群老客户更低价 → 去「客户价」页。</span>
         </p>
       </div>
@@ -433,7 +433,7 @@ const PAGE_TABS = [
   { key: 'overview', icon: '🏠', label: '概览', hint: '站点信息 · 开站清单 · 收益心跳' },
   { key: 'design',   icon: '🎨', label: '装修', hint: '模板 / 色系 / 首页模块排序 + 实时预览' },
   { key: 'copy',     icon: '✍️', label: '文案', hint: '首屏版式、每块标题、按钮与图片' },
-  { key: 'pricing',  icon: '💰', label: '全站价', hint: '加价率 / 单服务改价 / 限时折扣' },
+  { key: 'pricing',  icon: '💰', label: '全站价', hint: '加价率 / 单服务改价 / 折扣促销' },
   { key: 'customers', icon: '👥', label: '客户价', hint: '只给指定客户更低价' },
   { key: 'payment',  icon: '💳', label: '收款', hint: '填自己的商户，客户付款直接进你账户' },
   { key: 'email',    icon: '📧', label: '邮件', hint: '客户收到的验证码用你的品牌' },
