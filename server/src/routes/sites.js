@@ -275,6 +275,10 @@ router.get('/', authenticate, async (req, res) => {
       o.cryptomus_key = o.cryptomus_key ? '******' : null;
       // 前端据此提示「最低可售价」（= 站长的真实进价倍率，不是 1/折扣）
       o.min_multiplier = minMultiplier(o.agent_discount, gMult);
+      // 🧭 六十五期：自有域名要填的 A 记录目标地址。
+      //    这个值来自环境变量 SERVER_PUBLIC_IP（不进代码库，仓库是 PUBLIC）。
+      //    没配就留空 —— 前端会变成"问平台要地址"，不会指一个错的 IP 让站长白折腾。
+      o.dns_target_ip = String(process.env.SERVER_PUBLIC_IP || '').trim();
       return o;
     });
     res.json({ status: 'success', data: safe(sites) });
@@ -389,8 +393,16 @@ router.post('/', authenticate, async (req, res) => {
     //    原因（2026-10-24 实测）：Cloudflare 免费通用证书只覆盖一级子域名，
     //    *.xnow.taikon.top 这种两级域名会证书失败；而 *.taikon.top 又是通配，
     //    会把同机其它项目的子域名一起抢过来。所以给每个分站单独写一个 server 块。
+    //
+    // 🔧 六十五期修正：原来只有「免费子域名」建站时才顺手发证书 + 写 vhost，
+    //    站长用**自有域名**建站时什么都不发生（domain_status 一直是 none），
+    //    页面上也没有提示 —— 相当于"建了站但线上打不开"，而且他根本不知道卡在哪。
+    //    现在两种域名都同样发证书 + 写 vhost：
+    //      · 免费子域名：本机 DNS 已就绪，签发成功率接近 100%
+    //      · 自有域名：DNS 还没指过来时，先用自签证书把站点配好；
+    //        等他改完 DNS 点「修复域名」，就会换成正式证书（代码里已优先 certbot）
     let publishNote = '';
-    if (isFreeSubdomain(cleanDomain)) {
+    {
       try {
         const cert = await ensureCert(cleanDomain);
         const backendPort = parseInt(process.env.PORT) || 3000;
@@ -401,11 +413,17 @@ router.post('/', authenticate, async (req, res) => {
         site.cert_mode = cert.mode;
         await site.save();
         bustSiteCache();
-        publishNote = cert.mode === 'le' ? '（已签发正式证书）' : '（当前为自签证书，浏览器可能提示不安全）';
+        if (cert.mode === 'letsencrypt') {
+          publishNote = '（已签发正式证书）';
+        } else if (isFreeSubdomain(cleanDomain)) {
+          publishNote = '（当前为自签证书，浏览器可能提示不安全）';
+        } else {
+          publishNote = '（自有域名已配置：请把 DNS 的 A 记录指向本机，生效后到「我的分站」点一次「修复域名」换正式证书）';
+        }
       } catch (e) {
         // 建站本身不能因为"域名没发出去"而失败 —— 站长可稍后点「修复域名」
         publishNote = '（域名尚未生效，可稍后点「修复域名」重试）';
-        console.error(`[site] 免费子域名 vhost 生成失败 ${cleanDomain}: ${e.message}`);
+        console.error(`[site] vhost 生成失败 ${cleanDomain}: ${e.message}`);
       }
     }
 
@@ -820,7 +838,7 @@ router.post('/:id/publish', authenticate, async (req, res) => {
     bustSiteCache();
     res.json({
       status: 'success',
-      message: cert.mode === 'le' ? '域名已生效（正式证书）' : '域名已生效（自签证书，浏览器可能提示不安全）',
+      message: cert.mode === 'letsencrypt' ? '域名已生效（正式证书）' : '域名已生效（自签证书，浏览器可能提示不安全）',
       data: { domain: site.domain, cert_mode: cert.mode }
     });
   } catch (e) {

@@ -526,11 +526,29 @@
           <span v-if="site.domain_status === 'active'" class="ml-2 text-emerald-400">已开通 ✅</span>
           <span v-else-if="site.domain_status === 'pending'" class="ml-2 text-amber-400">待验证</span>
           <span v-else-if="site.domain_status === 'failed'" class="ml-2 text-red-400">开通失败</span>
+          <!-- 🔐 证书状态：站长最关心的是"客户浏览器会不会报警告" -->
+          <span v-if="site.cert_mode === 'letsencrypt'" class="ml-2 text-emerald-400">证书：正式 ✅</span>
+          <span v-else-if="site.cert_mode === 'selfsigned'" class="ml-2 text-amber-400">证书：临时（客户可能看到不安全提示）</span>
         </p>
+
+        <!-- 🧭 六十五期：把"绑域名"这件小事拆成小白看得懂的三步（原来只有一个输入框）-->
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-400 space-y-1">
+          <p class="text-slate-300 font-bold">想用自己的域名（比如 shop.你的品牌.com）？三步：</p>
+          <p>① 去你买域名的地方（阿里云 / 腾讯云 / Cloudflare 都行），加一条 <b class="text-amber-300">A 记录</b>，
+             指向 <b class="text-amber-300">{{ site.dns_target_ip || '平台给你的服务器地址（问一下平台）' }}</b></p>
+          <p>② 等几分钟（DNS 生效），在下面填域名点「绑定并开通」</p>
+          <p>③ 如果这里显示的是「临时证书」，过 10 分钟点一次下面的「修复域名」，就会换成正式证书</p>
+          <p class="text-slate-500">用平台送的免费子域名（现在这个地址）就不用管这些，已经能直接卖。</p>
+        </div>
+
         <div class="flex gap-2">
           <input v-model="bindDomain" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="绑定你自己的域名，如 shop.你的品牌.com" />
           <button @click="bindOwnDomain()" :disabled="binding" class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-800 hover:bg-slate-700 disabled:opacity-50">
             {{ binding ? '验证中…' : '绑定并开通' }}
+          </button>
+          <button v-if="site.custom_domain" @click="republishDomain()" :disabled="publishing"
+                  class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-800 hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">
+            {{ publishing ? '修复中…' : '修复域名' }}
           </button>
         </div>
         <div v-if="domainHint" class="bg-amber-400/10 border border-amber-500/30 rounded-lg p-3 text-[11px] text-amber-200 whitespace-pre-wrap">{{ domainHint }}</div>
@@ -614,6 +632,7 @@ const site = ref(null)
 const stats = ref({})
 const bindDomain = ref('')
 const domainHint = ref('')
+const publishing = ref(false)
 const tab = ref('orders')
 const orders = ref([])
 const orderTotal = ref(0)
@@ -1117,6 +1136,24 @@ const bindOwnDomain = async () => {
       domainHint.value = `❌ ${data.message}`
     }
   } catch (e) { domainHint.value = '❌ 请求失败' } finally { binding.value = false }
+}
+
+// 🔧 修复域名：重新签发证书 + 重写 vhost。
+//    站长的典型用法：改完 DNS 等几分钟，点这个把「临时证书」换成正式证书。
+const republishDomain = async () => {
+  if (!site.value) return
+  publishing.value = true
+  domainHint.value = ''
+  try {
+    const res = await fetch(`/api/sites/${site.value.id}/publish`, { method: 'POST', headers: headers() })
+    const data = await res.json()
+    if (data.status === 'success') {
+      domainHint.value = `✅ ${data.message}`
+      load()
+    } else {
+      domainHint.value = `❌ ${data.message}`
+    }
+  } catch (e) { domainHint.value = '❌ 请求失败' } finally { publishing.value = false }
 }
 
 const loadOrders = async (append = false) => {

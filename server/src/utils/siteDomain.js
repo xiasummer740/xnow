@@ -50,7 +50,7 @@ export const isValidDomain = (domain) => {
   // 只允许标准主机名：标签 1~63、总长 ≤253，且必须至少两级
   if (d.length > 253 || d.length < 4) return false;
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d)) return false;
-  // 纯 IPv4 不算域名（曾经漏判，导致 192.129.210.52 能建成站）
+  // 纯 IPv4 不算域名（曾经漏判，导致直接把服务器 IP 当域名建站也能过）
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(d)) return false;
   return d.includes('.');
 };
@@ -60,10 +60,13 @@ export const vhostPath = (siteId, domain) =>
 
 // 归属验证：返回 { ok, reason, detail }
 export const verifyDomainOwnership = async (domain, token) => {
-  const expectedIp = process.env.SERVER_PUBLIC_IP || '192.129.210.52';
+  // 🔒 六十五期：这里原来写死了 VPS 公网 IP 作为兜底值 —— 本仓库是 PUBLIC，
+  //    公网 IP 不该出现在源码里。改成只认环境变量 SERVER_PUBLIC_IP；
+  //    没配时不做 IP 比对，只走 TXT 令牌校验（令牌是每个站点随机的，同样能证明归属）。
+  const expectedIp = String(process.env.SERVER_PUBLIC_IP || '').trim();
   let aRecords = [];
   try { aRecords = await dns.resolve4(domain); } catch (e) { aRecords = []; }
-  if (aRecords.includes(expectedIp)) {
+  if (expectedIp && aRecords.includes(expectedIp)) {
     return { ok: true, reason: 'A 记录指向本机', detail: aRecords.join(',') };
   }
   // Cloudflare 橙云兜底：查 TXT
