@@ -60,7 +60,7 @@ echo "  生产数据：$(MYSQL_PWD="$PP" mysql -N -u root "$DB" -e \
 
 [ -d "$APP/server" ] || die "$APP 不存在，请先跑 rehearse.sh"
 
-step "2. 造假上游（127.0.0.1:$MOCK）+ 造分站与客户"
+step "2. 造假上游（127.0.0.1:$MOCK）"
 cat > /tmp/mock-upstream.mjs <<'JS'
 import http from 'node:http';
 http.createServer((req, res) => {
@@ -75,7 +75,16 @@ http.createServer((req, res) => {
 JS
 nohup node /tmp/mock-upstream.mjs > "$MOCKLOG" 2>&1 &
 sleep 2
+chk "假上游就绪" "$(curl -sS -m 3 -o /dev/null -w '%{http_code}' -X POST -d 'k=1' http://127.0.0.1:$MOCK/api/v2)" "200"
 
+step "3. 先启动一次让迁移跑完（生产形态的库要补 44 列）"
+cd "$APP/server" || die "目录不存在"
+nohup node src/app.js > "$LOG" 2>&1 &
+for i in $(seq 1 60); do grep -q "running on port" "$LOG" 2>/dev/null && break; sleep 1; done
+grep -q "running on port" "$LOG" || { tail -10 "$LOG" | sed 's/^/  /'; die "启动失败"; }
+grep -E "\[migrate\] 自动补列完成" "$LOG" | sed 's/^/  /'
+
+step "3.5 造分站、客户、上游配置（必须在补列之后，否则 sites 还没有 template 列）"
 MYSQL_PWD="$PP" mysql -u root "$DB" -e "
 UPDATE configs SET value='' WHERE \`key\` IN ('tg_bot_token','tg_chat_id');
 DELETE FROM configs WHERE \`key\` IN ('upstream_url','upstream_key');
@@ -92,14 +101,17 @@ INSERT INTO users (id, phone, password_hash, role, balance, created_at, updated_
 VALUES (99, '13900000084', 'x', 'user', 50, NOW(), NOW());
 UPDATE users SET balance='100.000000' WHERE id=1;
 " 2>&1 | sed 's/^/  /'
-chk "假上游就绪" "$(curl -sS -m 3 -o /dev/null -w '%{http_code}' -X POST -d 'k=1' http://127.0.0.1:$MOCK/api/v2)" "200"
+chk "分站已入库" "$(MYSQL_PWD="$PP" mysql -N -u root "$DB" -e "SELECT COUNT(*) FROM sites WHERE id=1" 2>/dev/null)" "1"
+chk "客户已入库" "$(MYSQL_PWD="$PP" mysql -N -u root "$DB" -e "SELECT COUNT(*) FROM users WHERE id=99" 2>/dev/null)" "1"
 
-step "3. 启动新代码（端口 $PORT）"
-cd "$APP/server" || die "目录不存在"
+step "3.6 重启一次（分站缓存 TTL 60 秒，直连改库不清缓存）"
+PID=$(ss -tlnp 2>/dev/null | grep ":$PORT" | grep -oE 'pid=[0-9]+' | cut -d= -f2 | head -1)
+[ -n "${PID:-}" ] && kill -9 "$PID" 2>/dev/null
+sleep 2
 nohup node src/app.js > "$LOG" 2>&1 &
 for i in $(seq 1 60); do grep -q "running on port" "$LOG" 2>/dev/null && break; sleep 1; done
-grep -q "running on port" "$LOG" || { tail -10 "$LOG" | sed 's/^/  /'; die "启动失败"; }
-grep -E "\[migrate\] 自动补列完成" "$LOG" | sed 's/^/  /'
+grep -q "running on port" "$LOG" || { tail -10 "$LOG" | sed 's/^/  /'; die "重启失败"; }
+echo "  已重启，分站缓存已刷新"
 
 step "4. 签发令牌（管理员 uid=1 / 分站客户 uid=99）"
 cat > mk-token-rehearse.mjs <<'JS'
@@ -155,7 +167,8 @@ chk "分站订单 site_id" "$SITE_ID" "1"
 chk "主站订单 site_id" "$MAIN_ID" "0"
 chk "主站订单 site_cost（应为 0）" "$(python3 -c "print(f'{float(\"$MAIN_COST\"):.4f}')")" "0.0000"
 chk "分站订单 site_cost > 0" "$(python3 -c "print(1 if float('$SITE_COST')>0 else 0)")" "1"
-chk "分站客户付款 = 上游成本 × 5 × 0.9 / 2.5" "$(python3 -c "print(1 if abs(float('$SITE_CHARGE') - float('$SITE_UP')*5*0.9/2.5) < 1e-4 else 0)")" "1"
+# 客户看到的价 = 上游成本 × 分站倍率 × 折扣（与管理员的 1 倍无关）
+chk "分站客户付款 = 上游成本 × 5 倍 × 9 折" "$(python3 -c "print(1 if abs(float('$SITE_CHARGE') - float('$SITE_UP')*5*0.9) < 1e-3 else 0)")" "1"
 chk "站长成本 = 上游成本 × 2.0" "$(python3 -c "print(1 if abs(float('$SITE_COST') - float('$SITE_UP')*2.0) < 1e-4 else 0)")" "1"
 
 BAL_C=$(MYSQL_PWD="$PP" mysql -N -u root "$DB" -e "SELECT balance FROM users WHERE id=99" 2>/dev/null)
@@ -163,7 +176,8 @@ BAL_O=$(MYSQL_PWD="$PP" mysql -N -u root "$DB" -e "SELECT balance FROM users WHE
 echo "  客户余额 $BAL_C（50 起，扣 $SITE_CHARGE）"
 echo "  站长余额 $BAL_O（100 起，扣主站单 $MAIN_CHARGE + 分站成本 $SITE_COST）"
 chk "客户余额扣款正确" "$(python3 -c "print(1 if abs(float('$BAL_C') - (50-float('$SITE_CHARGE'))) < 1e-4 else 0)")" "1"
-chk "站长余额扣款正确" "$(python3 -c "print(1 if abs(float('$BAL_O') - (100-float('$MAIN_CHARGE'))) < 1e-4 else 0)")" "1"
+# 站长（uid1 既是管理员也是分站主）要扣两笔：自己下的主站单 + 分站这单的成本
+chk "站长余额扣款正确" "$(python3 -c "print(1 if abs(float('$BAL_O') - (100-float('$MAIN_CHARGE')-float('$SITE_COST'))) < 1e-3 else 0)")" "1"
 
 step "9. 上游真的被调到了吗"
 grep -c "action=add" "$MOCKLOG" 2>/dev/null | sed 's/^/  假上游收到 action=add 次数: /'
