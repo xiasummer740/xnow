@@ -260,6 +260,13 @@
             <span class="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
                   :class="m.enabled ? 'left-[18px]' : 'left-0.5'"></span>
           </button>
+          <!-- 手机上拖不动，必须有上下键（祥哥用手机验收）-->
+          <div class="flex flex-col shrink-0 -my-1">
+            <button type="button" @click="move(i, -1)" :disabled="i === 0"
+              class="px-1.5 text-[10px] leading-none text-slate-400 disabled:opacity-25 hover:text-amber-300">▲</button>
+            <button type="button" @click="move(i, 1)" :disabled="i === form.modules.length - 1"
+              class="px-1.5 text-[10px] leading-none text-slate-400 disabled:opacity-25 hover:text-amber-300">▼</button>
+          </div>
         </div>
       </div>
     </section>
@@ -566,6 +573,16 @@ const onDrop = (i) => {
   const arr = props.form.modules
   const [moved] = arr.splice(from, 1)
   arr.splice(i, 0, moved)
+  arr.forEach((m, idx) => (m.order = idx))
+}
+// 手机上没有拖拽手势，必须给上下键
+const move = (i, dir) => {
+  const arr = props.form.modules
+  const j = i + dir
+  if (j < 0 || j >= arr.length) return
+  const t = arr[i]
+  arr[i] = arr[j]
+  arr[j] = t
   arr.forEach((m, idx) => (m.order = idx))
 }
 </script>
