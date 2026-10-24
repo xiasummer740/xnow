@@ -11,6 +11,7 @@ import { resolveGeoMap } from '../utils/geo.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { createBackup, restoreBackup, isBackupFile } from '../utils/backupEngine.js';
 import { sanitizeAnnouncement, announcementToText } from '../utils/sanitize.js';
+import refundSiteCost from '../utils/siteRefund.js';
 
 const router = express.Router();
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
@@ -805,12 +806,22 @@ router.post('/orders/refund', authenticate, async (req, res) => {
 
     order.is_refunded = true;
     await order.save({ transaction: t });
+
+    // 🏬 分站订单：站长已付的进货成本同步退还（同一事务，避免只退一半）
+    let siteRefunded = 0;
+    try {
+      siteRefunded = await refundSiteCost(order, refundRatio, { transaction: t, User, Transaction });
+    } catch (e) {
+      await t.rollback().catch(() => {});
+      return res.status(500).json({ status: 'error', message: '退款失败（分站成本退还出错）：' + ((e && e.message) || e) });
+    }
+
     await t.commit();
 
-    await logAudit(req, 'order_refund', 'order', orderId, { order_no: order.order_no, amount: refundAmount });
-    sendTgMessage('💳 [管理员退款]\n📦 订单: <code>' + order.order_no + '</code>\n👤 UID: <code>' + user.id + '</code>\n💵 金额: ¥' + refundAmount);
+    await logAudit(req, 'order_refund', 'order', orderId, { order_no: order.order_no, amount: refundAmount, site_refunded: siteRefunded });
+    sendTgMessage('💳 [管理员退款]\n📦 订单: <code>' + order.order_no + '</code>\n👤 UID: <code>' + user.id + '</code>\n💵 金额: ¥' + refundAmount + (siteRefunded > 0 ? '\n🏬 站长成本已退: ¥' + siteRefunded : ''));
 
-    res.json({ status: 'success', message: '退款成功', data: { amount: refundAmount } });
+    res.json({ status: 'success', message: '退款成功', data: { amount: refundAmount, site_refunded: siteRefunded } });
   } catch (e) { await t.rollback().catch(() => {}); res.status(500).json({ status: 'error', message: e.message }); }
 });
 

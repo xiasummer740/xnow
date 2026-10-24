@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Config, Order, User, Transaction, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
+import refundSiteCost from './siteRefund.js';
 
 export const autoSyncOrders = async () => {
   try {
@@ -64,10 +65,12 @@ export const autoSyncOrders = async () => {
                 if (!locked.is_refunded) {
                   const user = await User.findByPk(locked.user_id, { transaction: t });
                   let refundAmount = parseFloat(locked.charge);
+                  let ratio = 1;
                   if (isPartial) {
                     const remainsQty = parseFloat(locked.remains);
                     const totalQty = parseFloat(locked.quantity);
-                    refundAmount = (remainsQty > 0 && totalQty > 0) ? (remainsQty / totalQty) * refundAmount : 0;
+                    ratio = (remainsQty > 0 && totalQty > 0) ? (remainsQty / totalQty) : 0;
+                    refundAmount = ratio * refundAmount;
                   }
                   if (user && refundAmount > 0) {
                     user.balance = parseFloat(user.balance) + refundAmount;
@@ -76,6 +79,14 @@ export const autoSyncOrders = async () => {
                       user_id: user.id, phone: locked.phone, amount: refundAmount,
                       type: '退款入账', description: `${isCancel ? '订单被取消，全额退款' : '订单部分完成，按比例退款'} [单号:${locked.order_no}]`
                     }, { transaction: t });
+                  }
+                  // 🏬 分站订单：站长已付的进货成本必须同步退回，
+                  //    否则每取消一单站长白亏一次，钱静默变成平台利润。
+                  try {
+                    await refundSiteCost(locked, ratio, { transaction: t, User, Transaction });
+                  } catch (e) {
+                    console.error('❌ [OrderSync] 分站成本退还失败 order=' + locked.order_no + ' err=' + ((e && e.message) || e));
+                    throw e;   // 同一事务内，回滚以保证「客户退、站长也退」要么都成
                   }
                   locked.is_refunded = true;
                 }
