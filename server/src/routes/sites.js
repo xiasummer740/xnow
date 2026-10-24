@@ -6,7 +6,7 @@ import { getBillingConfig, chargeBalance, genSubdomain, renewSite } from '../uti
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp, domainVhostOwner } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
 import multer from 'multer';
 import fs from 'fs';
@@ -375,6 +375,16 @@ router.post('/', authenticate, async (req, res) => {
   }
   if (isDomainForbidden(cleanDomain)) {
     return res.json({ status: 'error', message: '该域名不可使用' });
+  }
+
+  // 🔀 100 期：免费子域名还要查「本机 nginx 里有没有别人占着这个域名」。
+  //    Beta 与生产同机、共用 *.taikon.top 泛解析但库是分开的 —— 只查自己的 sites 表挡不住冲突，
+  //    两份 vhost 抢一个 server_name 时 nginx 只认先加载的，客户可能被送进另一个环境的库。
+  if (isFreeSubdomain(cleanDomain)) {
+    const taken = domainVhostOwner(cleanDomain);
+    if (taken) {
+      return res.json({ status: 'error', message: '这个域名已经被占用了，请换一个' });
+    }
   }
 
   // 💰 97 期：前端只说「在进货价上加价 %」。倍率由后端换算，不对外暴露。

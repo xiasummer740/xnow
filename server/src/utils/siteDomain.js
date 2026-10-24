@@ -53,6 +53,28 @@ const RESERVED_LABELS = [
   'panel', 'console', 'dashboard', 'pay', 'payment', 'support', 'help'
 ];
 
+// 🔀 100 期：跨环境域名冲突保护
+//    背景：Beta 与生产在**同一台机器**上，共用 /etc/nginx/sites-enabled 和 *.taikon.top 泛解析，
+//    但两边数据库是分开的。只用「查自己库里的 sites 表」挡不住冲突：
+//    生产若建了一个 Beta 已占用的域名（比如都叫 demostore），两份 vhost 会抢同一个 server_name，
+//    nginx 只认先加载的那份 —— 客户可能被送进另一个环境的库，看到别人的数据。
+//    做法：查 nginx 目录里有没有「同一个域名、但不是本站在用」的 vhost 文件。
+export const domainVhostOwner = (domain, selfSiteId = 0) => {
+  const d = String(domain || '').toLowerCase().replace(/[^a-z0-9.-]/g, '');
+  if (!d) return null;
+  try {
+    for (const f of fs.readdirSync(NGINX_DIR)) {
+      if (!f.startsWith('xnow-site-')) continue;
+      if (!f.toLowerCase().endsWith('-' + d)) continue;
+      const m = f.match(/^xnow-site-(\d+)-/);
+      const sid = m ? Number(m[1]) : 0;
+      if (selfSiteId && sid === Number(selfSiteId)) continue;   // 自己的 vhost，放行
+      return { file: f, site_id: sid };
+    }
+  } catch (e) {}
+  return null;
+};
+
 // 免费子域名：xxx.xnow.taikon.top —— 这是**合法且鼓励**的建站域名
 export const isFreeSubdomain = (domain) => {
   const d = String(domain || '').toLowerCase();

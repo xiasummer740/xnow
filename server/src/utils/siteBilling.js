@@ -15,7 +15,7 @@ import path from 'path';
 import { Site, User, Config, Transaction } from '../models/index.js';
 import { sendTgMessage } from './tgBot.js';
 import { clearSiteCache } from '../middleware/site.js';
-import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureCert } from './siteDomain.js';
+import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureCert, domainVhostOwner } from './siteDomain.js';
 
 export const DEFAULTS = {
   siteMonthly: 99,      // 分站 ¥99/月
@@ -62,7 +62,9 @@ export const genSubdomain = async () => {
       Site.findOne({ where: { domain } }),
       Site.findOne({ where: { custom_domain: domain } }),
     ]);
-    if (!a && !b) return domain;
+    // 🔀 100 期：本机 nginx 里已有这个域名的 vhost（可能是另一环境/已删站残留）也不能用，
+    //    否则新站会把别人的 server_name 抢走或反过来被抢。
+    if (!a && !b && !domainVhostOwner(domain)) return domain;
   }
   throw new Error('子域名分配失败，请稍后重试');
 };

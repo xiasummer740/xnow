@@ -2275,3 +2275,54 @@ bash rollback-sites.sh --env prod --stamp XXX      ← 连数据库一起还原
 从 Windows 直接 scp 上去的 `.sh` 是 CRLF，bash 直接报 `syntax error near unexpected token 'in\r''`。
 git 里存的是 LF，`go-live.sh` 用 `git show` 取出来的也是 LF —— 所以正常路径没问题，
 但**任何人手工 scp 脚本时必须先去掉 CR**，否则回滚这条命脉就断了。已实测确认修好后可正常执行。
+
+---
+
+## 四十四、上线前发现的一个跨环境地雷：域名空间共用（101 期）
+
+### 一、问题
+
+Beta 和生产在**同一台机器**上，共用：
+
+- `/etc/nginx/sites-enabled` 这一套 nginx 配置目录
+- `*.taikon.top` 这条泛解析（Beta 的 `demostore.taikon.top` 就是这么来的）
+- 免费子域名自动生成的母域（`SITE_DNS_SUFFIX` 默认 `taikon.top`）
+
+但**两边的数据库是分开的**。于是有个漏洞：
+
+> 生产上如果有个代理把分站域名填成 `demostore.taikon.top`（这正是 Beta 在用的），
+> 建站校验只查「自己库里有没有这个域名」——查不到，放行。
+> 然后两份 vhost 抢同一个 `server_name`，nginx 只认先加载的那份。
+> 结果：这个域名的客户可能被送进**另一个环境的数据库**，看到别人的价格、别人的订单。
+
+现在的实际状态：机器上有 3 条 vhost（`laozhang` / `t1` / `demostore`），都是 Beta 的。
+生产一旦上线，第一个代理只要手抖填了这三个名字中的任意一个，就会踩中。
+
+### 二、修法：查 nginx 目录，而不是只查自己的库
+
+新增 `domainVhostOwner(domain, selfSiteId)`：扫 `/etc/nginx/sites-enabled/`，
+找「同一域名但不是本站在用」的 vhost 文件。
+
+两处接上：
+
+1. **建站**：免费子域名如果已被任何 vhost 占用 → 直接拒绝「这个域名已经被占用了，请换一个」
+2. **自动分配**：随机 6 位子域名循环里，除了查库，还要求 nginx 目录里没有同名 vhost
+
+自己的 vhost 传 `selfSiteId` 放行，所以「修复域名」不受影响。
+
+### 三、实测
+
+```
+① 建站填 demostore.taikon.top（Beta 在用） → ✅ 被挡「这个域名已经被占用了，请换一个」
+② 建站填 laozhang.taikon.top（Beta 在用）  → ✅ 被挡（同上）
+③ 建站填 brandnew98.taikon.top（全新域名）  → ✅ 通过域名校验（故意传非法加价率，死在加价率那步，说明没被误挡）
+④ 站点数 1 → 1（没有产生任何脏数据）
+⑤ 自家站点「修复域名」/publish            → ✅ 域名已生效（正式证书），演示站与 API 均 200
+```
+
+### 四、上线后的注意事项（写给以后维护的人）
+
+- 生产上线后，**Beta 那 3 个域名仍然占用着**。要么 Beta 保持现状（推荐，便于随时对照），
+  要么等生产稳定后把 Beta 的站点删掉腾出域名。
+- 更彻底的做法是让两个环境用不同的子域空间（Beta 用 `*.beta.taikon.top`），
+  但这要改泛解析 + 证书，且 Beta 只是临时环境，暂不做。
