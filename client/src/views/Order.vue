@@ -77,7 +77,7 @@
               <div v-else class="space-y-1">
                 <p class="text-red-300">{{ appStore.t('guide_1') }}</p>
                 <p class="text-red-300">{{ appStore.t('guide_2') }}</p>
-                <p class="text-slate-500 text-[10px] mt-1.5 font-sans italic">* 此服务上游未提供特殊说明，请遵循基础规范下单。</p>
+                <p class="text-slate-500 text-[10px] mt-1.5 font-sans italic">* 该服务暂无特殊说明，请遵循基础规范下单。</p>
               </div>
             </div>
           </div>
@@ -146,7 +146,7 @@
             <div>
               <label class="block text-xs md:text-sm font-bold text-slate-300 mb-2 md:mb-3">
                 新帖子数量 <span class="text-red-400">*</span>
-                <span class="text-[10px] text-slate-500 ml-2 font-normal">上游为每条新帖投喂一次，按次数收费</span>
+                <span class="text-[10px] text-slate-500 ml-2 font-normal">每条新帖自动投喂一次，按次数收费</span>
               </label>
               <input type="number" min="1" v-model="form.posts" placeholder="例如 3（= 未来 3 条新帖各投喂一次）" class="w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none focus:border-amber-400 transition text-base md:text-lg">
             </div>
@@ -162,8 +162,8 @@
                 {{ appStore.t('quantity') }}
                 <span v-if="activeService" class="text-[10px] md:text-xs text-amber-500 ml-1 font-normal">({{ activeService.min }} ~ {{ activeService.max }})</span>
                 <span v-if="isCustomComments" class="text-[10px] ml-2 px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded font-normal">受评论行数锁定</span>
-                <span v-if="isSubscriptions" class="text-[10px] ml-2 px-1.5 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded font-normal">每帖数量（= 上游 min = max）</span>
-                <span v-if="isInvites" class="text-[10px] ml-2 px-1.5 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded font-normal">仅本站计费用，上游不收</span>
+                <span v-if="isSubscriptions" class="text-[10px] ml-2 px-1.5 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded font-normal">每帖数量（最少 = 最多）</span>
+                <span v-if="isInvites" class="text-[10px] ml-2 px-1.5 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/20 rounded font-normal">仅用于本站计费</span>
               </label>
               <input type="number" v-model="form.quantity" :readonly="isCustomComments" :class="['w-full bg-slate-900/80 border border-slate-600 rounded-lg md:rounded-xl p-3 md:p-4 text-white outline-none transition text-lg md:text-xl font-mono', isCustomComments ? 'opacity-50 cursor-not-allowed border-slate-700' : 'focus:border-amber-400']">
             </div>
@@ -297,19 +297,24 @@ const updateQuantityFromComments = () => {
     form.value.quantity = count === 0 ? (activeService.value?.min || 1) : count;
 };
 
-// 💡 核心注入：上游错误码全境中文翻译器
+// 💡 错误提示翻译器：对客户只说"我们"，绝不出现"上游"（客户眼里 XNOW 就是源头）
 const translateUpstreamError = (errStr) => {
     if (!errStr) return '未知系统错误，请重试';
     const s = String(errStr).toLowerCase();
     
     if (s.includes('min_quantity')) return '下单被拦截：您提交的数量低于该服务的最低要求';
     if (s.includes('max_quantity')) return '下单被拦截：您提交的数量超出了该服务的最高要求';
-    if (s.includes('not enough') || s.includes('balance') || s.includes('funds')) return '系统错误：上游通道余额不足，请联系客服处理';
+    if (s.includes('not enough') || s.includes('balance') || s.includes('funds')) return '系统繁忙，请稍后重试或联系客服';
     if (s.includes('incorrect request')) return '请求错误：参数格式不正确或服务已失效';
     if (s.includes('invalid link') || s.includes('invalid_link')) return '链接无效：请检查目标链接的格式是否正确';
-    if (s.includes('service not found')) return '服务失效：该服务已被上游移除或下架';
-    if (s.includes('comments')) return '评论异常：自定义评论内容不符合上游接口规范';
+    if (s.includes('service not found')) return '服务失效：该服务已下架，请选择其他服务';
+    if (s.includes('comments')) return '评论异常：自定义评论内容不符合规范';
     if (s.includes('duplicate')) return '重复下单：相同的链接请等待上一单完成后再提交';
+    if (s.includes('missing username') || s.includes('username')) return '缺少用户名：该服务需要填社交平台用户名（不要带 @ 或链接）';
+    if (s.includes('hashtag')) return '缺少话题标签，请填写后重试';
+    if (s.includes('delay')) return '延迟参数不正确，请重新选择';
+    if (s.includes('missing answer') || s.includes('answer')) return '缺少选项编号，请填写后重试';
+    if (s.includes('expiry')) return '到期日期格式不对（应形如 31/12/2026）';
     
     // 如果没有命中上述规则，返回原文
     return errStr; 
@@ -490,7 +495,7 @@ const submitOrder = async () => {
           if(uData.status === 'success') { userStore.userInfo.balance = uData.balance; }
       } else { 
           // 💡 接管并翻译错误提示
-          const friendlyError = translateUpstreamError(data.message || '下单失败，上游通道异常');
+          const friendlyError = translateUpstreamError(data.message || '下单失败，系统繁忙请稍后重试');
           uiStore.showToast(friendlyError, 'error');
       }
   } catch(e) { uiStore.showToast('提交失败，网络传输中断', 'error'); }

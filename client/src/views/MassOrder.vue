@@ -53,7 +53,7 @@
       <div class="bg-slate-800/60 p-6 rounded-2xl border border-slate-700 text-center">
         <div class="text-amber-400 text-3xl mb-3">⚡</div>
         <h4 class="text-white font-bold mb-2">批量极速处理</h4>
-        <p class="text-sm text-slate-400">逐条提交上游，失败自动回滚扣款，安全可靠。</p>
+        <p class="text-sm text-slate-400">逐条提交，失败自动回滚扣款，安全可靠。</p>
       </div>
       <div class="bg-slate-800/60 p-6 rounded-2xl border border-slate-700 text-center">
         <div class="text-blue-400 text-3xl mb-3">🛡️</div>
