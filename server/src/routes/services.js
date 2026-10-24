@@ -52,10 +52,14 @@ router.get('/', authenticate, async (req, res) => {
     }
 
     const services = await Service.findAll({ order: [['sort', 'ASC']] });
-    
+
+    // 🔑 管理员看上游原价（custom_rate 只面向客户）—— 与 orders.js 扣费口径完全一致
+    const isStaff = actualRole === 'super_admin' || actualRole === 'admin';
+
     const formatted = services.map(s => {
-      // 🔌 与 orders.js 的扣费口径一致：custom_rate 优先，再乘用户倍率
-      const baseRate = (s.custom_rate !== null && s.custom_rate !== undefined) ? parseFloat(s.custom_rate) : parseFloat(s.rate);
+      const baseRate = (!isStaff && s.custom_rate !== null && s.custom_rate !== undefined)
+        ? parseFloat(s.custom_rate)
+        : parseFloat(s.rate);
       return {
         service: s.service_id,
         name: s.name,

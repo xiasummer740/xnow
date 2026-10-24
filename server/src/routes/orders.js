@@ -141,7 +141,10 @@ router.post('/add', authenticate, async (req, res) => {
       finalMultiplier = baseMultiplier * agentDiscount; 
     }
 
-    const baseRate = service.custom_rate !== null && service.custom_rate !== undefined
+    // 🔑 管理员/至尊管理员按上游原价：custom_rate 是「面向客户的零售价」，
+    //    不该套在管理者自己头上（2026-10-24 祥哥反馈"我是管理员，怎么费用跟上游不一样"）
+    const isStaff = actualRole === 'super_admin' || actualRole === 'admin';
+    const baseRate = (!isStaff && service.custom_rate !== null && service.custom_rate !== undefined)
       ? parseFloat(service.custom_rate)
       : parseFloat(service.rate);
     const sellRate = baseRate * finalMultiplier;
@@ -314,7 +317,9 @@ router.post('/batch', authenticate, async (req, res) => {
         finalMultiplier = baseMultiplier * agentDiscount;
       }
 
-      const baseRate = service.custom_rate !== null && service.custom_rate !== undefined
+      // 🔑 与单笔下单同口径：管理员按上游原价，不套零售加价
+      const isStaff = actualRole === 'super_admin' || actualRole === 'admin';
+      const baseRate = (!isStaff && service.custom_rate !== null && service.custom_rate !== undefined)
         ? parseFloat(service.custom_rate)
         : parseFloat(service.rate);
       const sellRate = baseRate * finalMultiplier;
