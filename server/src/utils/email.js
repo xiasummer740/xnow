@@ -23,7 +23,7 @@ export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
         const smtp_port = parseInt(useSite ? siteCfg.smtp_port : cm['smtp_port']) || 465;
         const smtp_user = useSite ? siteCfg.smtp_user : (cm['smtp_email'] || cm['smtp_user'] || cm['email_user']);
         const smtp_pass = useSite ? siteCfg.smtp_pass : cm['smtp_pass'];
-        const brand = (useSite && siteCfg.name) ? String(siteCfg.name) : 'XNOW PRO';
+        const brand = (siteCfg && siteCfg.name) ? String(siteCfg.name) : 'XNOW PRO';
 
         if (!smtp_host || !smtp_user || !smtp_pass) {
             throw new Error(`SMTP配置缺失: host=${!!smtp_host}, user=${!!smtp_user}, pass=${!!smtp_pass}`);
@@ -118,15 +118,66 @@ export const sendEmailCode = async (toEmail, code, siteCfg = null) => {
             `
             };
 
-        await transporter.sendMail(mailOptions);
-        return { success: true };
+        try {
+            await transporter.sendMail(mailOptions);
+            return { success: true };
+        } catch (sendErr) {
+            if (!useSite) throw sendErr;
+            // 🏬 分站 SMTP 故障时**不能连累这个站的注册**：
+            //    站长配错一个端口，整站客户就收不到验证码、注册不了，
+            //    而他只会看到「发送失败」，然后来找平台。
+            //    做法：改用平台通道代发，但品牌仍然是他 —— 客户完全看不出换了通道。
+            const pUser = cm['smtp_email'] || cm['smtp_user'] || cm['email_user'];
+            const pPass = cm['smtp_pass'];
+            if (!pUser || !pPass) throw sendErr;
+            console.error(`[email] 分站 SMTP 失败(${smtp_host}:${smtp_port}) → 平台通道代发: ${sendErr.message}`);
+            const fallbackTransporter = nodemailer.createTransport({
+                host: cm['smtp_host'] || 'smtp.qq.com',
+                port: parseInt(cm['smtp_port']) || 465,
+                secure: true,
+                auth: { user: pUser, pass: pPass }
+            });
+            await fallbackTransporter.sendMail({
+                ...mailOptions,
+                from: `"${brand} 验证中心" <${pUser}>`
+            });
+            return { success: true, fallback: true, message: `分站 SMTP 故障，已由系统通道代发（${sendErr.message}）` };
+        }
     } catch (error) {
         console.error('Email Send Error:', error);
         return { success: false, message: error.message };
     }
 };
 
-// 📎 备份文件走邮件异地存档（2026-10-14，祥哥：「我需要的是备份的文件」+「发邮箱也行」）
+// 🧪 站长自查：只用**分站自己的 SMTP** 发一封测试信（故意不回退）
+//    这样测出来的结果才是真话 —— 如果这里显示失败，说明他配的账号/端口/授权码有问题，
+//    上线后他的客户正是要走这条通道。回退通道只在故障时兜底，不能拿它冒充"测试通过"。
+export const sendSiteSmtpTest = async (toEmail, siteCfg) => {
+    if (!siteCfg?.smtp_user || !siteCfg?.smtp_pass) {
+        return { success: false, message: '还没填 SMTP 账号或授权码' };
+    }
+    const host = siteCfg.smtp_host;
+    const port = parseInt(siteCfg.smtp_port) || 465;
+    if (!host) return { success: false, message: '还没填 SMTP 服务器地址' };
+    const brand = siteCfg.name ? String(siteCfg.name) : 'XNOW PRO';
+    try {
+        const transporter = nodemailer.createTransport({
+            host, port, secure: port === 465 || port === 587,
+            auth: { user: siteCfg.smtp_user, pass: siteCfg.smtp_pass },
+            connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 20000
+        });
+        await transporter.sendMail({
+            from: `"${brand} 验证中心" <${siteCfg.smtp_user}>`,
+            to: toEmail,
+            subject: `【${brand}】SMTP 配置测试成功`,
+            text: `这封测试邮件说明你的发信配置是通的。\n\n站点：${brand}\nSMTP：${host}:${port}\n发件账号：${siteCfg.smtp_user}\n\n你的客户注册时收到的验证码，就会从这套配置发出。`
+        });
+        return { success: true, message: `测试信已发出，请查收 ${toEmail}（也看一下垃圾箱）` };
+    } catch (e) {
+        return { success: false, message: `发送失败：${e.message}` };
+    }
+};
+
 //
 // 和 TG 那份**互为冗余**：任一通道把账号封了/墙了，另一条还在。
 //

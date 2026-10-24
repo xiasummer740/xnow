@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
 import { isValidDomain, isDomainForbidden, isBindForbidden, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
+import { sendSiteSmtpTest } from '../utils/email.js';
 import { clearSiteCache } from '../middleware/site.js';
 
 // 站点数据一变就让 Host→站点 的缓存失效，避免「新绑域名 60 秒内仍显示主站」
@@ -523,8 +524,32 @@ router.delete('/:id/domain', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) {
+// 🧪 站长自查发信：只用他自己的 SMTP，不回退。
+//    站长在正式开卖前应该点一下这个按钮 —— 否则等客户注册收不到验证码才发现就晚了。
+router.post('/:id/smtp-test', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权操作该分站' });
+    }
+    // 收件地址：优先用请求里给的，其次用站长自己的邮箱
+    let to = String(req.body.email || '').trim();
+    if (!to) {
+      const { User } = await import('../models/index.js');
+      const owner = await User.findByPk(site.owner_id);
+      to = owner?.email || '';
+    }
+    if (!to) return res.json({ status: 'error', message: '请填写接收测试邮件的地址' });
+
+    const result = await sendSiteSmtpTest(to, site);
+    res.json({ status: result.success ? 'success' : 'error', message: result.message });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+router.delete('/:id', authenticate, async (req, res) => {  if (!['admin', 'super_admin'].includes(req.user.role)) {
     return res.status(403).json({ status: 'error', message: '仅管理员可删除分站' });
   }
   try {

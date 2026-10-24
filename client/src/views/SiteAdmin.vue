@@ -164,6 +164,17 @@
             <input v-model="form.smtp_pass" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空/****** 表示不修改" />
           </div>
         </div>
+        <div class="pt-1 space-y-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <input v-model="smtpTestTo" class="flex-1 min-w-[180px] bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="收测试信的邮箱（留空发给你的注册邮箱）" />
+            <button @click="testSmtp" :disabled="smtpTesting"
+              class="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold">
+              {{ smtpTesting ? '发送中…' : '发一封测试信' }}
+            </button>
+          </div>
+          <p v-if="smtpTestMsg" class="text-[11px]" :class="smtpTestOk ? 'text-emerald-400' : 'text-rose-400'">{{ smtpTestMsg }}</p>
+          <p class="text-[11px] text-amber-500/80">⚠️ 一定要先测通再开卖：配错了客户注册收不到验证码，生意做不成。测试信只走你自己的邮箱，不经过平台。</p>
+        </div>
       </section>
 
       <!-- 域名 -->
@@ -268,6 +279,31 @@ const orderTotal = ref(0)
 const customers = ref([])
 const customerTotal = ref(0)
 const PAGE = 30
+const smtpTestTo = ref('')
+const smtpTesting = ref(false)
+const smtpTestMsg = ref('')
+const smtpTestOk = ref(false)
+
+const testSmtp = async () => {
+  if (!site.value) return
+  smtpTesting.value = true
+  smtpTestMsg.value = ''
+  try {
+    // 先把当前表单存下来，否则测的是上一次保存的旧配置
+    await save(true)
+    const res = await fetch(`/api/sites/${site.value.id}/smtp-test`, {
+      method: 'POST',
+      headers: { ...headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: smtpTestTo.value.trim() })
+    })
+    const data = await res.json()
+    smtpTestOk.value = data.status === 'success'
+    smtpTestMsg.value = data.message || (smtpTestOk.value ? '已发送' : '发送失败')
+  } catch (e) {
+    smtpTestOk.value = false
+    smtpTestMsg.value = '请求失败，请重试'
+  } finally { smtpTesting.value = false }
+}
 
 const createForm = ref({ domain: '', name: '', multiplier: 2.5 })
 const form = ref({
@@ -352,8 +388,8 @@ const moveModule = (i, dir) => {
   arr.forEach((m, idx) => (m.order = idx))
 }
 
-const save = async () => {
-  if (!site.value) return
+const save = async (silent = false) => {
+  if (!site.value) return false
   saving.value = true
   try {
     const payload = {
@@ -369,9 +405,10 @@ const save = async () => {
     }
     const res = await fetch(`/api/sites/${site.value.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) })
     const data = await res.json()
-    alert(data.status === 'success' ? '✅ 已保存，访客刷新即可看到新外观' : `❌ ${data.message}`)
+    if (!silent) alert(data.status === 'success' ? '✅ 已保存，访客刷新即可看到新外观' : `❌ ${data.message}`)
     if (data.status === 'success') load()
-  } catch (e) { alert('保存失败') } finally { saving.value = false }
+    return data.status === 'success'
+  } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
 }
 
 const createSite = async () => {
