@@ -1181,3 +1181,46 @@ bash /var/www/xnow/deploy/sites/rehearse.sh    # 或 scp 到 /tmp 再跑
 bash /var/www/xnow/deploy/sites/rehearse.sh         # 只读体检（快）
 bash /var/www/xnow/deploy/sites/rehearse-order.sh   # 深度演练：真下单（约 1 分钟）
 ```
+
+---
+
+## 二十五、自有域名 + 自动证书（85 期实测）
+
+### 已经验过的
+
+| 环节 | 实测结果 |
+|---|---|
+| 平台域不许被分站占用 | 绑 `shop85.taikon.top` → 被拒「免费子域名无需绑定，请填写你自己的域名」✅ |
+| 域名格式校验 / 重复占用校验 | 代码内 `isValidDomain` + 双查 `domain`/`custom_domain` ✅ |
+| DNS 没指过来时 | 返回 `pending` + 明确提示，并**给出本站专属 TXT 值**：<br>`xnow-verify=69111838a24082aa7b759ad0f022074a` ✅ |
+| 此时不写 vhost / 不签证书 | 确认没有生成任何 nginx 配置文件与证书（域名还没通，写了也没用）✅ |
+| 解绑 | vhost + Let's Encrypt 证书目录一并清掉，`nginx -t` 通过 ✅ |
+| 免费子域名发布 | `{"message":"域名已生效（正式证书）","cert_mode":"letsencrypt"}` ✅ |
+| 证书机本身 | `laozhang.taikon.top` 正挂着真实的 LE 证书（签发 Oct 24 → 到期 Jan 22），HTTPS 200 ✅ |
+
+### 修掉的一个会误导站长的小问题
+
+站长先点过「发布」（`cert_mode` 被写成 `letsencrypt`），接着绑自有域名但 DNS 没指过来，
+状态是 `pending`，**界面上却还挂着「正式证书」** —— 他以为已经好了。
+现在 `pending` 时会把 `cert_mode` 清空：
+
+```
+绑定前: cert_mode=letsencrypt status=active
+绑定后: cert_mode=NULL        status=pending   ✅
+```
+
+### 唯一没法在这台机器上验完的一环
+
+「DNS 已经指过来 → 自动跑 certbot 签正式证书」这一支，需要**一个真的指向本机 IP 的外部域名**。
+目前祥哥的域名都在 Cloudflare 橙云后面，A 记录指向 CF 的 IP，不是本机 —— 所以归属验证会走 TXT 分支。
+代码分支本身与「免费子域名发布」共用同一套 `ensureCert`（那套已经签出过真实证书）。
+
+**他自己测的话，三步：**
+
+1. 在「我的分站 → 自有域名」填域名并点绑定；
+2. 按页面提示，在 DNS 加一条记录（二选一）：
+   - 灰云/无 CF：`A` → 本机 IP
+   - 橙云 CF：`TXT` → 页面上给出的 `xnow-verify=...`
+3. 回后台点一次「修复域名」，看到「域名已开通，证书已自动签发 ✅」即成功。
+
+⚠️ Let's Encrypt 对同一组域名有**每周 5 张**的签发限制，测试时别反复连点。

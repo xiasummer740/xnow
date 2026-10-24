@@ -893,6 +893,11 @@ router.post('/:id/domain', authenticate, async (req, res) => {
     const dns = await verifyDomainOwnership(domain, site.domain_token);
     if (!dns.ok) {
       site.domain_status = 'pending';
+      // 84 期：这里必须把 cert_mode 清掉。
+      //   否则站长之前跑过一次「发布」把 cert_mode 写成 letsencrypt，
+      //   新建自有域名验证没过（还是 pending）时，界面依旧挂着「正式证书」——
+      //   他以为已经好了，实际这个域名根本还没通。
+      site.cert_mode = null;
       await site.save();
       bustSiteCache();
       return res.json({
