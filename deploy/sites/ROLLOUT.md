@@ -146,3 +146,64 @@ bash deploy/sites/rollback-sites.sh --env prod --stamp XXX              # 最后
 | 预览端口引用的 CSS 是否含主题规则 | ✅ 命中 |
 
 作用：排除"模板名打错 → 站长选了看着没反应"这类静默失效。
+
+## 九、上线前联调演练结果（2026-10-24 实测，全部只读、生产零改动）
+
+### 1. 真实上线脚本的生产「只读预检」通过
+
+用与上线**完全同构**的部署包（`server/src` 44 文件 + `client/dist` 30 文件 + 迁移脚本 + nginx 模板），
+执行 `deploy-sites.sh --env prod --check`：
+
+```
+✅ 后端 JS 语法全部通过 (43 个文件)
+✅ 前端产物存在
+✅ 迁移脚本存在
+✅ 当前数据快照：users=5 orders=31
+仅检查模式，未做任何改动        退出码 0
+```
+
+预检前后对照：数据 `users=5 orders=31 services=2839 sites=0 tx=39` 完全一致、
+`xnow-spa-https` 的 sha256 未变、首页与 `/api/public/config` 均 200。
+
+### 2. 迁移脚本在「生产真实表结构」上演练通过
+
+把生产库**结构**（12 张表）导出到临时库 `xnow_dry_*`，在临时库上跑真实迁移：
+
+| 检查 | 结果 |
+|---|---|
+| 迁移前关键列 | `orders.site_cost` 0、`transactions.site_id` 0、`sites.custom_domain/smtp_host/hero_layout` 0（`orders.site_id` 已存在，属旧骨架） |
+| 迁移执行 | ✅ 完成，共 **36 项变更**，退出码 0 |
+| 迁移后新列总数 | 36 项齐全 |
+| 幂等性（再跑一次）| ✅「无需变更（已是最新）」，不报错 |
+| 目标库保护 | ✅ 故意传 `MIGRATE_TARGET=xnow_db` 被拒绝并中止 |
+| 生产列数 | 演练后 `orders.site_cost` 仍为 **0**（确认没误伤生产）|
+| 临时库清理 | ✅ 已删除 |
+| 生产最终快照 | `users=5 orders=31 services=2839 sites=0 tx=39` 一字未变 |
+
+**结论**：迁移在生产表结构上不会失败、可重复执行、且打错库会被自身拦住。
+这三条是上线当天最可能出事的点，现在都有实测证据。
+
+### 3. 免费子域名已端到端跑通（公网可访问）
+
+Cloudflare 加 `*.taikon.top` 之后实测发现两个约束：
+- 免费通用证书只覆盖**一级**子域名；`t1.xnow.taikon.top`（两级）解析不到 / 证书不覆盖
+- 直接用泛域名接 nginx 会抢走同机其它项目的子域名
+
+因此改为**每个分站自动生成独立 vhost**（与自有域名同一机制）：
+
+```
+https://laozhang.taikon.top/api/public/config
+  → site_id=11  is_subsite=true  site_name=老张涨粉铺   HTTP 200
+https://laozhang.taikon.top/                          HTTP 200
+xnow.taikon.top / beta.xnow.taikon.top / t1.xnow.taikon.top   全部 200（互不影响）
+```
+
+站长侧配套新增接口 `POST /api/sites/:id/publish`（「修复域名」自助重发 vhost）。
+
+## 十、仍需你本人决定/操作的三件事
+
+| # | 事项 | 谁来做 | 影响 |
+|---|---|---|---|
+| 1 | 看一眼 Beta 并确认"能拿去卖" | 你 | 上线唯一真正前置条件 |
+| 2 | `apt install certbot python3-certbot-nginx` | 你批准我装 | 自有域名从"能用但警告"变成"浏览器绿锁" |
+| 3 | 说一句"部署到生产" | 你 | 我来执行，已备好一键脚本与回滚 |
