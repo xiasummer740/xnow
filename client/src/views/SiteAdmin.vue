@@ -100,6 +100,28 @@
       <!-- 外观 -->
       <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
         <h2 class="font-bold text-sm text-amber-400 mb-3">外观模板</h2>
+
+        <!-- 🎨 三十三期：一键风格预设。
+             站长不需要懂 6 个旋钮怎么配 —— 先挑一套整体风格，
+             不满意再用下面的旋钮微调。每个预设都是一套调好的组合。 -->
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs text-slate-400">一键风格（先挑一套，再微调）</label>
+            <span class="text-[10px] text-slate-600">点一下整套生效</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <button v-for="p in presets" :key="p.key" @click="applyPreset(p)"
+              class="text-left px-3 py-2 rounded-lg border transition hover:border-amber-400/60"
+              :class="activePreset === p.key ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 bg-slate-950/40'">
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="{ background: p.colorHex }"></span>
+                <span class="text-xs font-bold text-white">{{ p.name }}</span>
+              </div>
+              <div class="text-[10px] text-slate-500 leading-tight">{{ p.desc }}</div>
+            </button>
+          </div>
+        </div>
+
         <div class="grid lg:grid-cols-2 gap-5">
           <!-- 左：选择器 -->
           <div class="space-y-3">
@@ -724,6 +746,45 @@ const colors = [
 ]
 // 🧩 二十八期：这里的键必须与 Home.vue 里真实的区块一一对应，
 //    否则站长在后台关了「教程 FAQ」，首页照样显示（之前就是这个 bug）。
+// 🎨 三十三期：风格预设。每个都是"模板 + 色系 + 5 个细节维度"的成套组合，
+//    目的是让不懂设计的站长也能一键得到协调的外观（而不是自己乱配变成大杂烩）。
+//    colorHex 只用于按钮上的小圆点，不写入数据库（数据库里存 color/accent）。
+const presets = [
+  { key: 'neon_purple', name: '霓虹紫', desc: '潮、年轻、夜店感', colorHex: '#a855f7',
+    data: { template: 'neon', color: 'purple', accent: '', ui_radius: 'round', ui_density: 'normal', card_style: 'glass', font_style: 'sans', btn_shape: 'pill', hero_layout: 'center' } },
+  { key: 'neon_cyan', name: '赛博青', desc: '科技、电竞、数据感', colorHex: '#22d3ee',
+    data: { template: 'neon', color: 'cyan', accent: '', ui_radius: 'soft', ui_density: 'compact', card_style: 'glass', font_style: 'mono', btn_shape: 'rounded', hero_layout: 'center' } },
+  { key: 'saas_blue', name: '商务蓝', desc: '可信、正规、企业感', colorHex: '#3b82f6',
+    data: { template: 'saas', color: 'blue', accent: '', ui_radius: 'square', ui_density: 'compact', card_style: 'outline', font_style: 'sans', btn_shape: 'rounded', hero_layout: 'split' } },
+  { key: 'minimal_slate', name: '极简灰', desc: '干净、高级、不抢戏', colorHex: '#e2e8f0',
+    data: { template: 'minimal', color: 'cyan', accent: '#94a3b8', ui_radius: 'soft', ui_density: 'relaxed', card_style: 'outline', font_style: 'sans', btn_shape: 'square', hero_layout: 'center' } },
+  { key: 'magazine_gold', name: '杂志金', desc: '品牌感、像媒体', colorHex: '#d4a017',
+    data: { template: 'magazine', color: 'orange', accent: '#d4a017', ui_radius: 'square', ui_density: 'relaxed', card_style: 'solid', font_style: 'serif', btn_shape: 'square', hero_layout: 'banner' } },
+  { key: 'glass_mint', name: '玻璃青', desc: '清爽、通透、轻', colorHex: '#34d399',
+    data: { template: 'glass', color: 'green', accent: '', ui_radius: 'round', ui_density: 'normal', card_style: 'glass', font_style: 'rounded', btn_shape: 'pill', hero_layout: 'split' } },
+  { key: 'warm_red', name: '热卖红', desc: '促销感、能催单', colorHex: '#ef4444',
+    data: { template: 'classic', color: 'red', accent: '', ui_radius: 'round', ui_density: 'normal', card_style: 'solid', font_style: 'sans', btn_shape: 'pill', hero_layout: 'center' } },
+  { key: 'candy_orange', name: '活泼橙', desc: '亲和、好上手', colorHex: '#f97316',
+    data: { template: 'classic', color: 'orange', accent: '', ui_radius: 'pill', ui_density: 'relaxed', card_style: 'glass', font_style: 'rounded', btn_shape: 'pill', hero_layout: 'split' } },
+  { key: 'deep_green', name: '沉稳绿', desc: '老练、可靠、稳重', colorHex: '#22c55e',
+    data: { template: 'saas', color: 'green', accent: '', ui_radius: 'soft', ui_density: 'normal', card_style: 'solid', font_style: 'sans', btn_shape: 'rounded', hero_layout: 'split' } }
+]
+
+const activePreset = computed(() => {
+  const f = form.value
+  const hit = presets.find(p =>
+    p.data.template === f.template && p.data.color === f.color &&
+    (p.data.accent || '') === (f.accent || '') &&
+    p.data.ui_radius === (f.ui_radius || '') && p.data.ui_density === (f.ui_density || '') &&
+    p.data.card_style === (f.card_style || '') && p.data.font_style === (f.font_style || '') &&
+    p.data.btn_shape === (f.btn_shape || '') && p.data.hero_layout === (f.hero_layout || ''))
+  return hit ? hit.key : ''
+})
+
+// 套用预设：只改表单（客户视角预览立刻变），站长满意再点保存
+const applyPreset = (p) => {
+  Object.assign(form.value, p.data)
+}
 const MODULES = {
   audience: '谁在用（客户案例）',
   steps: '三步开始',
