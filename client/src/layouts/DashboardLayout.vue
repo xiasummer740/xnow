@@ -30,9 +30,10 @@
 
         <!-- 74 期：分站上不出现「我的分站」—— 站长管分站要去主站账号里管，
              分站对客户（甚至对站长自己）就该是一家干净的店，不能露出"我这个店还有后台"。 -->
-        <template v-if="!appStore.isSubsite && ['admin', 'super_admin', 'agent'].includes(userStore.userInfo?.role)">
-          <p class="px-3 pt-4 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">管理</p>
-          <router-link to="/my-site" @click="handleNav('/my-site')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>{{ appStore.lang === 'zh' ? '我的分站' : 'My Site' }}</span></router-link>
+        <template v-if="!appStore.isSubsite">
+          <p class="px-3 pt-4 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ isAgentRole ? '管理' : '开店' }}</p>
+          <router-link to="/my-site" @click="handleNav('/my-site')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>{{ appStore.lang === 'zh' ? (isAgentRole ? '我的分站' : '开通至尊代理') : (isAgentRole ? 'My Site' : 'Become an Agent') }}</span>
+            <span v-if="!isAgentRole" class="nav-badge">¥99/月</span></router-link>
           <router-link to="/admin" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>{{ appStore.t('menu_admin') }}</span></router-link>
           <router-link to="/admin/backup" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/backup')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg><span>{{ appStore.t('menu_backup') || '灾备中心' }}</span></router-link>
           <router-link v-if="!appStore.isSubsite" to="/api-doc" @click="handleNav('/api-doc')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg><span>{{ appStore.t('menu_api') || '开发者 API' }}</span></router-link>
@@ -146,13 +147,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
 import { useRoute } from 'vue-router';
 
-const userStore = useUserStore(); const appStore = useAppStore(); const uiStore = useUiStore();
+const userStore = useUserStore()
+
+// 87 期：代理是付费升级项，「我的分站」对普通用户显示成「开通至尊代理」入口
+const isAgentRole = computed(() => ['admin', 'super_admin', 'agent'].includes(userStore.userInfo?.role));
+const appStore = useAppStore(); const uiStore = useUiStore();
 const route = useRoute(); const isSidebarOpen = ref(false);
 const isProfileMenuOpen = ref(false);
 const upstreamHeaderBalance = ref('');
@@ -293,6 +298,17 @@ onUnmounted(() => {
 
 <style>
 /* 导航项统一样式 */
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  white-space: nowrap;
+}
 .nav-item {
   @apply flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/70 transition-all duration-200;
 }

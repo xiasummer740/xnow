@@ -63,14 +63,13 @@ router.beforeEach((to, from, next) => {
   if (!publicPaths.includes(to.path) && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');
-  } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin' || to.path === '/my-site')) {
+  } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin')) {
       // 🔒 3. 角色守卫：后台页只许 管理员/至尊管理员（防普通用户手输 URL 直捣后台）
       try {
         const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        // 「我的分站」额外放行至尊代理（agent）—— 普通用户仍被拦
-        const allow = to.path === '/my-site'
-          ? ['admin', 'super_admin', 'agent']
-          : ['admin', 'super_admin'];
+        // 「我的分站」现在对所有登录用户开放：普通用户要先在这里开通至尊代理
+        // （¥99/月）。不开代理就开不了分站，但**入口必须让他们看得到**。
+        const allow = ['admin', 'super_admin'];
         if (!allow.includes(payload.role)) return next('/');
         next();
       } catch {

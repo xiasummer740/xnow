@@ -11,14 +11,33 @@
     <!-- 📣 推荐同行开店：站长把朋友介绍来开至尊代理/充值，他拿 10% 返佣。
          只出现在主站的「我的分站」页，分站上不露痕迹。 -->
 
+    <!-- 💳 代理资格 + 分站月费（87 期商业化） -->
+    <SiteBilling ref="billingRef" @changed="load()" @status="billingState = $event" />
+
     <div v-if="loading" class="text-center py-20 text-slate-500">加载中…</div>
+
+    <!-- 还不是代理 → 先开通代理（上面那张卡就是入口，这里只做解释） -->
+    <div v-else-if="!site && !billingState.isAgent" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 text-center">
+      <div class="text-3xl mb-2">🔒</div>
+      <h2 class="font-bold mb-2">还没有至尊代理资格</h2>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        开分站需要先开通至尊代理（¥{{ plan.agent_monthly }}/月）。<br />
+        开通后即可创建分站：首个分站 {{ plan.trial_hours }} 小时免费试用，之后 ¥{{ plan.site_monthly }}/月 / 站。
+      </p>
+    </div>
 
     <!-- 还没有分站 → 创建 -->
     <div v-else-if="!site" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6">
       <h2 class="font-bold mb-4">开通你的分站</h2>
       <div class="space-y-3">
+        <p class="text-[11px] text-amber-500/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 leading-relaxed">
+          💳 首个分站 <b>{{ plan.trial_hours }} 小时免费试用</b>，之后 <b>¥{{ plan.site_monthly }}/月</b>；
+          每个分站单独计费，到期未续费会停站（数据保留，续费即恢复）。
+        </p>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">站点域名（子域名形式，如 myshop.xnow.taikon.top）</label>
+          <label class="block text-xs text-slate-400 mb-1">
+            站点域名 <span class="text-slate-500">（可不填 —— 留空自动分配一个免费子域名，之后也能改成自己的域名）</span>
+          </label>
           <input v-model="createForm.domain" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="myshop.xnow.taikon.top" />
         </div>
         <div>
@@ -683,10 +702,14 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '../stores/user'
+import SiteBilling from '../components/site/SiteBilling.vue'
 import SitePricing from '../components/site/SitePricing.vue'
 
 const userStore = useUserStore()
 const loading = ref(true)
+const billingRef = ref(null)
+const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 99 })
+const plan = ref({ site_monthly: 99, agent_monthly: 99, trial_hours: 24 })
 const saving = ref(false)
 const creating = ref(false)
 const binding = ref(false)
@@ -1055,6 +1078,10 @@ const headers = () => ({
 
 const load = async () => {
   loading.value = true
+  // 计费规则（价格改在后台配置里，前端不用跟着改代码）
+  fetch('/api/billing/plan').then(r => r.json()).then(p => {
+    if (p.status === 'success') plan.value = p.data
+  }).catch(() => {})
   try {
     const res = await fetch('/api/sites', { headers: headers() })
     const data = await res.json()
@@ -1187,16 +1214,25 @@ const save = async (silent = false) => {
 const createSite = async () => {
   creating.value = true
   try {
+    const payload = {
+      name: createForm.value.name,
+      multiplier: createForm.value.multiplier
+    }
+    // 域名留空 = 让后端自动分配免费子域名
+    const d = String(createForm.value.domain || '').trim()
+    if (d) payload.domain = d
+
     const res = await fetch('/api/sites', {
       method: 'POST', headers: headers(),
-      body: JSON.stringify({
-        domain: createForm.value.domain, name: createForm.value.name,
-        multiplier: createForm.value.multiplier
-      })
+      body: JSON.stringify(payload)
     })
     const data = await res.json()
-    alert(data.status === 'success' ? '✅ 分站已开通' : `❌ ${data.message}`)
-    if (data.status === 'success') load()
+    alert(data.status === 'success' ? `✅ ${data.message}` : `❌ ${data.message}`)
+    if (data.status === 'success') {
+      createForm.value.domain = ''
+      load()
+      billingRef.value?.load?.()
+    }
   } catch (e) { alert('开通失败') } finally { creating.value = false }
 }
 
