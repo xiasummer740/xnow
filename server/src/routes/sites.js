@@ -319,20 +319,21 @@ router.post('/', authenticate, async (req, res) => {
       ? parseInt(req.body.owner_id)
       : req.user.id;
 
-  // 🔢 三十八期：每个站长能开几个站。
-  //    默认 0 = 不限（保持现状，不动已有行为）。
-  //    祥哥若定"一个站长只能开一个站"，把 configs.max_sites_per_agent 设成 1 即可 ——
-  //    这是经营策略而非常量，所以做成配置项，不用改代码、不用重新部署。
+  // 🔢 每位站长能开几个站。
+  //    ⚠️ 默认值 = 1：每位站长只能开 1 个分站（祥哥 2026-10-24 定）。
+  //    想放宽：把 configs.max_sites_per_agent 设成 2 / 3 / …；显式设 0 表示不限。
+  //    做成配置项是因为这属于经营策略，改规则不该每次都改代码重新部署。
   //    平台管理员（admin/super_admin）不受限制，方便自己做测试站。
   if (!['admin', 'super_admin'].includes(req.user.role)) {
-    let maxSites = 0;
+    let maxSites = 1;
     try {
       const cfg = await Config.findOne({ where: { key: 'max_sites_per_agent' } });
       if (cfg && cfg.value !== '' && cfg.value !== null) {
         const n = parseInt(cfg.value, 10);
-        if (Number.isFinite(n) && n > 0) maxSites = n;
+        // 显式配置优先：0 = 不限；正数 = 上限
+        if (Number.isFinite(n) && n >= 0) maxSites = n;
       }
-    } catch (e) { /* 读不到配置就不限制：不能因为配置表异常让人开不了站 */ }
+    } catch (e) { /* 读不到配置就用默认值 1：不能因为配置表异常让人无限开站 */ }
     if (maxSites > 0) {
       const owned = await Site.count({ where: { owner_id: ownerId } });
       if (owned >= maxSites) {

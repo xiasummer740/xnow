@@ -60,10 +60,10 @@
         <div class="absolute inset-0 bg-amber-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"></div>
         <div class="h-full bg-slate-900 rounded-[1.8rem] p-8 relative z-10 flex flex-col items-center text-center">
           <div class="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-600 rounded-full flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(245,158,11,0.5)] mb-6 transform group-hover:scale-110 transition-transform duration-500">📉</div>
-          <h3 class="text-2xl font-black text-white mb-2 tracking-wide">{{ appStore.lang === 'zh' ? '极致底价垄断' : 'Absolute Floor Price' }}</h3>
+          <h3 class="text-2xl font-black text-white mb-2 tracking-wide">{{ appStore.lang === 'zh' ? '超值会员价' : 'Member Pricing' }}</h3>
           <div class="text-amber-400 font-black text-6xl my-6 drop-shadow-[0_0_15px_rgba(245,158,11,0.6)]">{{ displayDiscount }} <span class="text-2xl font-bold">{{ appStore.lang === 'zh' ? '折起' : 'X' }}</span></div>
           <p class="text-slate-400 text-sm leading-relaxed">
-            {{ appStore.lang === 'zh' ? `突破普通用户价格限制，享受全站千万商品骨折级拿货底价。单单省钱，单单赚钱，利润空间彻底释放，你就是源头！` : 'Break through regular pricing limits and enjoy extreme wholesale prices. Maximize your profit margins instantly!' }}
+            {{ appStore.lang === 'zh' ? `会员专享更低价格，全站商品统一折扣，批量下单更省。单单省钱，单单省心。` : 'Members enjoy lower prices across the whole catalog, with extra savings on bulk orders.' }}
           </p>
         </div>
       </div>

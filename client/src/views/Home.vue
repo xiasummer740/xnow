@@ -102,7 +102,7 @@
         <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition">1</div>
           <h3 class="text-white font-black text-lg mb-2">{{ appStore.lang === 'zh' ? '注册账号' : 'Sign Up' }}</h3>
-          <p class="text-slate-500 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '手机号注册，无需实名，30秒完成。注册即享全网底价。' : 'Sign up with phone number in 30 seconds. Instant access to wholesale pricing.' }}</p>
+          <p class="text-slate-500 text-sm leading-relaxed">{{ appStore.lang === 'zh' ? '手机号注册，无需实名，30秒完成。注册即享会员价。' : 'Sign up with phone number in 30 seconds. Instant access to wholesale pricing.' }}</p>
         </div>
         <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
           <div class="w-14 h-14 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition">2</div>
@@ -161,7 +161,7 @@
     <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq') }" class="site-section relative z-20 max-w-2xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ' }}</h2>
       <div class="space-y-3">
-        <div v-for="(faq, i) in faqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div v-for="(faq, i) in visibleFaqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <button @click="faq.open = !faq.open" class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition">
             <span class="text-white font-bold text-sm">{{ faq[appStore.lang].q }}</span>
             <span :class="['text-amber-400 transition-transform', faq.open ? 'rotate-45' : '']">+</span>
@@ -202,7 +202,7 @@ const hero = computed(() => {
     subtitle: s.hero_subtitle || (zh
       ? 'TikTok 涨粉、IG 粉丝、YouTube 订阅、Telegram 群成员、Facebook / X 涨粉、网站流量 —— 全平台社媒增长一次搞定'
       : 'Buy TikTok followers, Instagram likes, YouTube subscribers, Telegram members, Facebook & X followers, website traffic — all platforms in one SMM panel'),
-    desc: s.hero_desc || (zh ? '极速自动交付 · 全网底价 · 无需账号密码 · 注册即用' : 'Instant delivery · Wholesale prices · No password needed · Sign up and go'),
+    desc: s.hero_desc || (zh ? '极速自动交付 · 超值价格 · 无需账号密码 · 注册即用' : 'Instant delivery · Great prices · No password needed · Sign up and go'),
     btn1Text: s.hero_btn1_text || (zh ? '⚡ 立即注册体验' : '⚡ Get Started Now'),
     btn1Url: s.hero_btn1_url || '',
     btn2Text: s.hero_btn2_text || (zh ? '🛡️ 安全节点' : '🛡️ VPN'),
@@ -283,15 +283,20 @@ const faqs = reactive([
   { zh: { q: '多久能看到效果？', a: '大部分服务下单后几秒到几分钟内启动。TikTok 千粉最快 10 分钟完成，具体速度取决于所选服务。' }, en: { q: 'How fast will I see results?', a: 'Most orders start within seconds to a few minutes. A TikTok 1K followers order can complete in ~10 minutes; speed depends on the service.' }, open: false },
   { zh: { q: '会掉粉吗？会被封号吗？', a: '部分服务标注了"30天可补"，掉粉可自动补充。关于封号——我们运营多年，从未有客户因此被封。平台无法判断是谁购买了服务。' }, en: { q: 'Will followers drop? Is it safe from bans?', a: 'Services marked "30-day refill" auto-refill any drops. On safety — we have operated for years without a customer being banned for using us.' }, open: false },
   { zh: { q: '怎么付款？', a: '支持微信支付、支付宝、USDT(TRC20) 三种方式。单次充值 500 元以上免手续费。' }, en: { q: 'What payment methods do you accept?', a: 'We accept WeChat Pay, Alipay and USDT (TRC20). Top-ups over ¥500 are fee-free.' }, open: false },
-  { zh: { q: '可以自己定价转卖吗？', a: '可以！升级至尊代理(¥99/月)后享受底价，同时开放 API 接口，你可以搭建自己的站点，自己定价转卖。' }, en: { q: 'Can I resell at my own price?', a: 'Yes! Become an agent (from ¥99/month) for wholesale rates plus API access to build and price your own SMM site.' }, open: false },
+  // 🚫 这条只在平台主站展示：在分站上教客户「搭自己的站、自己定价转卖」，等于帮站长培养竞争对手。
+  { subsiteHidden: true, zh: { q: '可以自己定价转卖吗？', a: '可以！升级至尊代理(¥99/月)后享受更优价格，同时开放 API 接口，你可以搭建自己的站点，自己定价转卖。' }, en: { q: 'Can I resell at my own price?', a: 'Yes! Become an agent (from ¥99/month) for wholesale rates plus API access to build and price your own SMM site.' }, open: false },
 ]);
+
+// 分站不展示会挖站长墙角的 FAQ 条目（如「你也可以开站转卖」）
+const visibleFaqs = computed(() => (appStore.isSubsite ? faqs.filter((f) => !f.subsiteHidden) : faqs));
+
 
 // FAQPage 结构化数据：与 faqs 同一数据源，随语言切换重建（/ 中文、/en 英文）
 function updateFaqSchema() {
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: faqs.map((f) => ({
+    mainEntity: visibleFaqs.value.map((f) => ({
       '@type': 'Question',
       name: f[appStore.lang].q,
       acceptedAnswer: { '@type': 'Answer', text: f[appStore.lang].a },
