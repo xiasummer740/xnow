@@ -239,10 +239,20 @@ const cleanDescription = (t) => {
                 </div>
                 <div v-else class="bg-slate-800/80 border border-amber-500/30 rounded-3xl p-6 shadow-[0_0_30px_rgba(251,191,36,0.1)] backdrop-blur-sm">
                     <h3 class="text-white font-bold mb-4 flex items-center"><span class="text-amber-400 mr-2">⚡</span> {{ app.t('usd_desc_title') }}</h3>
-                    <p class="text-xs leading-relaxed text-slate-300 mb-4">
+                    <p class="text-xs leading-relaxed text-slate-300 mb-2">
                         {{ app.t('usd_desc_1') }}<strong class="text-amber-400">{{ app.t('usd_desc_2') }}</strong>{{ app.t('usd_desc_3') }}
                     </p>
-                    <a href="https://www.trxyes.com/" target="_blank" class="block bg-slate-900 border border-amber-500 text-amber-400 text-xs font-bold py-3 text-center rounded-xl hover:bg-amber-500 hover:text-black transition mb-4">{{ app.t('usd_btn') }}</a>
+                    <p class="text-xs leading-relaxed text-slate-300 mb-2">
+                        {{ app.t('usd_desc_4') }}<strong class="text-amber-400">{{ app.t('usd_desc_5') }}</strong>{{ app.t('usd_desc_6') }}
+                    </p>
+                    <!-- 网址直接用可点文字露出来（对齐源头站写法），点击新窗口打开 -->
+                    <p class="mb-4">
+                        <a href="https://www.trxyes.com/" target="_blank" rel="noopener noreferrer"
+                           class="text-xs font-bold text-amber-400 hover:text-amber-300 underline decoration-amber-500/50 underline-offset-2 break-all">
+                            https://www.trxyes.com/
+                        </a>
+                        <span class="text-[10px] text-slate-500 ml-1">{{ app.t('usd_link_note') }}</span>
+                    </p>
                     
                     <div v-if="usdtImageUrl" class="mt-6 relative group cursor-zoom-in overflow-hidden rounded-xl border border-slate-700 shadow-lg" @click="showLightbox = true">
                         <img :src="usdtImageUrl" class="w-full h-auto object-cover transition duration-500 group-hover:scale-105 opacity-80 group-hover:opacity-100" />
