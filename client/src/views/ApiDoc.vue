@@ -11,7 +11,7 @@
       <h3 class="text-lg font-bold text-white mb-4 relative z-10">API 连接凭证</h3>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 relative z-10">
         <div><div class="text-xs text-slate-500 font-bold mb-1 uppercase tracking-wider">请求方式 (Method)</div><div class="text-white font-mono bg-slate-900 px-3 py-1.5 rounded inline-block">POST</div></div>
-        <div class="md:col-span-2"><div class="text-xs text-slate-500 font-bold mb-1 uppercase tracking-wider">接口地址 (API URL)</div><div class="text-green-400 font-mono bg-slate-900 px-3 py-1.5 rounded inline-block border border-green-500/30 w-full overflow-x-auto">https://xnow.taikon.top/api/v2</div></div>
+        <div class="md:col-span-2"><div class="text-xs text-slate-500 font-bold mb-1 uppercase tracking-wider">接口地址 (API URL)</div><div class="text-green-400 font-mono bg-slate-900 px-3 py-1.5 rounded inline-block border border-green-500/30 w-full overflow-x-auto">{{ apiBase }}/api/v2</div></div>
         <div><div class="text-xs text-slate-500 font-bold mb-1 uppercase tracking-wider">返回格式 (Format)</div><div class="text-white font-mono bg-slate-900 px-3 py-1.5 rounded inline-block">JSON</div></div>
         <div class="md:col-span-4 mt-2">
           <div class="text-xs text-slate-500 font-bold mb-1 uppercase tracking-wider">API 密钥 (API Key) - 请妥善保管</div>
@@ -103,6 +103,10 @@ import { useUiStore } from '../stores/ui';
 const userStore = useUserStore(); 
 const appStore = useAppStore();
 const uiStore = useUiStore();
+
+// 🔒 分站必须显示自己的接口地址：站长把 API 文档发给客户时，
+//    写死平台域名等于直接告诉客户"他去哪进货"，也等于把客户导回主站。
+const apiBase = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : ''
 
 const copyKey = () => { 
   if(userStore.userInfo?.api_key){ 

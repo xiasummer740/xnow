@@ -350,11 +350,23 @@
             <input v-model="form.hero_btn2_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="https://t.me/你的客服" />
           </div>
           <div class="md:col-span-2">
-            <label class="block text-xs text-slate-400 mb-1">Logo 图片地址</label>
+            <label class="block text-xs text-slate-400 mb-1 flex items-center justify-between">
+              <span>Logo 图片</span>
+              <button type="button" @click="pickImage('logo')" :disabled="uploading"
+                class="text-[10px] px-2 py-1 rounded border border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
+                {{ uploading === 'logo' ? '上传中…' : '📤 上传图片' }}
+              </button>
+            </label>
             <input v-model="form.logo" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="/logo.png 或 https://你的图床/logo.png" />
           </div>
           <div class="md:col-span-2">
-            <label class="block text-xs text-slate-400 mb-1">首页背景图地址（可选）</label>
+            <label class="block text-xs text-slate-400 mb-1 flex items-center justify-between">
+              <span>首页背景图（可选）</span>
+              <button type="button" @click="pickImage('hero_bg_url')" :disabled="uploading"
+                class="text-[10px] px-2 py-1 rounded border border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
+                {{ uploading === 'hero_bg_url' ? '上传中…' : '📤 上传图片' }}
+              </button>
+            </label>
             <input v-model="form.hero_bg_url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="留空用模板自带背景" />
           </div>
         </div>
@@ -782,6 +794,41 @@ const activePreset = computed(() => {
 })
 
 // 套用预设：只改表单（客户视角预览立刻变），站长满意再点保存
+// 🖼️ 三十七期：图片上传（Logo / 首页背景图）。
+// 站长大多不会把图片传到图床再拿链接 —— 给个按钮直接传。
+const uploading = ref('')
+const pickImage = (field) => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/png,image/jpeg,image/webp,image/gif'
+  input.onchange = async () => {
+    const f = input.files && input.files[0]
+    if (!f) return
+    if (f.size > 3 * 1024 * 1024) { alert('图片不能超过 3MB，建议先压缩一下'); return }
+    if (!site.value || !site.value.id) { alert('请先创建分站'); return }
+    uploading.value = field
+    try {
+      const fd = new FormData()
+      fd.append('file', f)
+      const res = await fetch(`/api/sites/${site.value.id}/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('xnow_token') || ''}` },
+        body: fd
+      })
+      const data = await res.json()
+      if (data.status === 'success' && data.data && data.data.url) {
+        form.value[field] = data.data.url
+      } else {
+        alert(data.message || '上传失败')
+      }
+    } catch (e) {
+      alert('上传失败：' + e.message)
+    } finally {
+      uploading.value = ''
+    }
+  }
+  input.click()
+}
 const applyPreset = (p) => {
   Object.assign(form.value, p.data)
 }

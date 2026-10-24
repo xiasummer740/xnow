@@ -158,6 +158,17 @@ server {
         proxy_read_timeout 300s;
     }
 
+    # 🖼️ 站长上传的 Logo / 首页背景图。
+    #    必须写在这里：分站用自己域名访问时走的就是这份 vhost，
+    #    漏了这段的话图片请求会掉进下面的 SPA 兜底，返回 HTML（图片显示不出来，
+    #    而且 HTTP 状态还是 200，非常难查 —— 三十七期实测踩到过）。
+    location /uploads/ {
+        alias ${process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads'}/;
+        expires 7d;
+        add_header Cache-Control "public";
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri $uri.html $uri/ /index.html;
     }

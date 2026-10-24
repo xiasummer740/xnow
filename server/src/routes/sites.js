@@ -7,6 +7,8 @@ import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
 import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
+import multer from 'multer';
+import fs from 'fs';
 import { clearSiteCache } from '../middleware/site.js';
 
 // 站点数据一变就让 Host→站点 的缓存失效，避免「新绑域名 60 秒内仍显示主站」
@@ -618,6 +620,40 @@ router.delete('/:id/domain', authenticate, async (req, res) => {
 
 // 🧪 站长自查发信：只用他自己的 SMTP，不回退。
 //    站长在正式开卖前应该点一下这个按钮 —— 否则等客户注册收不到验证码才发现就晚了。
+// 🖼️ 三十七期：站长上传 Logo / 首页背景图。
+//    之前只能填「图片地址」，非技术站长根本没法把图片传到网上 —— 想要个头像都做不到。
+//    这里收 3MB 以内的常见图片，存到 dist 之外的独立目录（重新部署不会把图冲掉）。
+const UPLOAD_DIR = process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads';
+const siteUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 3 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /^image\/(png|jpe?g|webp|gif)$/.test(file.mimetype || '');
+    cb(ok ? null : new Error('只支持 PNG / JPG / WEBP / GIF 图片'), ok);
+  }
+});
+
+router.post('/:id/upload', authenticate, (req, res) => {
+  siteUpload.single('file')(req, res, async (err) => {
+    if (err) return res.status(400).json({ status: 'error', message: err.message || '上传失败' });
+    try {
+      const site = await Site.findByPk(req.params.id);
+      if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+      const isStaffU = ['admin', 'super_admin'].includes(req.user.role);
+      if (!isStaffU && site.owner_id !== req.user.id) return res.status(403).json({ status: 'error', message: '无权操作' });
+      if (!req.file || !req.file.buffer) return res.status(400).json({ status: 'error', message: '没有收到文件' });
+
+      const ext = ({ 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' })[req.file.mimetype] || '.png';
+      const name = `site-${site.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      fs.writeFileSync(path.join(UPLOAD_DIR, name), req.file.buffer);
+
+      res.json({ status: 'success', message: '上传成功', data: { url: `/uploads/${name}` } });
+    } catch (e) {
+      res.status(500).json({ status: 'error', message: '上传失败: ' + e.message });
+    }
+  });
+});
 // 🔧 「修复域名」：重新生成 vhost + 重载 nginx。
 //    典型场景：建站时 nginx 恰好不可用、或站长改过 DNS 后要重试。
 router.post('/:id/publish', authenticate, async (req, res) => {

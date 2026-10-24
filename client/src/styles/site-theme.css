@@ -270,3 +270,61 @@ html[data-hero="banner"] .hero-wrap::after {
   html[data-hero="split"] .hero-wrap .hero-actions { text-align: center; justify-content: center; }
   html[data-hero="split"] .hero-visual { display: none; }
 }
+
+/* 🏷️ 三十七期：分站名称文字用「品牌色」渲染。
+   之前首页 logo 文字硬编码琥珀金渐变 —— 站长选了紫色主题、站名却是金色，
+   两个主色打架，看起来就像"套模板没改干净"。现在跟随品牌色。
+   主站不受影响：没有 data-brand 时回落到原来的琥珀金。 */
+.site-brand-text {
+  background: linear-gradient(135deg, var(--brand, #fbbf24), var(--brand-strong, #f59e0b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html:not([data-color]) .site-brand-text {
+  background: linear-gradient(90deg, #fde68a, #facc15, #d97706);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 🎨 三十七期：分站把「平台固定配色」统一收编到品牌色。
+   起因：用无头浏览器截图分站首页后发现 —— 站长选了紫色主题，
+   但标题强调词、24/7 数字、价格、图标底色全是硬编码的琥珀金，
+   两个主色打架，观感就是"套了个模板没改干净"。
+   下面的覆盖只在分站生效（html 上有 data-color 才是分站），主站零影响。 */
+html[data-color] .text-amber-400,
+html[data-color] .text-amber-300,
+html[data-color] .text-yellow-400 {
+  color: var(--brand) !important;
+}
+html[data-color] .bg-amber-500\/10,
+html[data-color] .bg-amber-400\/10 {
+  background-color: var(--brand-soft) !important;
+}
+html[data-color] .border-amber-500\/30,
+html[data-color] .border-amber-400\/30,
+html[data-color] .border-amber-400\/40 {
+  border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important;
+}
+html[data-color] .bg-amber-400,
+html[data-color] .bg-amber-500 {
+  background-color: var(--brand) !important;
+  color: #0b1220 !important;
+}
+/* 主按钮：统一成品牌色渐变（覆盖掉硬编码的琥珀→黄渐变） */
+html[data-color] .site-btn {
+  background-image: linear-gradient(135deg, var(--brand), var(--brand-strong)) !important;
+  color: #0b1220 !important;
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--brand) 30%, transparent) !important;
+}
+/* 站名/标题强调词：必须压过 Tailwind 的渐变工具类 */
+html[data-color] .site-brand-text {
+  background: linear-gradient(135deg, var(--brand), var(--brand-strong)) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+html[data-color] .site-card {
+  border-color: color-mix(in srgb, var(--brand) 22%, transparent) !important;
+}

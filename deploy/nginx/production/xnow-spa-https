@@ -56,6 +56,16 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # 🖼️ 站长上传的图片（分站 Logo / 首页背景图）。
+    #    刻意放在 dist **之外**：重新部署会整包替换 dist，放在里面图片会被冲掉。
+    #    注意：这个目录不在 git 里，换机时要单独打包迁移（见 ROLLOUT.md）。
+    location /uploads/ {
+        alias /var/www/xnow-uploads/;
+        expires 7d;
+        add_header Cache-Control "public";
+        try_files $uri =404;
+    }
+
     # 构建产物带内容哈希：内容一变文件名就变，可以放心长缓存
     location /assets/ {
         root /var/www/xnow/client/dist;

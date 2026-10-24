@@ -3,12 +3,12 @@
     <header class="relative z-20 flex items-center justify-between px-6 py-4 md:px-12 lg:py-6 max-w-7xl mx-auto">
       <div class="flex items-center space-x-3">
         <img :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-10 w-10 md:h-12 md:w-12 object-contain drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" alt="Logo">
-        <span class="text-2xl md:text-3xl font-black italic tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-600 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">{{ appStore.siteName || 'XNOW' }}</span>
+        <span class="text-2xl md:text-3xl font-black italic tracking-widest site-brand-text">{{ appStore.siteName || 'XNOW' }}</span>
       </div>
       <div class="flex items-center space-x-4 md:space-x-6">
         <button @click="toggleLangRoute" class="text-slate-300 hover:text-white font-bold transition text-sm md:text-base select-none">{{ appStore.lang === 'zh' ? 'EN' : '中' }}</button>
-        <router-link v-if="userStore.token" to="/order" class="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.t('console') || '控制台' }}</router-link>
-        <router-link v-else to="/login" class="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '登录 / 注册' : 'Login / Register' }}</router-link>
+        <router-link v-if="userStore.token" to="/order" class="site-btn bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.t('console') || '控制台' }}</router-link>
+        <router-link v-else to="/login" class="site-btn bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-900 font-black px-5 py-2 md:px-8 md:py-2.5 rounded-full transition transform hover:scale-105 shadow-[0_0_20px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '登录 / 注册' : 'Login / Register' }}</router-link>
       </div>
     </header>
 
@@ -16,11 +16,11 @@
       <div class="hero-copy flex flex-col items-center">
       <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs md:text-sm font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(251,191,36,0.2)] backdrop-blur-md">{{ hero.badge }}</div>
       <h1 v-if="hero.title" class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
-        <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ hero.title }}</span>
+        <span class="site-brand-text text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ hero.title }}</span>
       </h1>
       <h1 v-else class="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
         {{ appStore.lang === 'zh' ? '让你的社交媒体' : 'Make Your' }}<br/>
-        <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ appStore.lang === 'zh' ? '🔥 火速出圈' : 'Social Media Explode' }}</span>
+        <span class="site-brand-text text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">{{ appStore.lang === 'zh' ? '🔥 火速出圈' : 'Social Media Explode' }}</span>
       </h1>
       <p class="text-slate-300 text-base md:text-lg max-w-2xl mx-auto mb-4 leading-relaxed">
         {{ hero.subtitle }}
@@ -75,7 +75,7 @@
 
     <!-- Use cases -->
     <section v-if="appStore.moduleEnabled('audience')" :style="{ order: appStore.moduleOrder('audience') }" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
-      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 谁在用 XNOW' : '🎯 Who It’s For' }}</h2>
+      <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.lang === 'zh' ? '🎯 谁在用 ' + (appStore.siteName || '我们') : '🎯 Who It’s For' }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <router-link to="/vpn" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
           <div class="text-3xl mb-3">🎬</div>
