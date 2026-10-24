@@ -3,7 +3,13 @@
 # XNOW 分站体系：生产部署脚本（69 期编写，**尚未对生产执行过**）
 #
 # 用法（祥哥验收通过、说「可以上」之后才跑）：
-#   ssh xnow-vps 'bash /tmp/deploy-prod.sh'
+#   ① 先演练（只读，什么都不改）：
+#        ssh xnow-vps 'XNOW_DRY_RUN=1 bash /tmp/deploy-prod.sh'
+#   ② 确认无误后正式上线：
+#        ssh xnow-vps 'bash /tmp/deploy-prod.sh'
+#
+# ⚠️ 生产在 main 分支、没有 deploy/ 目录，所以脚本不能"就地跑"，
+#    要用 deploy/sites/go-live.sh 把本脚本从分支里取出来再跑（见那个文件）。
 #
 # 设计原则：
 #   1. 每一步都可单步回滚，失败立刻停，不留半成品状态；
@@ -61,6 +67,62 @@ cp "$APP/server/.env" "$BAK/server.env" 2>/dev/null && echo "  ✅ server/.env �
 
 step "2. 拉代码（$BRANCH）"
 git fetch origin "$BRANCH" || die "fetch 失败"
+
+# 🔴 81 期：切分支/拉代码最容易被两件事卡死，必须先清理 ——
+#   ① 已跟踪文件被手工改过 → git checkout 拒绝（Your local changes would be overwritten）
+#   ② 未跟踪文件与分支同名 → git pull 报（untracked working tree files would be overwritten）
+#   生产上这两种都真实存在（5 个路由文件 + client/public/usdt-guide.jpg）。
+#   做法：先原样备份到 $BAK/preflight/，再清理；备份留着，随时能捡回来。
+PREFLIGHT="$BAK/preflight"
+CHANGED=$(git diff --name-only)
+if [ -n "$CHANGED" ]; then
+  echo "  ⚠️ 生产有 $(echo "$CHANGED" | wc -l) 个已跟踪文件被手工改过（备份后还原）："
+  echo "$CHANGED" | while read -r f; do
+    [ -z "$f" ] && continue
+    if [ -f "$f" ]; then
+      mkdir -p "$PREFLIGHT/tracked/$(dirname "$f")"
+      cp -p "$f" "$PREFLIGHT/tracked/$f"
+    fi
+    echo "     · $f"
+  done
+  if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then echo "     [dry-run] 不执行 git checkout"; else
+    git checkout -- . || die "还原工作区失败"
+  fi
+fi
+
+COLLIDE=$(git ls-files --others --exclude-standard)
+if [ -n "$COLLIDE" ]; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    git cat-file -e "origin/$BRANCH:$f" 2>/dev/null || continue   # 只处理"分支里也有"的
+    local_sha=$(sha1sum "$f" 2>/dev/null | cut -d' ' -f1)
+    branch_sha=$(git cat-file -p "origin/$BRANCH:$f" | sha1sum | cut -d' ' -f1)
+    if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then
+      if [ "$local_sha" = "$branch_sha" ]; then
+        echo "     [dry-run] 会删除未跟踪文件 $f（与分支同内容，无损）"
+      else
+        echo "     [dry-run] 会备份并删除未跟踪文件 $f（⚠️ 内容与分支不同）"
+      fi
+      continue
+    fi
+    mkdir -p "$PREFLIGHT/untracked/$(dirname "$f")"
+    cp -p "$f" "$PREFLIGHT/untracked/$f" 2>/dev/null
+    rm -f "$f"
+    if [ "$local_sha" = "$branch_sha" ]; then
+      echo "     🧹 删除未跟踪文件 $f（与分支同内容，无损）"
+    else
+      echo "     🧹 删除未跟踪文件 $f（⚠️ 内容与分支不同，已备份到 $PREFLIGHT/untracked/$f）"
+    fi
+  done <<< "$COLLIDE"
+fi
+
+if [ "${XNOW_DRY_RUN:-0}" = "1" ]; then
+  echo ""
+  echo "  [dry-run] 到此处为止都是只读检查，没有改动任何文件。"
+  echo "  [dry-run] 备份目录（本次未创建）会是：$PREFLIGHT"
+  exit 0
+fi
+
 git checkout "$BRANCH" || die "切分支失败"
 git pull --ff-only origin "$BRANCH" || die "拉代码失败"
 echo "  现在提交: $(git log --oneline -1)"
