@@ -8,11 +8,41 @@ const i18nDict = {
   vip_title: 'Upgrade to VIP Agent', vip_subtitle: 'Unlock wholesale prices and easily build your own SMM panel with our seamless API.', vip_feature1_title: '📉 Ultimate Wholesale Price', vip_feature1_desc: 'Bypass the middlemen! Enjoy 20%~50% off the standard retail price. Maximize your profit margins.', vip_feature2_title: '🔌 API Reseller Panel', vip_feature2_desc: 'Full access to our Developer API. Sync our entire service list to your own SMM panel and become a platform owner.', vip_feature3_title: '⚡ Priority Tech Support', vip_feature3_desc: '24/7 dedicated support channel. Auto-refills and instant refunds for absolute peace of mind.', vip_status_admin: 'You have Supreme Admin privileges. No need to upgrade.', vip_status_active: 'VIP Agent Status: ACTIVE', vip_expire: 'Expires on: ', vip_btn_renew: 'Renew VIP Status (¥ 99 / 30 Days)', vip_btn_upgrade: 'Unlock VIP Agent (¥ 99 / 30 Days)', menu_vpn: '🛡️ Secure VPN', vpn_menu_shop: '🛒 Plans', vpn_menu_clients: '📡 My Nodes', vpn_console_title: 'Secure Node Console', vpn_shop_cta: 'Get Started', vpn_buy: 'Buy Now', vpn_no_clients: 'No active nodes. Go get one!', vpn_traffic: 'Traffic', vpn_expiry: 'Expiry', vpn_vps: 'Location', vpn_status_active: 'Active' }
 };
 export const useAppStore = defineStore('app', {
-  state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0 }),
+  state: () => ({ currency: 'CNY', lang: 'zh', exchangeRate: 7.25, siteName: 'XNOW', siteLogo: '/logo.png', tgBotLink: 'https://t.me/Xnow001Bot', globalRefreshTrigger: 0,
+    // 🎨 分站主题（主站为空 → 外观与改造前一致）
+    themeTemplate: '', themeColor: '', themeAccent: '', footerText: '', supportUrl: '', homeModules: [] as { key: string; enabled: boolean; order: number }[] }),
   actions: {
     toggleCurrency() { this.currency = this.currency === 'CNY' ? 'USD' : 'CNY'; }, toggleLang() { this.lang = this.lang === 'zh' ? 'en' : 'zh'; }, triggerRefresh() { this.globalRefreshTrigger++; }, 
     async fetchRate() { try { const resRate = await fetch('https://open.er-api.com/v6/latest/USD'); const dataRate = await resRate.json(); if(dataRate && dataRate.rates && dataRate.rates.CNY) this.exchangeRate = dataRate.rates.CNY; } catch(e) {} },
-    async fetchConfig() { try { const res = await fetch('/api/public/config'); const data = await res.json(); if(data && data.status === 'success') { if (data.data.site_name) this.siteName = data.data.site_name; if (data.data.site_logo) this.siteLogo = data.data.site_logo; if (data.data.tg_bot_link) this.tgBotLink = data.data.tg_bot_link; } } catch(e) {} this.fetchRate(); },
+    async fetchConfig() { try { const res = await fetch('/api/public/config'); const data = await res.json(); if(data && data.status === 'success') { if (data.data.site_name) this.siteName = data.data.site_name; if (data.data.site_logo) this.siteLogo = data.data.site_logo; if (data.data.tg_bot_link) this.tgBotLink = data.data.tg_bot_link;
+      // 🎨 分站主题：模板 / 色系 / 自定义主色 / 页脚 / 客服 / 首页模块
+      const d = data.data;
+      if (d.theme_template) this.themeTemplate = d.theme_template;
+      if (d.theme_color) this.themeColor = d.theme_color;
+      this.themeAccent = d.theme_accent || '';
+      this.footerText = d.footer_text || '';
+      this.supportUrl = d.support_url || '';
+      if (d.home_modules) { try { const m = JSON.parse(d.home_modules); if (Array.isArray(m)) this.homeModules = m; } catch(e) {} }
+      this.applyTheme();
+    } } catch(e) {} this.fetchRate(); },
+    applyTheme() {
+      // 只在分站生效：主站不设置 data-template，保持原样
+      if (!this.themeTemplate) return;
+      const el = document.documentElement;
+      el.dataset.template = this.themeTemplate;
+      if (this.themeColor) el.dataset.color = this.themeColor;
+      if (this.themeAccent && /^#[0-9a-fA-F]{6}$/.test(this.themeAccent)) {
+        el.style.setProperty('--brand', this.themeAccent);
+        el.style.setProperty('--brand-soft', this.themeAccent + '2e');
+        el.style.setProperty('--brand-strong', this.themeAccent);
+      }
+    },
+    moduleEnabled(key: string) {
+      // 未配置模块的分站：全部显示（保持与主站一致）
+      if (!this.homeModules || this.homeModules.length === 0) return true;
+      const m = this.homeModules.find(x => x.key === key);
+      return m ? m.enabled !== false : false;
+    },
     t(key) { return i18nDict[this.lang][key] || key; }, 
     formatMoney(cnyAmount) { const amt = parseFloat(cnyAmount || 0); if (this.currency === 'CNY') return `¥ ${(amt).toFixed(2)}`; return `$ ${(amt / this.exchangeRate).toFixed(4)}`; }
   }

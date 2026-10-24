@@ -23,6 +23,13 @@ router.get('/config', async (req, res) => {
       data.announcement = req.site.announcement || data.announcement;
       data.site_id = String(req.site.id);
       data.is_subsite = 'true';
+      // 🎨 三期：分站主题（模板 / 色系 / 页脚 / 客服 / 首页模块）
+      data.theme_template = req.site.template || 'classic';
+      data.theme_color = req.site.color || 'cyan';
+      data.theme_accent = req.site.accent || '';
+      data.footer_text = req.site.footer_text || '';
+      data.support_url = req.site.support_url || '';
+      data.home_modules = req.site.home_modules || '';
     }
 
     res.json({ status: 'success', data });

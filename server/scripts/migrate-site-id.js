@@ -79,6 +79,25 @@ const run = async () => {
     changed++;
   }
 
+  // 三期：分站主题字段
+  const siteCols = [
+    ['template',      "VARCHAR(24) NOT NULL DEFAULT 'classic'"],
+    ['color',         "VARCHAR(24) NOT NULL DEFAULT 'cyan'"],
+    ['accent',        'VARCHAR(16) NULL'],
+    ['footer_text',   'VARCHAR(255) NULL'],
+    ['support_url',   'VARCHAR(255) NULL'],
+    ['home_modules',  'TEXT NULL'],
+  ];
+  for (const [col, ddl] of siteCols) {
+    if (await columnExists('sites', col)) {
+      console.log(`  ⏭  sites.${col} 已存在`);
+    } else {
+      await sequelize.query(`ALTER TABLE \`sites\` ADD COLUMN \`${col}\` ${ddl}`);
+      console.log(`  ✅ sites.${col} 已添加`);
+      changed++;
+    }
+  }
+
   // 结果自查
   for (const table of TABLES) {
     const [rows] = await sequelize.query(

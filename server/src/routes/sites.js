@@ -190,9 +190,45 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ status: 'error', message: '无权操作此分站' });
     }
 
-    const { name, logo, multiplier, agent_discount, announcement, status } = req.body;
+    const { name, logo, multiplier, agent_discount, announcement, status,
+            template, color, accent, footer_text, support_url, home_modules } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
+
+    // 🎨 主题字段（白名单校验，避免写入非法模板名/色系把前端弄坏）
+    const TEMPLATES = ['classic', 'saas', 'minimal', 'neon', 'magazine', 'glass'];
+    const COLORS = ['cyan', 'purple', 'green', 'red', 'orange', 'blue'];
+    if (template !== undefined) {
+      if (!TEMPLATES.includes(template)) return res.json({ status: 'error', message: '模板不存在' });
+      site.template = template;
+    }
+    if (color !== undefined) {
+      if (!COLORS.includes(color)) return res.json({ status: 'error', message: '色系不存在' });
+      site.color = color;
+    }
+    if (accent !== undefined) {
+      const hex = String(accent || '').trim();
+      if (hex && !/^#[0-9a-fA-F]{6}$/.test(hex)) return res.json({ status: 'error', message: '自定义主色需为 #RRGGBB 格式' });
+      site.accent = hex || null;
+    }
+    if (footer_text !== undefined) site.footer_text = String(footer_text || '').slice(0, 255);
+    if (support_url !== undefined) {
+      const u = String(support_url || '').trim();
+      // 🔒 只允许 http(s)，防止 javascript: 伪协议挂在客服按钮上
+      if (u && !/^https?:\/\//i.test(u)) return res.json({ status: 'error', message: '客服链接必须以 http(s):// 开头' });
+      site.support_url = u || null;
+    }
+    if (home_modules !== undefined) {
+      let mods = home_modules;
+      if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { return res.json({ status: 'error', message: '首页模块格式错误' }); } }
+      if (!Array.isArray(mods)) return res.json({ status: 'error', message: '首页模块必须是数组' });
+      const ALLOWED = ['announce', 'stats', 'hot_services', 'faq', 'vip', 'affiliate'];
+      const clean = mods
+        .filter(m => m && ALLOWED.includes(m.key))
+        .map((m, i) => ({ key: m.key, enabled: m.enabled !== false, order: Number.isFinite(+m.order) ? +m.order : i }))
+        .sort((a, b) => a.order - b.order);
+      site.home_modules = JSON.stringify(clean.slice(0, 12));
+    }
 
     // 🔒 两个价格字段可单独修改，但必须按"改完之后"的组合校验，
     // 否则可先压低倍率、再压低折扣绕过单字段检查。

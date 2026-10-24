@@ -43,6 +43,14 @@
       </a>
 
     </div>
+
+    <!-- 🎨 分站页脚：只有分站配置了 footer_text 才出现，主站保持原样 -->
+    <div v-if="appStore.footerText" class="site-footer relative z-10">
+      {{ appStore.footerText }}
+      <template v-if="appStore.supportUrl">
+        · <a :href="appStore.supportUrl" target="_blank" rel="noopener noreferrer">联系客服</a>
+      </template>
+    </div>
   </div>
 </template>
 

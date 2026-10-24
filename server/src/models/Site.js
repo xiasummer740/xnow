@@ -10,7 +10,14 @@ const Site = sequelize.define('Site', {
   multiplier: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 2.0 },
   agent_discount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0.8 },
   status: { type: DataTypes.ENUM('active', 'suspended'), defaultValue: 'active' },
-  announcement: { type: DataTypes.TEXT, allowNull: true }
+  announcement: { type: DataTypes.TEXT, allowNull: true },
+  // 🎨 三期主题系统
+  template: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'classic' },
+  color: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'cyan' },
+  accent: { type: DataTypes.STRING(16), allowNull: true },            // 自定义主色 HEX，优先于 color
+  footer_text: { type: DataTypes.STRING(255), allowNull: true },       // 页脚版权
+  support_url: { type: DataTypes.STRING(255), allowNull: true },       // 客服链接（TG 等）
+  home_modules: { type: DataTypes.TEXT, allowNull: true }              // 首页模块 JSON:[{key,enabled,order}]
 }, {
   tableName: 'sites',
   timestamps: true,

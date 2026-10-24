@@ -1,0 +1,127 @@
+/* ==========================================================================
+   分站主题系统 · 三期
+   --------------------------------------------------------------------------
+   由 /api/public/config 下发的 theme_template / theme_color / theme_accent
+   驱动，写入 <html data-template data-color style="--brand:...">。
+   主站不设置这些属性 → 落到 :root 默认值，外观与改造前完全一致。
+   ========================================================================== */
+
+:root {
+  --brand: #fbbf24;          /* 主站沿用金色 */
+  --brand-soft: rgba(251, 191, 36, 0.18);
+  --brand-strong: #f59e0b;
+  --site-radius: 1rem;
+  --site-surface: rgba(15, 23, 42, 0.72);
+  --site-border: rgba(148, 163, 184, 0.18);
+  --site-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+  --site-letter: 0;
+}
+
+/* ---------- 6 套色系 ---------- */
+html[data-color="cyan"]   { --brand: #22d3ee; --brand-soft: rgba(34,211,238,.18);  --brand-strong: #06b6d4; }
+html[data-color="purple"] { --brand: #a855f7; --brand-soft: rgba(168,85,247,.18);  --brand-strong: #9333ea; }
+html[data-color="green"]  { --brand: #22c55e; --brand-soft: rgba(34,197,94,.18);   --brand-strong: #16a34a; }
+html[data-color="red"]    { --brand: #ef4444; --brand-soft: rgba(239,68,68,.18);   --brand-strong: #dc2626; }
+html[data-color="orange"] { --brand: #f97316; --brand-soft: rgba(249,115,22,.18);  --brand-strong: #ea580c; }
+html[data-color="blue"]   { --brand: #3b82f6; --brand-soft: rgba(59,130,246,.18);  --brand-strong: #2563eb; }
+
+/* 自定义主色（HEX）通过内联 --brand / --brand-soft 覆盖上面 */
+
+/* ---------- 通用：让高亮元素跟随品牌色 ---------- */
+html[data-color] .text-amber-400,
+html[data-color] .text-amber-300,
+html[data-color] .text-amber-500 { color: var(--brand) !important; }
+
+html[data-color] .bg-amber-400,
+html[data-color] .bg-amber-500,
+html[data-color] .from-amber-400,
+html[data-color] .to-yellow-500,
+html[data-color] .from-amber-500 { background-image: linear-gradient(135deg, var(--brand), var(--brand-strong)) !important; }
+
+html[data-color] .border-amber-400,
+html[data-color] .border-amber-500\/30,
+html[data-color] .border-amber-500\/50 { border-color: var(--brand) !important; }
+
+html[data-color] .shadow-\[0_0_15px_rgba\(251\,191\,36\,0\.3\)\] { box-shadow: 0 0 18px var(--brand-soft) !important; }
+
+/* ---------- 模板 1 · classic（默认，接近主站） ---------- */
+html[data-template="classic"] { --site-radius: 1rem; }
+
+/* ---------- 模板 2 · saas（扁平、直角、细边、无光晕） ---------- */
+html[data-template="saas"] {
+  --site-radius: 0.5rem;
+  --site-surface: rgba(15, 23, 42, 0.55);
+  --site-border: rgba(148, 163, 184, 0.12);
+  --site-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --site-letter: 0.02em;
+}
+html[data-template="saas"] .quantum-formula { opacity: 0.06 !important; }
+html[data-template="saas"] .x-3d-character-stage { display: none !important; }
+
+/* ---------- 模板 3 · minimal（极简：去掉所有装饰） ---------- */
+html[data-template="minimal"] {
+  --site-radius: 0.75rem;
+  --site-surface: rgba(2, 6, 23, 0.6);
+  --site-border: rgba(148, 163, 184, 0.1);
+  --site-shadow: none;
+  --site-letter: 0.03em;
+}
+html[data-template="minimal"] .quantum-formula { display: none !important; }
+html[data-template="minimal"] .x-3d-character-stage { display: none !important; }
+html[data-template="minimal"] .anime-arrow-container { display: none !important; }
+html[data-template="minimal"] #app-root { background: #04070f !important; }
+
+/* ---------- 模板 4 · neon（霓虹：强光晕 + 渐变底） ---------- */
+html[data-template="neon"] {
+  --site-radius: 1.25rem;
+  --site-surface: rgba(15, 23, 42, 0.78);
+  --site-border: rgba(148, 163, 184, 0.3);
+  --site-shadow: 0 0 40px var(--brand-soft);
+}
+html[data-template="neon"] #app-root {
+  background:
+    radial-gradient(1200px 600px at 16% -10%, var(--brand-soft), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, rgba(147, 51, 234, 0.16), transparent 60%),
+    #060b18 !important;
+}
+html[data-template="neon"] .quantum-formula { opacity: 0.22 !important; color: var(--brand) !important; }
+
+/* ---------- 模板 5 · magazine（杂志：衬线标题 + 大留白） ---------- */
+html[data-template="magazine"] {
+  --site-radius: 1.1rem;
+  --site-surface: rgba(17, 24, 39, 0.8);
+  --site-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  --site-letter: 0.06em;
+}
+html[data-template="magazine"] h1,
+html[data-template="magazine"] h2,
+html[data-template="magazine"] h3 {
+  font-family: Georgia, "Times New Roman", "Songti SC", serif !important;
+  letter-spacing: var(--site-letter) !important;
+  font-weight: 700 !important;
+}
+html[data-template="magazine"] .quantum-formula { opacity: 0.08 !important; }
+
+/* ---------- 模板 6 · glass（玻璃拟态） ---------- */
+html[data-template="glass"] {
+  --site-radius: 1.6rem;
+  --site-surface: rgba(255, 255, 255, 0.06);
+  --site-border: rgba(255, 255, 255, 0.16);
+  --site-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+html[data-template="glass"] #app-root {
+  background:
+    radial-gradient(900px 500px at 8% -8%, var(--brand-soft), transparent 55%),
+    radial-gradient(800px 500px at 95% 8%, rgba(56, 189, 248, 0.14), transparent 55%),
+    #070d1c !important;
+}
+html[data-template="glass"] .quantum-formula { opacity: 0.1 !important; }
+
+/* ---------- 所有分站：圆角与描边统一走变量 ---------- */
+html[data-template] .rounded-3xl { border-radius: var(--site-radius) !important; }
+html[data-template] .rounded-2xl { border-radius: calc(var(--site-radius) * 0.8) !important; }
+html[data-template] .rounded-xl  { border-radius: calc(var(--site-radius) * 0.6) !important; }
+
+/* 页脚（分站自定义版权） */
+.site-footer { color: rgb(100 116 139); font-size: 11px; text-align: center; padding: 28px 16px 18px; letter-spacing: 0.04em; }
+.site-footer a { color: var(--brand); text-decoration: none; }
