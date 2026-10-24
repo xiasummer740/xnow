@@ -767,8 +767,30 @@ router.delete('/:id/domain', authenticate, async (req, res) => {
     if (!['admin', 'super_admin'].includes(req.user.role) && site.owner_id !== req.user.id) {
       return res.status(403).json({ status: 'error', message: '无权操作此分站' });
     }
-    removeVhost(site.id, site.custom_domain);
+    const goneDomain = site.custom_domain;
+    removeVhost(site.id, goneDomain);
     try { reloadNginx(); } catch (e) {}
+    // 🧹 74 期：解绑时把证书也一起清掉。
+    //    之前只删 vhost，Let's Encrypt 的证书目录会一直留着 ——
+    //    站长换域名换几次，/etc/letsencrypt/live 里就堆一堆废证书，
+    //    而 LE 对「同一组域名重复签发」有每周 5 张的限制，堆到后面会签不下来。
+    //    删证书是尽力而为：失败也不该让解绑整体失败。
+    if (goneDomain) {
+      try {
+        const safeDom = String(goneDomain).replace(/[^a-z0-9.-]/gi, '');
+        if (/^[a-z0-9.-]+$/i.test(safeDom)) {
+          const { execSync } = await import('child_process');
+          const fsmod = await import('fs');
+          if (fsmod.existsSync(`/etc/letsencrypt/live/${safeDom}`)) {
+            execSync(`certbot delete --cert-name ${safeDom} --non-interactive`, { stdio: 'pipe', timeout: 30000 });
+          }
+          for (const ext of ['crt', 'key']) {
+            const p = `/etc/nginx/ssl/${safeDom}.${ext}`;
+            if (fsmod.existsSync(p)) fsmod.unlinkSync(p);
+          }
+        }
+      } catch (e) { /* 清不掉就算了，不影响解绑 */ }
+    }
     site.domain_status = 'none';
     site.cert_mode = null;
     site.custom_domain = null;

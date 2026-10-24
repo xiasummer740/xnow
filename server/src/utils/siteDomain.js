@@ -19,6 +19,25 @@ import { Site } from '../models/index.js';
 const NGINX_DIR = '/etc/nginx/sites-enabled';
 const SSL_DIR = '/etc/nginx/ssl';
 
+// 🔑 74 期：ACME 挑战必须有一个**独立**的 webroot。
+//    原来把 client/dist 当 webroot，靠的是"80 端口能直接取到那个文件"——
+//    可我们所有 vhost（含全局默认）都是无条件 301 跳 HTTPS，
+//    而新域名此时只有自签证书，Let's Encrypt 跟到 HTTPS 就校验失败 →
+//    首次签发永远失败，只能退回自签，站长看到的就是"浏览器不安全"。
+//    现在把挑战文件放进 /var/www/certbot，并在每个 vhost 的 80 段里
+//    用 location ^~ 把它**放在跳转之前**，首次签发才真的能过。
+// 目录名与 install.sh 里那段全局 ACME 配置保持一致，别搞出两个挑战目录
+const ACME_ROOT = process.env.ACME_WEBROOT || '/var/www/acme-challenge';
+
+const ensureAcmeRoot = () => {
+  try {
+    fs.mkdirSync(path.join(ACME_ROOT, '.well-known', 'acme-challenge'), { recursive: true });
+    return ACME_ROOT;
+  } catch (e) {
+    return null;
+  }
+};
+
 // 我们的主域名（免费子域名的母域）与上游域名
 const OUR_APEX = ['xnow.taikon.top', 'taikon.top'];
 const UPSTREAM = ['tk7188.com'];
@@ -127,10 +146,12 @@ export const ensureCert = async (domain, webroot) => {
   try { execSync('command -v certbot', { stdio: 'ignore' }); hasCertbot = true; } catch (e) { hasCertbot = false; }
 
   if (hasCertbot) {
+    // 优先用专用 webroot；建不出来才退回调用方给的目录，再不行用 --nginx
+    const acme = ensureAcmeRoot();
     // 优先用 webroot：不改 nginx 配置（--nginx 会就地改我们自动生成的 vhost，容易打架）
-    const auth = webroot && fs.existsSync(webroot)
-      ? `--webroot -w ${webroot}`
-      : '--nginx';
+    const auth = acme
+      ? `--webroot -w ${acme}`
+      : (webroot && fs.existsSync(webroot) ? `--webroot -w ${webroot}` : '--nginx');
     try {
       execSync(
         `certbot certonly ${auth} -d ${safe} --non-interactive --agree-tos ` +
@@ -166,7 +187,17 @@ export const writeVhost = ({ siteId, domain, backendPort, distRoot, cert }) => {
 server {
     listen 80;
     server_name ${safe};
-    return 301 https://$host$request_uri;
+
+    # 🔑 证书挑战优先于跳转。注意 nginx 的坑：写在 server 层的 return 在 rewrite
+    #    阶段就执行了，location 里的例外根本轮不到 —— 所以跳转必须放进 location /。
+    location ^~ /.well-known/acme-challenge/ {
+        root ${ACME_ROOT};
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {

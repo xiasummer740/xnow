@@ -258,23 +258,34 @@ fi
 # ── 全局 ACME 验证配置 ──────────────────────────
 # 如果当前 nginx 没有全局 ACME 验证路径，自动添加
 # 这样后续安装其他项目（如 XX-UI）可以直接用 webroot 模式签证书
+# 74 期修正：原来写的是 conf.d/00-acme-challenge.conf，listen 80 + server_name _，
+# 既不是 default_server，也没有别的 vhost 会把请求交给它 —— 等于这段配置永远匹配不到，
+# 新域名签证书时请求全被默认 vhost 301 走了。改成"未知主机名的默认 server"：
+# 挑战路径放行，其余才跳 HTTPS。注意跳转必须是 location /，写成 server 层 return 的话
+# 它在 rewrite 阶段就执行了，location 的例外轮不到。
 if command -v nginx &>/dev/null; then
-  ACME_CONF="/etc/nginx/conf.d/00-acme-challenge.conf"
   ACME_ROOT="/var/www/acme-challenge"
+  mkdir -p "$ACME_ROOT/.well-known/acme-challenge"
+  ACME_CONF="/etc/nginx/sites-available/xnow-http-redirect"
   if [ ! -f "$ACME_CONF" ]; then
-    mkdir -p "$ACME_ROOT"
     cat > "$ACME_CONF" << 'EOF'
 server {
-    listen 80;
+    listen 80 default_server;
     server_name _;
-    location /.well-known/acme-challenge/ {
-        alias /var/www/acme-challenge/;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme-challenge;
+        try_files $uri =404;
     }
-    location / { return 404; }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 EOF
+    ln -sf "$ACME_CONF" /etc/nginx/sites-enabled/xnow-http-redirect
     nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
-    ok "全局 ACME 验证已配置"
+    ok "全局 ACME 验证已配置（默认 server + 挑战放行）"
   fi
 fi
 

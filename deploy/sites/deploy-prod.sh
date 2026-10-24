@@ -42,7 +42,7 @@ mkdir -p "$BAK" || die "备份目录建不出来"
 #    prod-<时间戳>.sql.gz 等      rollback-sites.sh 认这套名字
 # 只产出前一种时，回滚脚本会报"备份文件不存在" —— 最要紧的退路等于断的。
 ROLLBACK_BAK="${XNOW_BACKUP_DIR:-/var/backups/xnow}"
-STAMP=$(date +%Y%m%d-%H%M%S)
+STAMP="$TS"   # 与上面备份目录用同一个时间戳，别让两边差一秒对不上
 MYSQL_PWD="$DBP" mysqldump -u root --single-transaction --routines xnow_db > "$BAK/xnow_db.sql" 2>/dev/null \
   || die "数据库备份失败（不要继续）"
 gzip -c "$BAK/xnow_db.sql" > "$ROLLBACK_BAK/prod-$STAMP.sql.gz" \
@@ -102,7 +102,11 @@ fi
 
 step "6. 堵住「未知子域名落到 Beta 实例」的坑（只影响未知 Host）"
 if [ -f "$APP/deploy/sites/fix-unknown-host.sh" ]; then
-  bash "$APP/deploy/sites/fix-unknown-host.sh" || echo "  ⚠️ 这一步没成功，主站不受影响，但要人工看一眼（回滚见脚本末尾提示）"
+  # 🔑 74 期：让新域名能签下证书。默认 80 段必须"先放行挑战再跳转"，
+#    否则站长绑自有域名时证书永远签不下来（只能退回自签，浏览器报警告）。
+bash "$APP/deploy/sites/fix-acme-webroot.sh" || echo "  ⚠️ ACME 挑战路径没修好 —— 自有域名的自动证书会签不下来，请人工看一眼"
+
+bash "$APP/deploy/sites/fix-unknown-host.sh" || echo "  ⚠️ 这一步没成功，主站不受影响，但要人工看一眼（回滚见脚本末尾提示）"
 else
   echo "  跳过：脚本不在"
 fi
