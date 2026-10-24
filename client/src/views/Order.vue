@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-5xl mx-auto space-y-4 md:space-y-6 pb-20 relative">
     
-    <div class="bg-slate-800/80 p-4 md:p-5 rounded-2xl border border-slate-700 flex items-start space-x-3 md:space-x-4 shadow-xl">
+    <div class="site-card bg-slate-800/80 p-4 md:p-5 rounded-2xl border border-slate-700 flex items-start space-x-3 md:space-x-4 shadow-xl">
       <div class="text-pink-500 mt-1 text-xl md:text-2xl">📢</div>
       <div class="w-full overflow-hidden">
         <h3 class="font-bold text-white mb-1 text-sm md:text-base">{{ appStore.t('sys_notice') }}</h3>
@@ -21,7 +21,7 @@
       </div>
     </div>
 
-    <div class="bg-slate-800/80 p-5 md:p-10 rounded-2xl md:rounded-3xl border border-slate-700 shadow-2xl space-y-6 md:space-y-8 relative">
+    <div class="site-card bg-slate-800/80 p-5 md:p-10 rounded-2xl md:rounded-3xl border border-slate-700 shadow-2xl space-y-6 md:space-y-8 relative">
       <div class="space-y-5 md:space-y-6">
         
         <!-- 🔍 全局搜索：按服务 ID / 名称 直接定位（对齐源头站的体验，2855 个服务不用翻下拉） -->
@@ -204,7 +204,7 @@
           </div>
         </div>
 
-        <button @click="submitOrder" :disabled="isSubmitting || !activeServiceId" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-lg md:text-xl py-4 md:py-5 rounded-xl md:rounded-2xl transition-all transform hover:-translate-y-1 shadow-[0_5px_15px_rgba(251,191,36,0.3)] disabled:opacity-50 disabled:hover:translate-y-0">
+        <button @click="submitOrder" :disabled="isSubmitting || !activeServiceId" class="site-btn w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-lg md:text-xl py-4 md:py-5 rounded-xl md:rounded-2xl transition-all transform hover:-translate-y-1 shadow-[0_5px_15px_rgba(251,191,36,0.3)] disabled:opacity-50 disabled:hover:translate-y-0">
           {{ isSubmitting ? '系统高并发处理中...' : appStore.t('submit_order') }}
         </button>
       </div>
