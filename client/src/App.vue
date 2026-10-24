@@ -2,7 +2,11 @@
   <div id="app-root" class="relative min-h-screen bg-[#060b18]">
     <!-- 🧹 分站：关掉主站招牌的飘动公式背景（那是 XNOW 的视觉标识，分站不能有）--><div v-if="!appStore?.isSubsite" class="fixed inset-0 pointer-events-none z-0 overflow-hidden"><div v-for="n in 30" :key="n" class="quantum-formula" :style="getQuantumStyle(n)">{{ getFormula() }}</div></div>
     
-    <router-view class="relative z-10" />
+    <!-- 📱 98 期：右下角悬浮客服/互动按钮会压住页面最后一屏的内容
+         （实测 neon 模板下把「服务用户」数据卡和底部说明压掉一半）。
+         分站会显示悬浮按钮时，给页面底部留出让位空间。 -->
+    <router-view class="relative z-10"
+                 :class="appStore?.isSubsite && appStore?.supportUrl ? 'pb-28' : ''" />
     
     <div v-if="uiStore?.toast?.show" :class="['fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-[10000] transition-all border border-white/10 backdrop-blur-md', uiStore.toast.type === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white']">{{ uiStore.toast.message }}</div>
     

@@ -177,7 +177,9 @@ router.post('/send-code', async (req, res) => {
             res.json({ status: 'success', message: '验证码已发送，请注意查收邮件(含垃圾箱)' });
         } else {
             console.error('Email Fail:', result.message);
-            res.status(500).json({ status: 'error', message: '发送失败，请确保后台已正确配置 SMTP' });
+            // 🔒 98 期：这句话是给**客户**看的，不能把内部细节（SMTP / 后台配置）甩出去。
+      //    站长要排查配置，走「分站 → 邮件 → 发信自测」，那里有逐项原因。
+      res.status(500).json({ status: 'error', message: '验证码发送失败，请稍后再试；多次失败请联系客服' });
         }
     } catch (err) {
         res.status(500).json({ status: 'error', message: '邮件服务器连接异常' });

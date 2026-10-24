@@ -2161,3 +2161,62 @@ stash 命令形态在一次性仓库里验证过：
 
 （第一次测第 3 条时返回 `500 No Config`，是因为 Beta 平台侧本来就没配商户密钥；
 补上平台测试密钥后复测得到 `400 Sign Error`，才是真正的「验签拒绝」。）
+
+---
+
+## 四十二、6 套模板 × 6 色系全量实测 + 分站 SMTP 实证（99 期）
+
+### 一、分站自有 SMTP 是真的被用上了
+
+光"字段能保存"不算数，要证明**发信时真的连的是站长配的那台服务器**。
+
+做法：把站点 25 的 SMTP 指向一台不存在的主机 `smtp98.nonexistent-test.invalid`，然后在前台触发发验证码。
+
+```
+接口：POST /api/send-code → HTTP 500「验证码发送失败，请稍后再试；多次失败请联系客服」
+日志：Email Send Error: Error: getaddrinfo ENOTFOUND smtp98.nonexistent-test.invalid
+      hostname: 'smtp98.nonexistent-test.invalid'
+```
+
+日志里出现的就是**站长配的那个主机名** —— 说明发信走的是分站自己的通道，不是平台的。
+
+顺手改掉一处客户可见的内部信息：原来失败时回的是「发送失败，请确保后台已正确配置 SMTP」，
+这句话把「后台 / SMTP」这种内部词甩给了客户。现在客户只看到中性提示，
+站长要排查配置走「分站 → 邮件 → 发信自测」（那里有逐项原因，且故意不走回退通道，测出来的才是真话）。
+
+邮件链路的三种情况都已确认不会暴露主站：
+
+| 情况 | 发件地址 | 模板页脚 |
+|---|---|---|
+| 分站 + 自家 SMTP | 站长自己的邮箱 | 店名 |
+| 分站 + 没配 SMTP（平台代发） | 平台 QQ 邮箱（不含品牌词） | 店名 |
+| 主站 | 平台邮箱 | XNOW PRO |
+
+### 二、6 套模板 × 6 色系全量实测（390px）
+
+逐套切换 + 逐色切换，每套都截图 + 校验 DOM：
+
+```
+✅ classic   data-template=classic   卡片 30 · 溢出 0 · XNOW 痕迹 无
+✅ saas      data-template=saas      卡片 24 · 溢出 0 · XNOW 痕迹 无
+✅ minimal   data-template=minimal   卡片 18 · 溢出 0 · XNOW 痕迹 无
+✅ neon      data-template=neon      卡片 19 · 溢出 0 · XNOW 痕迹 无
+✅ magazine  data-template=magazine  卡片 17 · 溢出 0 · XNOW 痕迹 无
+✅ glass     data-template=glass     卡片 18 · 溢出 0 · XNOW 痕迹 无
+
+✅ cyan   --brand=#22d3ee     ✅ purple --brand=#a855f7
+✅ green  --brand=#22c55e     ✅ red    --brand=#ef4444
+✅ orange --brand=#f97316     ✅ blue   --brand=#3b82f6
+（6 色去重后 6 种不同色值 · 页面 JS 错误 0 条）
+```
+
+卡片数随模板变化（30 / 24 / 18 / 19 / 17 / 18），说明不是换个 data 属性糊弄，版式真的不同。
+neon 那套是终端风（`$ 下单 tiktok-followers --qty 1000`），杂志风是黑白大字，玻璃风是毛玻璃卡片。
+
+### 三、截图里抓到一个真问题：悬浮按钮压内容
+
+neon 模板截图里，右下角的「互动小人 + LIVE」压住了底部数据卡（「服务用户 1」被遮一半）。
+这是手机上的真实体感问题 —— 祥哥就是拿手机验收的。
+
+修法：分站显示悬浮按钮时，给页面底部留出让位空间（`pb-28`）。
+复核：滚到底后 `重叠: false`，CTA「免费注册」完整可见，按钮落在下方空白处。
