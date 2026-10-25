@@ -4246,3 +4246,89 @@ node deploy/sites/acceptance-audit.cjs          # 只读
 1. `curl -I https://xnow.taikon.top/uploads/<任意真实图片>` → `200 image/png`
 2. 新建一个测试分站 → 打开子域名 → 删除（顺带验证 vhost/墓碑/410）
 3. 备份脚本已包含 `/var/www/xnow-uploads/` 与 `nginx-sites/`
+---
+## 八十三、🎉 分站系统上线融合主站（2026-10-26 00:16）
+
+祥哥：「可以上」→ 已执行，主站全程只停了约 6 秒。
+
+### 上线做了什么
+
+```
+① 生产仓库 main(3d57a90f) → feat/sites(a9524caf)，含 163 个提交
+   · 线上原有 5 个未提交热修先备份到 /var/backups/xnow-prelaunch/hotfix/
+     （pay.js / orders.js / services.js / admin.js / public.js）
+   · 核对：这些热修的内容在 feat/sites 里都已有更新版本，无独有逻辑丢失
+   · 整个工作区快照 26MB：/var/backups/xnow-prelaunch/worktree-.tgz
+② 建表：create-tables.cjs → site_collections / site_withdrawals /
+   site_service_prices / site_customer_groups（后两张是这次才发现从来没建过）
+③ 补列：migrate-columns.cjs → 0 项待补（此前演练已对齐）
+④ 换前端 dist（保留旧 assets，老页面不会白屏），site.html 1676 字节 / XNOW 0 处
+⑤ pm2 restart xnow-backend
+⑥ 冒烟
+```
+
+### 上线后实测
+
+```
+首页 200            /admin 200          /recharge 200
+bundle index-BRGBmgu3.js 可下载 200
+/api/public/config 200      主站不泄露分站信息 404
+上传图 200 image/png        收款码接口 404（不是 200 HTML）
+测试分站 demostore.taikon.top 200
+数据：users=6  balance=101002.581400  orders=31  tx=40（与上线前一模一样）
+pm2：xnow-backend online，重启后日志无新报错
+停机：约 6 秒（pm2 restart + 启动）
+```
+
+表结构最终包含：`sites`(66 列) / `site_collections` / `site_withdrawals` /
+`site_service_prices` / `site_customer_groups`。
+
+### 报错一个问题：两张表从来没建过
+
+上线时 `migrate-columns` 报「有 2 张表在库里不存在」：
+
+| 表 | 缺了会怎样 |
+|---|---|
+| `site_service_prices` | 站长「给单个服务单独改价」**静默不生效** —— orders.js 里 try/catch 回退默认倍率，页面看着一切正常 |
+| `site_customer_groups` | 客户分组打折整块不可用 |
+
+Beta 上一直有这两张表（手工建的），所以测试看不出来。已把 DDL（照 Beta 的
+`SHOW CREATE TABLE` 抄）加进 `create-tables.cjs`，生产已建好，幂等可重跑。
+
+### 备份：分站数据在不在包里？（祥哥问的）
+
+**在。** 分站的数据全在同一个 MySQL 库里：
+
+- `users.site_id`（哪个客户属于哪个站）
+- `orders.site_id` / `transactions.site_id`（订单与流水的站点归属）
+- `sites` / `site_collections`（代收台账）/ `site_withdrawals`（提现）/
+  `site_service_prices` / `site_customer_groups`
+
+定时备份跑的是 `mysqldump` **整库导出**，所以这些表天然都在包里。
+
+而站长的**图片**（logo/背景/收款码）和**分站域名 vhost** 是文件，不在库里 ——
+这两样是**这次上线才补进备份的**（旧版 `backupEngine` 只打包数据库）。
+上线后立刻手动跑了一份备份实测：
+
+```
+xnow_backup_2026_10_26_00_16_18.tar.gz  1.2M
+├── xnow_db.sql                 ← 整库（含 4 张 site_* 表定义、users.site_id）
+├── pending_payments.json       ← 补单队列
+├── uploads/                    ← 站长图片（含 qr/ 收款码）
+│   └── qr/
+└── nginx-sites/                ← 每个分站域名的 vhost
+    └── xnow-site-25-demostore.taikon.top
+```
+
+> 也就是说：**上线前**如果机器挂了，数据库里的分站数据能恢复，但站长的图片和
+> 域名配置会丢（站点变成白底 + 域名 404）。**上线后**这三样一起在包里。
+
+⚠️ 已知小瑕疵：备份扫描的是 `/etc/nginx/sites-enabled` 全域，而 Beta 与生产同机 →
+生产的备份包里也会带 Beta 的测试 vhost（反之亦然）。无害，暂不处理。
+
+### 上线后待办
+
+1. 👉 **祥哥自己登录点一遍**：密室 → 分站管理/客户/提现（现在是真空库，全 0）
+2. 开一个测试分站（¥99）：验证 免费子域名 `xxxxx.taikon.top` 打开正常、装修能存
+3. 确认无误后再把 Beta 的演示站数据清一清，别和真实客户混在一起
+4. 备份保留策略目前 24 份，够用；以后分站多了要盯 `/var/www/xnow-uploads` 体积
