@@ -407,6 +407,8 @@ const grantSite = async () => {
 
 const extendUserSite = async (st) => {
     if (roleModal.value.busy) return;
+    const cur = st.expire_at ? new Date(Number(st.expire_at)).toLocaleDateString('zh-CN') : '永久';
+    if (!await ui.confirm(`确定给「${st.name}」增加 30 天？（赠送，不扣用户余额）\n当前到期：${cur}`)) return;
     roleModal.value.busy = true;
     try {
         const res = await fetch(`/api/admin/sites/${st.id}/action`, {
@@ -626,8 +628,6 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             管理密室 —— 全站用户 / 订单 / 资金 / 配置。
             <span class="text-violet-300/70">站长后台不在这里，在「分站管理」里点进某个站。</span>
           </span>
-          <router-link to="/my-site"
-                       class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">去分站管理 →</router-link>
         </div>
 
         <!-- Tab 导航 -->
@@ -636,21 +636,16 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             :class="['px-4 py-2 rounded-lg text-sm font-bold transition', activeTab === t.key ? 'bg-amber-400/15 text-amber-400 border border-amber-400/30 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/70']">
             {{ t.label }}
           </button>
+          <!-- 🧹 110 期：这三个入口原本分散在身份条、tab 行、分站业务卡三处，
+               点进去还是同一个地方（分站管理页里本来就有「站点 / 客户 / 提现」三个 tab）。
+               现在只保留这一个，提现待处理角标挂在这里，不会被漏掉。 -->
           <router-link to="/admin/sites"
             class="ml-auto px-4 py-2 rounded-lg text-sm font-bold text-violet-300 bg-violet-500/10 border border-violet-600/40 hover:bg-violet-500/20 transition">
-            🏬 分站列表 →
-          </router-link>
-          <router-link to="/admin/site-customers"
-            class="px-4 py-2 rounded-lg text-sm font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-600/40 hover:bg-emerald-500/20 transition">
-            🏬 分站客户 →
-          </router-link>
-          <router-link to="/admin/site-withdrawals"
-            class="px-4 py-2 rounded-lg text-sm font-bold text-amber-300 bg-amber-500/10 border border-amber-600/40 hover:bg-amber-500/20 transition">
-            💸 提现 →
-          <span v-if="pendingCount > 0"
-                class="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-none">
-            {{ pendingCount > 99 ? '99+' : pendingCount }}
-          </span>
+            🏬 分站管理 →
+            <span v-if="pendingCount > 0"
+                  class="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-none">
+              {{ pendingCount > 99 ? '99+' : pendingCount }}
+            </span>
           </router-link>
         </div>
 
@@ -669,15 +664,8 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 <h2 class="text-sm font-black text-white">🏬 分站业务</h2>
                 <p class="text-[11px] text-slate-500 mt-0.5">站长自己定价、自己装修；主站只在这里看数据、做运维、结货款。</p>
               </div>
-              <div class="flex items-center gap-2">
-                <router-link to="/admin/site-withdrawals"
-                             class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-600/40 hover:bg-amber-500/25 transition">
-                  💸 提现 <span v-if="pendingCount > 0" class="ml-0.5 text-red-400 font-black">{{ pendingCount }}</span>
-                </router-link>
-                <router-link to="/admin/sites"
-                             class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-violet-500/15 text-violet-300 border border-violet-600/40 hover:bg-violet-500/25 transition">
-                  分站管理 →
-                </router-link>
+              <div v-if="pendingCount > 0" class="text-[11px] font-bold text-amber-300">
+                💸 有 {{ pendingCount }} 笔提现待处理
               </div>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">

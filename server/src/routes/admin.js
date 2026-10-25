@@ -1299,15 +1299,26 @@ router.post('/sites/:id/action', authenticate, async (req, res) => {
     }
 
     if (action === 'extend') {
-      const days = Math.min(365, Math.max(1, Number(req.body?.days) || 30));
-      const base = Math.max(Date.now(), Number(site.expire_at) || 0);
-      site.expire_at = base + days * 86400 * 1000;
+      // 🔧 110 期：支持**负数**（扣减天数）。之前 Math.max(1, ...) 会把 -30 变成 +1 天，
+      //    管理员想撤销误加的时间根本做不到。现在 ±365 天，且扣减下限是"现在"——
+      //    不会扣成一张负数到期时间的乱账。
+      const raw = Number(req.body?.days);
+      const days = Number.isFinite(raw) && Math.trunc(raw) !== 0 ? Math.trunc(raw) : 30;
+      if (Math.abs(days) > 365) {
+        return res.status(400).json({ status: 'error', message: '一次最多增减 365 天' });
+      }
+      const now = Date.now();
+      const cur = Math.max(now, Number(site.expire_at) || 0);
+      const next = Math.max(now, cur + days * 86400 * 1000);
+      site.expire_at = next;
       if (site.status !== 'active') { site.status = 'active'; site.stop_reason = null; }
       await site.save();
       return res.json({
         status: 'success',
-        message: `已延期 ${days} 天：${site.name}`,
-        data: { expire_at: Number(site.expire_at) },
+        message: days > 0
+          ? `已延期 ${days} 天：${site.name}`
+          : `已扣减 ${-days} 天：${site.name}（现在到 ${new Date(next).toLocaleDateString('zh-CN')}）`,
+        data: { expire_at: Number(next) },
       });
     }
 

@@ -31,16 +31,12 @@
           装修、定价、收款、邮件、域名都是站长自己的事，主站不代改。
         </p>
       </div>
+      <!-- 🧹 「分站客户」「返回密室」在上一行的子导航里已经有了，这里只留刷新 -->
       <div class="ml-auto flex items-center gap-2">
         <button @click="load()" :disabled="loading"
                 class="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold disabled:opacity-50">
           {{ loading ? '读取中…' : '刷新' }}
         </button>
-        <router-link to="/admin/site-customers"
-                     class="px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-600/40 text-xs font-bold">
-          🏬 分站客户 →
-        </router-link>
-        <router-link to="/admin" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold">返回密室</router-link>
       </div>
     </div>
 
@@ -74,7 +70,7 @@
               <th class="text-right px-3 py-2 font-medium">站长毛利</th>
               <th class="text-right px-3 py-2 font-medium">客户余额</th>
               <th class="text-right px-3 py-2 font-medium">最后下单</th>
-              <th class="text-left px-3 py-2 font-medium">操作</th>
+              <th class="text-left px-3 py-2 font-medium sticky right-0 z-10 bg-slate-950 shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.9)]">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -101,10 +97,13 @@
               <td class="px-3 py-2 text-right text-emerald-400">¥{{ money(s.profit) }}</td>
               <td class="px-3 py-2 text-right text-slate-400">¥{{ money(s.customer_balance) }}</td>
               <td class="px-3 py-2 text-right text-slate-500">{{ s.last_order_at ? fmtDate(s.last_order_at) : '—' }}</td>
-              <td class="px-3 py-2">
+              <!-- 📌 390px 手机上表格会横向滚，操作列必须固定住，否则"减天数/停站/删"都在屏幕外 -->
+              <td class="px-2 py-2 sticky right-0 z-10 bg-slate-900 shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.9)]">
                 <div class="flex items-center gap-1">
-                  <button @click="act(s, 'extend')" :disabled="busy === s.id"
+                  <button @click="act(s, 'extend', 30)" :disabled="busy === s.id"
                           class="text-[10px] px-1.5 py-1 rounded bg-slate-800 text-slate-300 disabled:opacity-40">+30天</button>
+                  <button @click="act(s, 'extend', -30)" :disabled="busy === s.id"
+                          class="text-[10px] px-1.5 py-1 rounded bg-slate-800 text-amber-300/90 disabled:opacity-40">−30天</button>
                   <button v-if="s.status === 'active'" @click="act(s, 'stop')" :disabled="busy === s.id"
                           class="text-[10px] px-1.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-600/40 disabled:opacity-40">停站</button>
                   <button v-else @click="act(s, 'resume')" :disabled="busy === s.id"
@@ -188,18 +187,27 @@ const enterSite = (s) => {
   localStorage.setItem('xnow_site_current', String(s.id))
   window.location.href = '/my-site/overview'
 }
-const act = async (s, action) => {
+const act = async (s, action, days = 30) => {
+  // 🔒 每个会改到期时间/状态的动作都要先确认 —— 这些按钮就在表格里，误触一次
+  //    就是"凭空多送 30 天"或者"站突然下线"，没有二次确认太危险。
+  const cur = s.expire_at ? new Date(Number(s.expire_at)).toLocaleDateString('zh-CN') : '不计费'
+  if (action === 'extend') {
+    const label = days > 0 ? `增加 ${days} 天` : `扣减 ${-days} 天`
+    const tip = days > 0 ? '（赠送，不收钱）' : '（用于撤销误加的时间）'
+    if (!await uiStore.confirm(`确定给「${s.name}」${label}${tip}？\n当前到期：${cur}`)) return
+  }
   if (action === 'delete') {
     const typed = await uiStore.prompt(`删除站点会连同它的域名配置一起删掉，且不可恢复。\n要删除「${s.name}」，请输入站点名确认：`)
     if (typed === null) return
     if (String(typed).trim() !== String(s.name).trim()) return uiStore.notify('名称不匹配，已取消')
   }
   if (action === 'stop' && !await uiStore.confirm(`停站后这个域名会立刻显示下线页，确定停「${s.name}」？`)) return
+  if (action === 'resume' && !await uiStore.confirm(`确定恢复「${s.name}」的运营？域名会重新打开。`)) return
   busy.value = s.id
   try {
     const r = await fetch(`/api/admin/sites/${s.id}/action`, {
       method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, days: 30, confirm: action === 'delete' ? s.name : undefined }),
+      body: JSON.stringify({ action, days, confirm: action === 'delete' ? s.name : undefined }),
     }).then(x => x.json())
     if (r.status === 'success') { uiStore.notify(r.message || '完成'); await load() }
     else uiStore.notify(r.message || '操作失败')
