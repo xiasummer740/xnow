@@ -2,11 +2,11 @@ import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
 import { sequelize, Site, User, Config, Service, SiteServicePrice, SiteCustomerGroup, Order, Transaction } from '../models/index.js';
-import { getBillingConfig, chargeBalance, genSubdomain, renewSite } from '../utils/siteBilling.js';
+import { getBillingConfig, chargeBalance, genSubdomain, renewSite, restoreSiteDomain } from '../utils/siteBilling.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp, domainVhostOwner } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp, domainVhostOwner, resolveDistRoot } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
 import multer from 'multer';
 import fs from 'fs';
@@ -316,6 +316,7 @@ router.get('/', authenticate, async (req, res) => {
     const dnsTargetIp = await getPublicIp();
     const safe = (rows) => rows.map(r => {
       const o = r.toJSON();
+      o.stop_reason = o.stop_reason || null;   // 🚦 前端要据此显示哪种恢复方式
       o.smtp_pass = o.smtp_pass ? '******' : null;
       o.bufpay_key = o.bufpay_key ? '******' : null;
       o.cryptomus_key = o.cryptomus_key ? '******' : null;
@@ -531,9 +532,9 @@ router.post('/', authenticate, async (req, res) => {
     let publishNote = '';
     {
       try {
-        const cert = await ensureCert(cleanDomain, process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist'));
+        const cert = await ensureCert(cleanDomain, resolveDistRoot());
         const backendPort = parseInt(process.env.PORT) || 3000;
-        const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+        const distRoot = resolveDistRoot();
         writeVhost({ siteId: site.id, domain: cleanDomain, backendPort, distRoot, cert });
         reloadNginx();
         site.domain_status = 'active';
@@ -1345,9 +1346,9 @@ router.post('/:id/domain', authenticate, async (req, res) => {
     }
 
     // ② 证书 + ③ vhost
-    const cert = await ensureCert(domain, process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist'));
+    const cert = await ensureCert(domain, resolveDistRoot());
     const backendPort = parseInt(process.env.PORT) || 3000;
-    const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+    const distRoot = resolveDistRoot();
     writeVhost({ siteId: site.id, domain, backendPort, distRoot, cert });
     reloadNginx();
 
@@ -1475,9 +1476,9 @@ router.post('/:id/publish', authenticate, async (req, res) => {
     if (!isFreeSubdomain(site.domain)) {
       return res.json({ status: 'error', message: '自有域名请用「绑定域名」功能' });
     }
-    const cert = await ensureCert(site.domain, process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist'));
+    const cert = await ensureCert(site.domain, resolveDistRoot());
     const backendPort = parseInt(process.env.PORT) || 3000;
-    const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+    const distRoot = resolveDistRoot();
     writeVhost({ siteId: site.id, domain: site.domain, backendPort, distRoot, cert });
     reloadNginx();
     site.domain_status = 'active';

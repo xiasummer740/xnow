@@ -15,7 +15,7 @@ import path from 'path';
 import { Site, User, Config, Transaction } from '../models/index.js';
 import { sendTgMessage } from './tgBot.js';
 import { clearSiteCache } from '../middleware/site.js';
-import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureCert, domainVhostOwner } from './siteDomain.js';
+import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureCert, domainVhostOwner, resolveDistRoot } from './siteDomain.js';
 
 export const DEFAULTS = {
   siteMonthly: 99,      // 分站 ¥99/月
@@ -135,6 +135,7 @@ export const runSiteBillingCheck = async () => {
           }
           try { reloadNginx(); } catch (e) {}
           site.status = 'expired';
+          site.stop_reason = 'plan';   // 本站月费到期：给这个站续费才能恢复
           site.domain_status = 'none';
           await site.save();
           // 96 期：停站同样要清缓存，否则这 60 秒内域名还能按分站解析到后端
@@ -182,21 +183,24 @@ export const runSiteBillingCheck = async () => {
 
       if (now >= exp) {
         if (isAgent) {
+          // 💰 110 期（祥哥定调）：**代理到期不停站**，分站照常运营。
+          //    代理资格只值"进货价 8 折"，到期就把名下各站的进货折扣调回原价（1.0），
+          //    站长继续卖、继续赚，只是每单成本高 25%。想回到 8 折续费代理即可。
           u.role = 'user';
           await u.save();
           report.expiredAgents++;
           const mine = await Site.findAll({ where: { owner_id: u.id } });
+          let changed = 0;
           for (const s of mine) {
-            for (const d of [s.domain, s.custom_domain].filter(Boolean)) {
-              try { removeVhost(s.id, d); } catch (e) {}
-              try { parkDomain(d); } catch (e) {}
+            if (Number(s.agent_discount) !== 1) {
+              s.agent_discount = 1;          // 原价进货
+              await s.save();
+              changed++;
             }
-            s.status = 'expired';
-            await s.save();
           }
-          try { reloadNginx(); } catch (e) {}
           await sendTgMessage(
-            `⏰ <b>至尊代理已到期</b>\n👤 ${u.phone}\n💡 代理资格与名下 ${mine.length} 个分站已暂停，续费恢复`
+            `⏰ <b>至尊代理已到期</b>\n👤 ${u.phone}\n` +
+            `💡 名下 ${mine.length} 个分站<b>继续正常运营</b>，进货价已回到原价（${changed} 个站受影响）；续费代理即恢复 8 折`
           );
         }
         continue;
@@ -248,7 +252,7 @@ export const restoreSiteDomain = async (site) => {
     if (target) {
       // ⚠️ 必须用绝对路径：写成相对路径 client/dist 时，nginx 会按自己的前缀解析成
       //    /etc/nginx/client/dist → 首页 500（还伴随 rewrite cycle 报错）。实测踩到过。
-      const distRoot = process.env.SITE_DIST_ROOT || path.resolve(process.cwd(), '..', 'client', 'dist');
+      const distRoot = resolveDistRoot();
       const cert = await ensureCert(target, distRoot);
       const backendPort = parseInt(process.env.PORT) || 3000;
       writeVhost({ siteId: site.id, domain: target, backendPort, distRoot, cert });

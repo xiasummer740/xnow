@@ -3349,3 +3349,66 @@ if (ownerRow.role !== 'agent') return '仅至尊代理可创建分站，请先�
 > 验收脚本里凡是「**预期被拒绝**」的断言，都必须确认这个拒绝**不会留下数据**。
 > 规则一改，红变绿的同时副作用就生效了 —— 而且它长得像"测试"，
 > 没人会想到去查余额。带写操作的负向用例，要么用只读替代，要么跑完必须自己回滚。
+---
+## 六十四、代理到期不停站；只有「分站自己到期」才停（110 期，祥哥两次纠正）
+
+### 我先做错的一版
+
+祥哥说「代理到期后名下已经开好的站停止访问」，我照做了：
+代理到期 → 删 vhost + 打 410 墓碑 + `status='expired'` + 记 `stop_reason='agent'`，
+还加了一条「转非代理继续经营」的出口和一堆恢复按钮。
+
+然后祥哥纠正：**「不对，代理到期分站正常运营」**、**「只有分站到期才停止访问」**。
+
+代理资格值的是「进货价 8 折」，不是「能不能有站」——
+
+### 现在的规则
+
+| 事件 | 分站 | 进货价 | 客户看到 |
+|---|---|---|---|
+| 至尊代理到期 | ✅ 照常运营（vhost 不动、域名不 park） | 8 折 → **原价**（`agent_discount` 0.8→1） | 正常访问 200 |
+| 续费至尊代理 | ✅ 照常 | 原价 → **8 折** | 正常访问 200 |
+| **分站月费到期** | ⛔ 停 | — | `410` + 「这个站点已下线」 |
+| 续费分站 | ✅ 恢复 | — | 正常访问 200 |
+
+实现要点：
+- `siteBilling.js` 的到期体检：代理降级只改 `role` + 名下站点 `agent_discount=1`，
+  **不再** `removeVhost` / `parkDomain` / `status='expired'`（`stop_reason` 只留给 `plan`）
+- `billing.js` 续费代理：把名下站点 `agent_discount` 拉回 0.8，提示「名下 N 个分站进货价已回到 8 折」
+- 删掉上一版加的 `POST /api/sites/:id/continue-as-user`（不停站了就没有"出口"这回事）
+- 站长后台的停站横幅只剩一种：**本站月费到期**；并在代理月费卡上方写明「代理到期分站照常运营」
+
+### 实测（Beta，全部跑完已还原）
+
+```
+① 代理到期（把 agent_expire_at 调到 1 分钟前，跑到期体检）
+   [billing] 停站 0 个 / 代理降级 1 个
+   users: 11 → role=user
+   sites: 25 → status=active, agent_discount=1
+   客户站 HTTP 200，vhost 仍在                       ✅ 站没停
+   进货价 25.00 → 31.25（原价，+25%）                ✅ 只是不再打折
+
+② 续费至尊代理
+   「至尊代理已开通 30 天（扣 ¥99）｜名下 1 个分站进货价已回到 8 折」
+   进货价 31.25 → 25.00 · 站点仍 active             ✅
+
+③ 分站月费到期（把 site.expire_at 调到 1 分钟前，跑到期体检）
+   [billing] 停站 1 个
+   sites: 25 → status=expired, stop_reason=plan
+   客户站 HTTP 410 + 「这个站点已下线」              ✅ 这才是该停的
+
+④ 续费分站 ¥99
+   「分站已续费 30 天」· status=active · plan=paid · 到期 2026-11-24
+   客户站 HTTP 200                                   ✅ 立刻恢复
+```
+
+### 顺带修掉一个真 bug：`client/dist` 路径依赖工作目录
+
+`restoreSiteDomain` / `writeVhost` 里四处都写
+`path.resolve(process.cwd(), '..', 'client', 'dist')`。
+我在服务器上从 `/var/www/xnow-beta` 手工跑脚本时，它解析成 `/var/www/client/dist`，
+**把 vhost 的 root 写成不存在的目录 → 全站 500**（当场踩到，客户站 500）。
+
+现在统一走 `siteDomain.js` 的 `resolveDistRoot()`：环境变量 → 按代码位置算 → 几种常见 cwd，
+**必须真的有 `index.html` 才算数**，一个都找不到就抛错（宁可失败也别写坏 vhost）。
+从 `/tmp` 调用也能正确返回 `/var/www/xnow-beta/client/dist`。

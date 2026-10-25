@@ -10,6 +10,9 @@ const Site = sequelize.define('Site', {
   multiplier: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 2.0 },
   agent_discount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0.8 },
   status: { type: DataTypes.ENUM('active', 'suspended', 'expired'), defaultValue: 'active' },
+  // 🚦 110 期：站为什么被停 —— 'plan'（本站月费到期）/ 'agent'（站主的至尊代理到期连带停）
+  //    必须分开记：代理续费只恢复 'agent' 的站，不能顺手把「欠站费」的站也放出来。
+  stop_reason: { type: DataTypes.STRING(16), allowNull: true },
   announcement: { type: DataTypes.TEXT, allowNull: true },
   // 🎨 三期主题系统
   template: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'classic' },

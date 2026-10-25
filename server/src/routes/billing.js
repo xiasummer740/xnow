@@ -17,6 +17,8 @@ import {
 
 const router = express.Router();
 const DAY = 86400e3;
+// 💰 至尊代理的进货折扣（8 折）。代理到期后名下站点回落到 1（原价），续费再回来。
+const AGENT_DISCOUNT = 0.8;
 
 const publicUser = (u) => ({
   id: u.id, phone: u.phone, role: u.role, balance: u.balance,
@@ -65,7 +67,8 @@ router.get('/status', authenticate, async (req, res) => {
           days_left: me.agent_expire_at ? Math.floor((Number(me.agent_expire_at) - now) / DAY) : null,
         },
         sites: sites.map(s => ({
-          id: s.id, name: s.name, domain: s.domain, status: s.status, plan: s.plan,
+          id: s.id, name: s.name, domain: s.custom_domain || s.domain, status: s.status, plan: s.plan,
+        stop_reason: s.stop_reason || null,
           expire_at: Number(s.expire_at || 0),
           expire_text: fmt(s.expire_at),
           days_left: s.expire_at ? Math.floor((Number(s.expire_at) - now) / DAY) : null,
@@ -96,11 +99,35 @@ router.post('/agent/subscribe', authenticate, async (req, res) => {
     if (!['admin', 'super_admin'].includes(me.role)) me.role = 'agent';
     await me.save({ transaction: t });
 
+    // 💰 110 期：代理到期不停站（站一直正常运营），只是进货价回落到原价。
+    //    那么代理一续上，名下各站的进货折扣要**立刻恢复 8 折** ——
+    //    否则站长交了钱拿货还是原价，等于白交。
+    let discounted = 0;
+    try {
+      const mine = await Site.findAll({ where: { owner_id: me.id }, transaction: t });
+      for (const site of mine) {
+        if (Number(site.agent_discount) !== AGENT_DISCOUNT) {
+          site.agent_discount = AGENT_DISCOUNT;
+          await site.save({ transaction: t });
+          discounted++;
+        }
+      }
+    } catch (e) {
+      console.error('[billing] 恢复名下分站 8 折失败:', e.message);
+    }
+
     await t.commit();
     res.json({
       status: 'success',
-      message: `至尊代理已开通 ${cfg.renewDays} 天（扣 ¥${cfg.agentMonthly}）`,
-      data: { user: publicUser(me), expire_at: Number(me.agent_expire_at), expire_text: fmt(me.agent_expire_at) },
+      message: discounted
+        ? `至尊代理已开通 ${cfg.renewDays} 天（扣 ¥${cfg.agentMonthly}）｜名下 ${discounted} 个分站进货价已回到 8 折`
+        : `至尊代理已开通 ${cfg.renewDays} 天（扣 ¥${cfg.agentMonthly}）`,
+      data: {
+        user: publicUser(me),
+        expire_at: Number(me.agent_expire_at),
+        expire_text: fmt(me.agent_expire_at),
+        discounted_sites: discounted,
+      },
     });
   } catch (e) {
     try { await t.rollback(); } catch (_) {}
@@ -133,6 +160,7 @@ router.post('/site/:id/renew', authenticate, async (req, res) => {
     site.remind_keys = '';
     if (site.status === 'expired') {
       site.status = 'active';
+      site.stop_reason = null;
     }
     await site.save({ transaction: t });
     await t.commit();

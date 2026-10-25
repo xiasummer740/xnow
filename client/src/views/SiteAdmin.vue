@@ -22,6 +22,12 @@
     <!-- 📣 推荐同行开店：站长把朋友介绍来开至尊代理/充值，他拿 10% 返佣。
          只出现在主站的「我的分站」页，分站上不露痕迹。 -->
 
+    <!-- 💰 110 期：代理到期**不停站**（只有本站月费到期才停）。这句务必说清楚，
+         否则站长会以为"代理一停我站就没了"，不敢让代理到期。 -->
+    <p v-if="site && billingState.isAgent" class="text-[10px] text-slate-500 leading-relaxed px-1">
+      至尊代理到期后，你的分站<b class="text-slate-400">照常运营</b>，只是进货价从 8 折回到原价。
+    </p>
+
     <!-- 💳 代理资格 + 分站月费（87 期商业化） -->
     <SiteBilling ref="billingRef" @changed="load()" @status="billingState = $event" />
 
@@ -74,6 +80,21 @@
     <!-- 已有分站 -->
     <!-- pb-24：右下角那个 LIVE 客服球会盖住页面最后一行字（截图自查发现）-->
     <div v-else class="space-y-5 pb-24">
+      <!-- 🚦 站被停了 —— 只有一种原因：这个站的月费到期（祥哥定调） -->
+      <section v-if="page === 'overview' && site && site.status === 'expired'"
+        class="bg-rose-950/30 border border-rose-800/60 rounded-2xl p-4">
+        <h2 class="font-bold text-sm text-rose-300 mb-1.5">站点已停：这个站的月费到期了</h2>
+        <p class="text-[11px] text-slate-300 leading-relaxed">
+          访客现在打开 <b>{{ site.custom_domain || site.domain }}</b> 会看到「站点已下线」。
+          数据都还在，续费立刻恢复。
+        </p>
+        <button type="button" @click="renewSiteFee()" :disabled="busyStop"
+          class="mt-2.5 px-3 py-2 rounded-lg bg-amber-500 text-slate-900 text-[11px] font-bold disabled:opacity-50">
+          续费这个站 ¥{{ plan.site_monthly }}（30 天）
+        </button>
+        <p v-if="stopMsg" class="text-[11px] mt-2" :class="stopMsgOk ? 'text-emerald-400' : 'text-red-400'">{{ stopMsg }}</p>
+      </section>
+
       <!-- 🏬 我的分站（多站时用来切换；也在这里开新站）-->
       <section v-if="page === 'overview'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2.5">
@@ -1112,6 +1133,27 @@ const save = async (silent = false) => {
     if (data.status === 'success') { savedSig.value = formSig.value; await load() }
     return data.status === 'success'
   } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
+}
+
+// 🚦 停站后的三种恢复动作
+const busyStop = ref(false)
+const stopMsg = ref('')
+const stopMsgOk = ref(true)
+
+const afterRestore = (ok, text) => {
+  stopMsgOk.value = ok
+  stopMsg.value = text
+  if (ok) setTimeout(() => load(), 600)
+}
+
+const renewSiteFee = async () => {
+  if (busyStop.value) return
+  busyStop.value = true; stopMsg.value = ''
+  try {
+    const r = await fetch(`/api/billing/site/${site.value.id}/renew`, { method: 'POST', headers: headers() }).then(x => x.json())
+    afterRestore(r.status === 'success', (r.status === 'success' ? '✅ ' : '❌ ') + (r.message || ''))
+  } catch (e) { afterRestore(false, '❌ ' + e.message) }
+  finally { busyStop.value = false }
 }
 
 const createSite = async () => {

@@ -377,6 +377,35 @@ const pickParkCert = (safe) => {
 //    以前 `return 410;` 只有状态码，访客看到的是 nginx 自带的英文 "410 Gone" 白页 ——
 //    分站到期后客户一脸懵，看着像跑路。现在给一句中文说明，
 //    仍然不提平台、不提品牌（红线），也不暗示"还有个上级"。
+// 📁 分站静态目录（nginx root）
+//    以前四处都写成 path.resolve(process.cwd(), '..', 'client', 'dist') —— 只要进程的工作目录
+//    不是 server/（pm2 换 cwd、手工 node -e、cron 里跑脚本都会变），就会解析成 /var/www/client/dist，
+//    写进 vhost 后全站 500。2026-10-25 实测试踩到过一次。
+//    现在按「先看环境变量 → 再看代码位置 → 再看几种常见 cwd」的顺序找，**必须真有 index.html 才算数**，
+//    一个都找不到就抛错（宁可让调用方失败，也不要写出一份坏 vhost）。
+import fsx from 'fs';
+import { fileURLToPath } from 'url';
+
+const DIST_MARKERS = ['index.html', 'site.html'];
+
+export const resolveDistRoot = () => {
+  const here = fileURLToPath(new URL('.', import.meta.url));      // …/server/src/utils/
+  const candidates = [
+    process.env.SITE_DIST_ROOT,
+    path.resolve(here, '../../../client/dist'),                   // 仓库内：server/src/utils → client/dist
+    path.resolve(process.cwd(), '../client/dist'),                // cwd = server/
+    path.resolve(process.cwd(), 'client/dist'),                   // cwd = 仓库根
+    path.resolve(process.cwd(), '../client/dist'),                // cwd = deploy/ 之类
+  ].filter(Boolean);
+
+  for (const c of candidates) {
+    try {
+      if (DIST_MARKERS.some((m) => fsx.existsSync(path.join(c, m)))) return c;
+    } catch (e) { /* 没权限就算了，看下一个 */ }
+  }
+  throw new Error('找不到分站静态目录（client/dist）。请设置 SITE_DIST_ROOT，或确认前端已构建。');
+};
+
 const GONE_PAGE = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
   '<meta name="viewport" content="width=device-width,initial-scale=1"><title>站点已下线</title>' +
   '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
