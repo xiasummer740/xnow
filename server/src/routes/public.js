@@ -86,6 +86,8 @@ router.get('/config', async (req, res) => {
       data.ui_density = req.site.ui_density || '';
       data.card_style = req.site.card_style || '';
       data.font_style = req.site.font_style || '';
+    data.icon_style = req.site.icon_style || '';
+    data.icon_shape = req.site.icon_shape || '';
       data.btn_shape = req.site.btn_shape || '';
       data.hero_layout = req.site.hero_layout || '';
       // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）

@@ -786,6 +786,122 @@ router.put('/:id/prices', authenticate, async (req, res) => {
   }
 });
 
+// ⚡ 110 期（祥哥：某些批量不好改）—— 按「平台 / 分类 / 全部」整批改价。
+//    和 PUT /prices 的区别：那边只认前端已经列出来的那 200 条（页面有截断），
+//    这边由服务端按条件直接扫全表，2855 条也能一次改完，不用一个个分类点。
+//    mode: margin（进货价 +N%）| rate（统一价）| clear（恢复跟随全站价）
+router.post('/:id/prices/bulk', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '分站不存在' });
+    const isStaff = ['admin', 'super_admin'].includes(req.user.role);
+    if (!isStaff && site.owner_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: '无权修改此分站' });
+    }
+
+    const mode = String(req.body.mode || '').trim();
+    if (!['margin', 'rate', 'clear'].includes(mode)) {
+      return res.json({ status: 'error', message: '批量方式不对' });
+    }
+    const scope = String(req.body.scope || 'all').trim();       // all | platform | category | q
+    const platform = String(req.body.platform || '').trim();
+    const category = String(req.body.category || '').trim();
+    const keyword = String(req.body.q || '').trim();
+
+    if (scope === 'category' && !category) return res.json({ status: 'error', message: '请先选一个分类' });
+    if (scope === 'platform' && !platform) return res.json({ status: 'error', message: '请先选一个平台' });
+
+    const { Op } = (await import('sequelize')).default;
+
+    // 平台 → 分类列表（和 GET /prices 同一套规则，保证"看到的"和"改到的"是一批）
+    const PLATFORMS = [
+      ['TikTok', /tiktok/i], ['Instagram', /instagram|\big\b/i], ['YouTube', /youtube/i],
+      ['Telegram', /telegram/i], ['Facebook', /facebook/i], ['Twitter', /twitter|\bx\/twitter/i],
+      ['Spotify', /spotify/i], ['Apple Music', /apple music/i], ['Audiomack', /audiomack/i],
+      ['SoundCloud', /soundcloud/i], ['Shopee', /shopee/i], ['Line', /\bline\b/i],
+      ['WhatsApp', /whatsapp/i], ['Discord', /discord/i], ['Twitch', /twitch/i],
+    ];
+    const platformOf = (name) => {
+      for (const [label, re] of PLATFORMS) if (re.test(name)) return label;
+      return '其他';
+    };
+
+    const where = {};
+    if (scope === 'category') where.category = category;
+    else if (scope === 'q' && keyword) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${keyword}%` } },
+        { category: { [Op.like]: `%${keyword}%` } },
+        { type: { [Op.like]: `%${keyword}%` } },
+      ];
+    } else if (scope === 'platform') {
+      const allCats = await Service.findAll({ attributes: ['category'], group: ['category'], raw: true });
+      const inPlat = allCats
+        .map((r) => String(r.category || '').trim())
+        .filter((c) => c && platformOf(c) === platform);
+      where.category = inPlat.length ? { [Op.in]: inPlat } : { [Op.in]: ['__none__'] };
+    }
+
+    const services = await Service.findAll({ where, attributes: ['service_id', 'name', 'rate', 'custom_rate'] });
+    if (!services.length) return res.json({ status: 'error', message: '这个范围里没有服务' });
+
+    // 🔒 成本保护：先算好每条的下界，任何一条越线就整批不动（不做"改一半"）
+    const globalMult = await getGlobalMultiplier();
+    const costMult = siteCostMultiplier(site.agent_discount, globalMult);
+    const discount = effectiveDiscount(site);
+    const marginPct = Number(req.body.margin_pct);
+    const fixedRate = parseFloat(req.body.rate);
+
+    if (mode === 'margin' && (!isFinite(marginPct) || marginPct < 0)) {
+      return res.json({ status: 'error', message: '加价率要填 0 或更大的数' });
+    }
+    if (mode === 'rate' && (!isFinite(fixedRate) || fixedRate <= 0)) {
+      return res.json({ status: 'error', message: '价格要大于 0' });
+    }
+
+    const ids = services.map((sv) => Number(sv.service_id));
+    if (mode === 'clear') {
+      const n = await SiteServicePrice.destroy({ where: { site_id: site.id, service_id: ids } });
+      return res.json({
+        status: 'success',
+        message: `已把 ${n} 条服务恢复成跟随全站统一价（共扫到 ${ids.length} 条）`,
+        data: { matched: ids.length, changed: n },
+      });
+    }
+
+    const toUpsert = [];
+    let floorHit = null;
+    for (const sv of services) {
+      const baseRate = (sv.custom_rate !== null && sv.custom_rate !== undefined)
+        ? parseFloat(sv.custom_rate) : parseFloat(sv.rate);
+      const cost = baseRate * costMult;
+      let rate = mode === 'margin' ? cost * (1 + marginPct / 100) : fixedRate;
+      rate = Number(rate.toFixed(4));
+      const floor = Number((cost / discount).toFixed(6));
+      if (rate < floor - 0.000001) { floorHit = { name: sv.name, rate, floor }; break; }
+      toUpsert.push({ site_id: site.id, service_id: Number(sv.service_id), rate });
+    }
+    if (floorHit) {
+      return res.json({
+        status: 'error',
+        // 🔒 只说进货价，不提倍率
+        message: `有一条会亏本：「${floorHit.name}」算出来 ${floorHit.rate}，低于你的进货价底线 ${floorHit.floor}。整批没有改动，请把加价率调高一点。`,
+      });
+    }
+
+    if (toUpsert.length) {
+      await SiteServicePrice.bulkCreate(toUpsert, { updateOnDuplicate: ['rate', 'updated_at'] });
+    }
+    res.json({
+      status: 'success',
+      message: `已改好 ${toUpsert.length} 条${mode === 'margin' ? `（进货价 +${marginPct}%）` : `（统一 ¥${fixedRate}）`}`,
+      data: { matched: ids.length, changed: toUpsert.length },
+    });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '批量改价失败：' + (e.message || e) });
+  }
+});
+
 router.put('/:id', authenticate, async (req, res) => {
   try {
     const site = await Site.findByPk(req.params.id);
@@ -845,7 +961,11 @@ router.put('/:id', authenticate, async (req, res) => {
       ui_radius: ['square', 'soft', 'round', 'pill'],
       ui_density: ['compact', 'normal', 'relaxed'],
       card_style: ['outline', 'glass', 'solid'],
-      font_style: ['sans', 'rounded', 'serif', 'mono'],
+      // 🎨 110 期：字体从 4 档扩到 8 档（kai/hei/song/yahei 是真中文字体栈，中文看起来才真的不一样）
+      font_style: ['sans', 'rounded', 'serif', 'mono', 'kai', 'hei', 'song', 'yahei'],
+      // 🎨 110 期：图标风格 + 形状
+      icon_style: ['brand', 'brand-mono', 'emoji', 'text'],
+      icon_shape: ['none', 'soft', 'circle'],
       btn_shape: ['pill', 'rounded', 'square'],
       hero_layout: ['center', 'split', 'banner'],
       // 🎨 四十一期：结构级 DIY（换版式，不只是换色）

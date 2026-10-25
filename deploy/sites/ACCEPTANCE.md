@@ -2827,3 +2827,73 @@ if (localStorage.getItem('xnow_is_subsite') === '1'
 
 **站长管分站的正确入口是主站**（正式环境 `xnow.taikon.top/my-site`，Beta 是 `beta.taikon.top/my-site`），
 分站域名只给客户看。
+---
+## 五十四、批量改价 + 图标/字体自定义（110 期，祥哥两点反馈）
+
+祥哥：「这里改价不方便，某些批量的不好改，另外分站的这些布局、样子、图标、字体不能够有丰富的自定义吗」
+
+### 一、改价：新增两条批量通道
+
+原来只有「整类一键定价」，只能作用于**当前页面列出来的那 200 条**（列表有截断），
+想改一个平台得逐个分类点一遍 —— 2855 条服务根本改不完。
+
+**① 勾选批量（前端）**：每条服务左侧有勾选框，勾几条 → 出现批量条：
+- 按「进货价 + N%」填
+- 统一填成某个价
+- 恢复跟随全站统一价
+- 全选这几百条 / 取消
+
+**② 整批改价（后端扫全表）**：`POST /api/sites/:id/prices/bulk`
+```json
+{ "scope": "platform|category|q|all", "platform": "TikTok",
+  "mode": "margin|rate|clear", "margin_pct": 50, "rate": 45 }
+```
+- 服务端按条件扫全表，**不受 200 条截断限制**（实测平台范围一次匹配 390 条）
+- 成本保护：先算完整批的下界，任何一条越线 → **整批不动**（不做"改一半"）
+- 实测：进货价 ¥25 → `+50%` 落库为 ¥37.5；`-5%` 被拒「加价率要填 0 或更大」；
+  `clear` 后覆盖清空、价格回到全站统一价
+
+修的一个自己的 bug：第一版把批量条和列表写成 `v-if/v-else`，**勾一条整张列表就消失了**，
+已改成两者并存。
+
+### 二、自定义：字体从 4 档扩到 9 档，新增图标自定义
+
+**字体**：原来 4 档里 3 档是西文字体，中文看起来几乎一样（站长以为"没得选"）。
+现在 9 档，每档用**自己的字体**渲染一句中文示例：
+
+| 档位 | 字体栈 | 示例 |
+|---|---|---|
+| 跟随模板 | system-ui | Aa 涨价 |
+| 现代黑体 | PingFang SC / Microsoft YaHei | 粉丝 到账 |
+| 硬黑海报 | Heiti SC / SimHei | 秒级 交付 |
+| 雅黑圆润 | Microsoft YaHei | 下单 即发 |
+| 宋体杂志 | Songti SC / SimSun | 品质 服务 |
+| 楷体文艺 | Kaiti SC / KaiTi | 匠心 出品 |
+| 圆体亲和 | SF Pro Rounded / PingFang SC | 轻松 涨粉 |
+| 衬线英文 | Georgia / Times New Roman | Premium |
+| 等宽科技 | JetBrains Mono / Consolas | ID 30094 |
+
+**图标**（新增两列 `icon_style` / `icon_shape`）：
+- 图标风格：跟随模板 / 品牌彩色 / 品牌单色 / 表情符号 / 只用文字
+- 图标底色形状：无底 / 透明 / 圆角块 / 圆形块
+- 落地：`Order.vue` 平台方块按这两个值渲染（品牌 SVG 单色时用 `currentColor`）
+- Beta 已 ALTER，正式环境上线时执行：
+  ```sql
+  ALTER TABLE sites ADD COLUMN icon_style VARCHAR(16) NULL AFTER font_style;
+  ALTER TABLE sites ADD COLUMN icon_shape VARCHAR(12) NULL AFTER icon_style;
+  ```
+
+**已有的自定义**（本来就有，只是埋在装修页下半部分）：6 套模板 · 9 个色系 + 自定义色值 ·
+背景纯色/渐变/图 · 圆角 5 档 · 字号 3 档 · 卡片样式 4 种 · 按钮形状 4 种 ·
+首屏版式 4 种 · 服务区版式 3 种（卡片/表格/榜单）· 首页模块开关与排序 · 自己的 CSS。
+
+### 三、验证
+
+```
+POST /prices/bulk  +50%（分类 12 条）   → 落库 37.5（成本 25 × 1.5）✅
+POST /prices/bulk  clear（平台 390 条） → 覆盖清空，价格回落 ✅
+POST /prices/bulk  margin_pct=-5        → 「加价率要填 0 或更大」✅
+装修页字体档位                          → 9/9 全部渲染 ✅
+装修页图标风格 / 底色形状                → 都在，勾选即预览 ✅
+全站价页 勾选 3 条                       → 「已勾选 3 条」批量条出现，列表仍在 ✅
+```

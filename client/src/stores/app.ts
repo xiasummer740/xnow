@@ -27,6 +27,8 @@ export const useAppStore = defineStore('app', {
     advantages: [] as { icon?: string; title?: string; body?: string }[],
     // 🎨 二十七期：风格细分维度（空 = 用模板默认）
     uiRadius: '', uiDensity: '', cardStyle: '', fontStyle: '', btnShape: '', heroLayout: '',
+    // 🎨 110 期：图标风格（品牌彩色/品牌单色/表情/纯文字）+ 图标形状（无底/圆角/圆形）
+    iconStyle: '', iconShape: '',
     // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）
     bgColor: '', bgImage: '', fontScale: '',
     // 🎨 四十一期：全方位 DIY
@@ -79,6 +81,8 @@ export const useAppStore = defineStore('app', {
       this.uiDensity = d.ui_density || '';
       this.cardStyle = d.card_style || '';
       this.fontStyle = d.font_style || '';
+      this.iconStyle = d.icon_style || '';
+      this.iconShape = d.icon_shape || '';
       this.btnShape = d.btn_shape || '';
       this.heroLayout = d.hero_layout || '';
     // 🎨 六十三期：背景色 / 背景图 / 字号档位
@@ -129,6 +133,8 @@ export const useAppStore = defineStore('app', {
     this.uiDensity = map.uiDensity || '';
     this.cardStyle = map.cardStyle || '';
     this.fontStyle = map.fontStyle || '';
+    this.iconStyle = map.iconStyle || '';
+    this.iconShape = map.iconShape || '';
     this.btnShape = map.btnShape || '';
     this.heroLayout = map.heroLayout || '';
     this.bgColor = map.bgColor || '';

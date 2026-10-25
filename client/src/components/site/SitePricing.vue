@@ -112,6 +112,100 @@ function clearDrafts() {
     draft.value[it.service_id] = isOverride(it) ? String(it.override) : '';
   }
 }
+// ⚡ 110 期（祥哥：某些批量的不好改）
+//    ① 勾选若干条 → 一起改（不用一条条点开面板）
+//    ② 按平台/分类/关键词「整批改价」→ 服务端扫全表，不受页面只显示 200 条的截断限制
+const picked = ref([]);
+const pickedSet = computed(() => new Set(picked.value.map(Number)));
+const isPicked = (it) => pickedSet.value.has(Number(it.service_id));
+function togglePick(it) {
+  const id = Number(it.service_id);
+  const i = picked.value.findIndex(x => Number(x) === id);
+  if (i >= 0) picked.value.splice(i, 1); else picked.value.push(id);
+}
+function pickAllVisible() { picked.value = items.value.map(it => Number(it.service_id)); }
+function clearPicked() { picked.value = []; }
+
+const pickMargin = ref(30);
+const pickFixed = ref('');
+
+// 勾选的这一批：按「进货价 + N%」填进草稿（确认后照旧点保存定价）
+function fillPickedMargin() {
+  const m = Number(pickMargin.value);
+  if (!isFinite(m) || m < 0) return flash('加价率要填 0 或更大', false);
+  let n = 0;
+  for (const it of items.value) {
+    if (!isPicked(it)) continue;
+    draft.value[it.service_id] = String(Number((Number(it.cost_per_1k) * (1 + m / 100)).toFixed(4)));
+    n++;
+  }
+  flash(`已给勾选的 ${n} 条填好「进货价 +${m}%」，确认后点保存定价`, !!n);
+}
+function fillPickedFixed() {
+  const v = parseFloat(pickFixed.value);
+  if (!isFinite(v) || v <= 0) return flash('价格要大于 0', false);
+  let n = 0;
+  for (const it of items.value) {
+    if (!isPicked(it)) continue;
+    draft.value[it.service_id] = String(v);
+    n++;
+  }
+  flash(`已把勾选的 ${n} 条统一填成 ¥${v}`, !!n);
+}
+function fillPickedClear() {
+  let n = 0;
+  for (const it of items.value) {
+    if (!isPicked(it)) continue;
+    draft.value[it.service_id] = '';
+    n++;
+  }
+  flash(`已把勾选的 ${n} 条改成「跟随全站统一价」（需点保存定价）`, !!n);
+}
+
+// 整批改价：直接落库（服务端按条件扫全表，不怕 200 条上限）
+const bulkScope = ref('platform');   // platform | category | q | all
+const bulkMode = ref('margin');      // margin | rate | clear
+const bulkMargin = ref(30);
+const bulkFixed = ref('');
+const bulkBusy = ref(false);
+async function runBulk() {
+  if (bulkBusy.value) return;
+  if (bulkScope.value === 'category' && !activeCategory.value) return flash('先在下面选一个分类，再整批改', false);
+  if (bulkScope.value === 'platform' && !activePlatform.value) return flash('先选一个平台，再整批改', false);
+  if (bulkScope.value === 'q' && !query.value.trim()) return flash('先在搜索框填关键词', false);
+  const scopeName = bulkScope.value === 'platform' ? `平台「${activePlatform.value}」`
+    : bulkScope.value === 'category' ? `分类「${shortCat(activeCategory.value)}」`
+    : bulkScope.value === 'q' ? `搜到「${query.value.trim()}」的服务`
+    : '全部服务';
+  const how = bulkMode.value === 'margin' ? `进货价 +${bulkMargin.value}%`
+    : bulkMode.value === 'rate' ? `统一 ¥${bulkFixed.value}`
+    : '恢复跟随全站统一价';
+  if (!confirm(`确定把 ${scopeName} 全部改成「${how}」？\n这会直接写进你的价格表（可以再改回来）。`)) return;
+  bulkBusy.value = true;
+  try {
+    const r = await fetch(`/api/sites/${props.siteId}/prices/bulk`, {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: bulkScope.value,
+        platform: activePlatform.value,
+        category: activeCategory.value,
+        q: query.value.trim(),
+        mode: bulkMode.value,
+        margin_pct: Number(bulkMargin.value),
+        rate: bulkFixed.value,
+      }),
+    });
+    const d = await r.json();
+    flash(d.message || (d.status === 'success' ? '已改好' : '改价失败'), d.status === 'success');
+    if (d.status === 'success') { picked.value = []; await load(); emit('saved'); }
+  } catch (e) {
+    flash('改价失败：' + e.message, false);
+  } finally {
+    bulkBusy.value = false;
+  }
+}
+
 const meta = ref({ markup_pct: 0, discount_rate: 1, discount_label: '', discount_until: 0 });
 const itemsAllCount = computed(() =>
   categories.value.reduce((n, c) => n + (c.count || 0), 0) || items.value.length);
@@ -333,6 +427,55 @@ onMounted(load);
         </div>
       </div>
 
+      <!-- ⚡ 110 期：整批改价（服务端扫全表，不受「只显示 200 条」限制） -->
+      <details class="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3 mb-3">
+        <summary class="text-[11px] font-bold text-sky-300 cursor-pointer select-none">
+          整批改价 —— 一个平台或一个分类，几千条也能一次改完
+          <span class="text-slate-500 font-normal">（直接生效，比一条条点快得多）</span>
+        </summary>
+        <div class="mt-3 space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-1">改哪些</label>
+              <select v-model="bulkScope" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
+                <option value="platform">当前平台{{ activePlatform ? '（' + activePlatform + '）' : '' }}</option>
+                <option value="category">当前分类{{ activeCategory ? '（' + shortCat(activeCategory) + '）' : '' }}</option>
+                <option value="q">搜索关键词</option>
+                <option value="all">全部服务</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-1">怎么改</label>
+              <select v-model="bulkMode" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
+                <option value="margin">进货价 + N%</option>
+                <option value="rate">统一价（每 1000）</option>
+                <option value="clear">恢复跟随全站统一价</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="bulkMode === 'margin'" class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-400">在进货价上加</span>
+            <input v-model.number="bulkMargin" type="number" step="5" min="0" max="300" inputmode="numeric"
+                   class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
+            <span class="text-[11px] text-slate-400">%</span>
+            <span class="text-[10px] text-slate-500">越高客户付得越多、你赚得越多</span>
+          </div>
+          <div v-else-if="bulkMode === 'rate'" class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-400">统一卖</span>
+            <input v-model="bulkFixed" type="text" inputmode="decimal" placeholder="例如 45"
+                   class="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
+            <span class="text-[11px] text-slate-400">元 / 千</span>
+          </div>
+          <button @click="runBulk" :disabled="bulkBusy"
+                  class="w-full py-2 rounded-lg bg-sky-500 text-slate-900 text-[12px] font-bold disabled:opacity-40">
+            {{ bulkBusy ? '正在改…' : '执行整批改价' }}
+          </button>
+          <p class="text-[10px] text-slate-500 leading-relaxed">
+            低于你的进货价的方案会被整批拦下（一条都不会改动），不会让你亏本卖。
+          </p>
+        </div>
+      </details>
+
       <div class="flex gap-2 mb-2">
         <input v-model="query" @keyup.enter="load" placeholder="搜服务名 / 分类，例如 TikTok 粉丝"
                class="flex-grow bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
@@ -371,7 +514,31 @@ onMounted(load);
       <div v-if="loading" class="text-xs text-slate-500 py-6 text-center">读取中…</div>
       <div v-else-if="!items.length" class="text-xs text-slate-500 py-6 text-center">没搜到服务，换个关键词试试</div>
 
-      <div v-else class="max-h-[26rem] overflow-y-auto custom-scrollbar pr-1 pb-14">
+      <!-- ✅ 勾选后出现的批量条 -->
+      <div v-if="picked.length" class="mb-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-bold text-amber-300">已勾选 {{ picked.length }} 条</span>
+          <div class="flex gap-1.5">
+            <button @click="pickAllVisible" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">全选这几百条</button>
+            <button @click="clearPicked" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">取消</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <input v-model.number="pickMargin" type="number" step="5" min="0" inputmode="numeric"
+                 class="w-14 bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1 text-[12px] text-right" />
+          <span class="text-[10px] text-slate-400">%</span>
+          <button @click="fillPickedMargin" class="px-2 py-1 rounded-md bg-amber-500 text-slate-900 text-[10px] font-bold">按进货价加价</button>
+          <span class="text-slate-600">|</span>
+          <input v-model="pickFixed" type="text" inputmode="decimal" placeholder="¥"
+                 class="w-16 bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1 text-[12px] text-right" />
+          <button @click="fillPickedFixed" class="px-2 py-1 rounded-md bg-slate-700 text-[10px] text-slate-100">统一成这个价</button>
+          <button @click="fillPickedClear" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">恢复跟随全站价</button>
+        </div>
+        <p class="text-[10px] text-amber-400/80">填好之后，点最下面的「保存定价」才真正生效。</p>
+      </div>
+
+      <!-- ⚠️ 这里不能写 v-else：勾选后列表还得继续显示（第一版写成 v-else，勾一条整张列表就消失了）-->
+      <div class="max-h-[26rem] overflow-y-auto custom-scrollbar pr-1 pb-14">
         <div v-for="g in grouped" :key="g.name" class="mb-2">
           <div v-if="!activeCategory" class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur px-1 py-1.5 mb-1.5
                       text-[11px] font-bold text-sky-300/90 border-b border-slate-800 flex items-center justify-between">
@@ -381,7 +548,11 @@ onMounted(load);
           <button v-for="it in g.items" :key="it.service_id" type="button" @click="openSheet(it)"
                   class="w-full text-left rounded-xl border p-3 mb-2 transition active:scale-[0.995]"
                   :class="dirty(it) ? 'border-amber-500/60 bg-amber-500/5' : 'border-slate-800 bg-slate-950/60'">
-            <div class="flex items-start gap-3">
+            <div class="flex items-start gap-2.5">
+              <!-- ✅ 勾选（点这里只勾选，不打开改价面板）-->
+              <button type="button" @click.stop="togglePick(it)"
+                      class="shrink-0 mt-0.5 w-6 h-6 rounded-md border flex items-center justify-center text-[12px] font-black"
+                      :class="isPicked(it) ? 'bg-amber-500 border-amber-400 text-slate-900' : 'border-slate-600 text-transparent'">✓</button>
               <div class="min-w-0 flex-grow">
                 <div class="text-xs text-slate-200 line-clamp-2">{{ it.name }}</div>
                 <div class="text-[10px] text-slate-500 mt-1">

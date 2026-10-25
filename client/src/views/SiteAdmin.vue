@@ -591,9 +591,13 @@ const pv = computed(() => {
   const RADII = { square: '0.25rem', soft: '0.75rem', round: '1.25rem', pill: '2rem' }
   const FONTS = {
     sans: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
-    rounded: '"SF Pro Rounded", "PingFang SC", system-ui, sans-serif',
+    hei: '"Heiti SC", "SimHei", "Microsoft YaHei", system-ui, sans-serif',
+    yahei: '"Microsoft YaHei", "PingFang SC", system-ui, sans-serif',
+    song: '"Songti SC", "SimSun", Georgia, serif',
+    kai: '"Kaiti SC", "KaiTi", "STKaiti", serif',
+    rounded: '"SF Pro Rounded", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
     serif: 'Georgia, "Songti SC", "Times New Roman", serif',
-    mono: '"JetBrains Mono", Consolas, monospace'
+    mono: '"JetBrains Mono", Consolas, "Courier New", monospace'
   }
   const CARDS = { outline: 'transparent', glass: 'rgba(255,255,255,.06)', solid: 'rgba(15,23,42,.92)' }
   const out = (() => { switch (t) {
@@ -715,6 +719,7 @@ const form = ref({
   name: '', markup_pct: 50, footer_text: '', support_url: '', announcement: '',
   template: 'classic', color: 'cyan', accent: '', modules: [],
   ui_radius: '', ui_density: '', card_style: '', font_style: '', btn_shape: '', hero_layout: '',
+    icon_style: '', icon_shape: '',
   // 71期：背景色 / 背景图 / 字号 —— 之前只有首页悬浮编辑器能改，
   // 站长在后台面板里找不到，等于「设置里配不全」。
   bg_color: '', bg_image: '', font_scale: '',
@@ -883,6 +888,7 @@ const load = async () => {
         ui_radius: s.ui_radius || '', ui_density: s.ui_density || '',
         bg_color: s.bg_color || '', bg_image: s.bg_image || '', font_scale: s.font_scale || '',
         card_style: s.card_style || '', font_style: s.font_style || '',
+        icon_style: s.icon_style || '', icon_shape: s.icon_shape || '',
         btn_shape: s.btn_shape || '', hero_layout: s.hero_layout || '',
       // 🎨 四十一期：结构级 DIY
       hero_variant: s.hero_variant || '', services_variant: s.services_variant || '',
@@ -997,6 +1003,7 @@ const save = async (silent = false) => {
       ui_radius: form.value.ui_radius, ui_density: form.value.ui_density,
       bg_color: form.value.bg_color || '', bg_image: form.value.bg_image || '', font_scale: form.value.font_scale || '',
       card_style: form.value.card_style, font_style: form.value.font_style,
+      icon_style: form.value.icon_style, icon_shape: form.value.icon_shape,
       btn_shape: form.value.btn_shape, hero_layout: form.value.hero_layout,
       home_modules: JSON.stringify(form.value.modules.map((m, i) => ({ key: m.key, enabled: !!m.enabled, order: i }))),
       bufpay_id: form.value.bufpay_id, bufpay_key: form.value.bufpay_key,

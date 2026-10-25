@@ -14,8 +14,13 @@
     <div class="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-2 md:gap-3">
       <div v-for="p in platformList" :key="p.name" @click="selectPlatform(p.name)"
            :class="['p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 transform', activePlatform === p.name ? 'bg-amber-400 text-slate-900 shadow-[0_5px_15px_rgba(251,191,36,0.4)] scale-105 font-black' : 'bg-slate-800/60 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-white hover:-translate-y-1']">
-        <div class="h-9 w-9 md:h-11 md:w-11 mb-1 md:mb-2 flex items-center justify-center">
-          <svg v-if="p.brand && BRANDS[p.brand]" viewBox="0 0 24 24" :style="{ fill: BRANDS[p.brand].color }" class="w-full h-full drop-shadow-md" v-html="BRANDS[p.brand].svg"></svg>
+        <!-- 🎨 110 期：图标风格/底色形状由站长在「装修」里选，这里照着渲染 -->
+        <div v-if="iconStyle !== 'text'"
+             :class="['h-9 w-9 md:h-11 md:w-11 mb-1 md:mb-2 flex items-center justify-center', iconShapeClass]">
+          <svg v-if="showBrand(p)" viewBox="0 0 24 24"
+               :style="{ fill: iconStyle === 'brand-mono' ? 'currentColor' : BRANDS[p.brand].color }"
+               :class="['w-full h-full drop-shadow-md', iconStyle === 'brand-mono' ? 'opacity-80' : '']"
+               v-html="BRANDS[p.brand].svg"></svg>
           <span v-else class="text-3xl md:text-4xl filter drop-shadow-md">{{ p.icon }}</span>
         </div>
         <div class="text-[10px] md:text-xs leading-tight w-full text-center font-medium whitespace-normal break-words px-1">{{ p.name }}</div>
@@ -225,6 +230,16 @@ import { useUiStore } from '../stores/ui';
 import { useAppStore } from '../stores/app';
 
 const userStore = useUserStore(); const uiStore = useUiStore(); const appStore = useAppStore();
+
+// 🎨 110 期：图标风格（品牌彩色 / 品牌单色 / 表情 / 纯文字）与底色形状
+const iconStyle = computed(() => appStore.iconStyle || 'brand');
+const iconShapeClass = computed(() => {
+  const sh = appStore.iconShape || '';
+  if (sh === 'circle') return 'rounded-full bg-slate-700/60 p-1';
+  if (sh === 'soft') return 'rounded-xl bg-slate-700/60 p-1';
+  return '';
+});
+const showBrand = (p) => iconStyle.value !== 'emoji' && p && p.brand && BRANDS[p.brand];
 
 // 🧩 平台按钮不再手写死列表 —— 由"实际有服务的分类"推导（见下方 platformList）。
 //    手写死列表的教训（2026-10-24 祥哥发现）：platformKeywords 支持 Line/Shopee/WhatsApp，

@@ -278,13 +278,43 @@
 
       <!-- 字体（用真实字体渲染）-->
       <div>
-        <label class="block text-[11px] text-slate-400 mb-1.5">字体</label>
-        <div class="grid grid-cols-2 gap-1.5">
+        <label class="block text-[11px] text-slate-400 mb-1.5">字体 <span class="text-slate-600">（每档下面就是它的样子）</span></label>
+        <div class="grid grid-cols-3 gap-1.5">
           <button v-for="ft in FONT_OPTS" :key="'ft' + ft.key" type="button" @click="form.font_style = ft.key"
             class="px-2 py-2 rounded-lg border text-left transition"
             :class="form.font_style === ft.key ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 hover:border-slate-500'">
-            <span class="block text-sm text-slate-100" :style="{ fontFamily: ft.css }">Aa 网站字体</span>
+            <span class="block text-sm text-slate-100 truncate" :style="{ fontFamily: ft.css }">{{ ft.sample || 'Aa 网站字体' }}</span>
             <span class="block text-[9px] text-slate-500 mt-0.5">{{ ft.name }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 🎨 110 期：图标风格 + 图标形状（祥哥：图标能不能自己挑）-->
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1.5">
+          图标风格 <span class="text-slate-600">（首页平台方块、服务卡前面的小图标）</span>
+        </label>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button v-for="ic in ICON_STYLE_OPTS" :key="'ic' + ic.key" type="button" @click="form.icon_style = ic.key"
+            class="px-2 py-2 rounded-lg border transition flex flex-col items-center gap-1"
+            :class="(form.icon_style || '') === ic.key ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 hover:border-slate-500'">
+            <span class="text-base leading-none">
+              {{ ic.key === '' ? '✨' : ic.key === 'brand' ? '🎵' : ic.key === 'brand-mono' ? '◍' : ic.key === 'emoji' ? '😀' : 'Aa' }}
+            </span>
+            <span class="text-[9px] text-slate-400">{{ ic.name }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1.5">图标底色形状</label>
+        <div class="grid grid-cols-4 gap-1.5">
+          <button v-for="sh in ICON_SHAPE_OPTS" :key="'ish' + sh.key" type="button" @click="form.icon_shape = sh.key"
+            class="py-2 rounded-lg border flex flex-col items-center gap-1 transition"
+            :class="(form.icon_shape || '') === sh.key ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 hover:border-slate-500'">
+            <span class="w-5 h-5 bg-slate-600 border border-slate-500"
+                  :style="{ borderRadius: sh.key === 'circle' ? '999px' : sh.key === 'soft' ? '0.375rem' : '0' }"></span>
+            <span class="text-[9px] text-slate-400">{{ sh.name }}</span>
           </button>
         </div>
       </div>
@@ -457,6 +487,7 @@ const buildDraft = () => ({
   themeTemplate: props.form.template, themeColor: props.form.color, themeAccent: props.form.accent,
   uiRadius: props.form.ui_radius, uiDensity: props.form.ui_density, cardStyle: props.form.card_style,
   fontStyle: props.form.font_style, btnShape: props.form.btn_shape, heroLayout: props.form.hero_layout,
+  iconStyle: props.form.icon_style, iconShape: props.form.icon_shape,
   bgColor: props.form.bg_color, bgImage: props.form.bg_image, fontScale: props.form.font_scale,
   heroVariant: props.form.hero_variant, servicesVariant: props.form.services_variant,
   customCss: props.form.custom_css, faviconUrl: props.form.favicon_url,
@@ -526,12 +557,32 @@ const RADIUS_OPTS = [
   { key: 'pill', name: '胶囊', css: '999px' }
 ]
 const FONT_SCALES = [{ key: 'sm', name: '小' }, { key: 'md', name: '标准' }, { key: 'lg', name: '大' }]
+// 🎨 110 期（祥哥：字体能不能更丰富）：原来 4 档里有 3 档是西文字体，
+//    中文看起来几乎一样。现在补上 4 档真中文字体栈，站长一眼能看出差别。
 const FONT_OPTS = [
-  { key: '', name: '跟随模板', css: 'system-ui, sans-serif' },
-  { key: 'sans', name: '现代无衬线', css: 'system-ui, -apple-system, "PingFang SC", sans-serif' },
-  { key: 'rounded', name: '圆润', css: '"SF Pro Rounded", "PingFang SC", system-ui, sans-serif' },
-  { key: 'serif', name: '衬线杂志', css: 'Georgia, "Songti SC", serif' },
-  { key: 'mono', name: '等宽科技', css: '"JetBrains Mono", Consolas, monospace' }
+  { key: '', name: '跟随模板', css: 'system-ui, sans-serif', sample: 'Aa 涨价' },
+  { key: 'sans', name: '现代黑体', css: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif', sample: '粉丝 到账' },
+  { key: 'hei', name: '硬黑海报', css: '"Heiti SC", "SimHei", "Microsoft YaHei", system-ui, sans-serif', sample: '秒级 交付' },
+  { key: 'yahei', name: '雅黑圆润', css: '"Microsoft YaHei", "PingFang SC", system-ui, sans-serif', sample: '下单 即发' },
+  { key: 'song', name: '宋体杂志', css: '"Songti SC", "SimSun", Georgia, serif', sample: '品质 服务' },
+  { key: 'kai', name: '楷体文艺', css: '"Kaiti SC", "KaiTi", "STKaiti", serif', sample: '匠心 出品' },
+  { key: 'rounded', name: '圆体亲和', css: '"SF Pro Rounded", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif', sample: '轻松 涨粉' },
+  { key: 'serif', name: '衬线英文', css: 'Georgia, "Times New Roman", "Songti SC", serif', sample: 'Premium' },
+  { key: 'mono', name: '等宽科技', css: '"JetBrains Mono", Consolas, "Courier New", monospace', sample: 'ID 30094' }
+]
+// 🎨 110 期：图标风格 + 图标形状
+const ICON_STYLE_OPTS = [
+  { key: '', name: '跟随模板' },
+  { key: 'brand', name: '品牌彩色' },
+  { key: 'brand-mono', name: '品牌单色' },
+  { key: 'emoji', name: '表情符号' },
+  { key: 'text', name: '只用文字' }
+]
+const ICON_SHAPE_OPTS = [
+  { key: '', name: '无底' },
+  { key: 'none', name: '透明' },
+  { key: 'soft', name: '圆角块' },
+  { key: 'circle', name: '圆形块' }
 ]
 const BTN_OPTS = [
   { key: '', name: '跟随', css: '0.5rem' },
