@@ -48,6 +48,37 @@ const TABLES = [
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   },
   {
+    name: 'site_service_prices',
+    label: '站长给单个服务的单独定价',
+    // ⚠️ 少了这张表，站长"给某个服务单独改价"会**静默不生效**：
+    //    orders.js 里是 try/catch 兜底，查不到就回退默认倍率，页面上看起来一切正常。
+    ddl: `CREATE TABLE IF NOT EXISTS \`site_service_prices\` (
+  \`id\` INT(11) NOT NULL AUTO_INCREMENT,
+  \`site_id\` INT(11) NOT NULL,
+  \`service_id\` INT(11) NOT NULL,
+  \`rate\` DECIMAL(14,6) NOT NULL,
+  \`created_at\` DATETIME NOT NULL,
+  \`updated_at\` DATETIME NOT NULL,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`site_service_prices_site_id_service_id\` (\`site_id\`,\`service_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  },
+  {
+    name: 'site_customer_groups',
+    label: '分站客户分组（按组打折）',
+    ddl: `CREATE TABLE IF NOT EXISTS \`site_customer_groups\` (
+  \`id\` INT(11) NOT NULL AUTO_INCREMENT,
+  \`site_id\` INT(11) NOT NULL,
+  \`name\` VARCHAR(40) NOT NULL,
+  \`multiplier\` DECIMAL(5,3) NOT NULL DEFAULT 1.000,
+  \`note\` VARCHAR(120) DEFAULT NULL,
+  \`created_at\` DATETIME NOT NULL,
+  \`updated_at\` DATETIME NOT NULL,
+  PRIMARY KEY (\`id\`),
+  KEY \`site_customer_groups_site_id\` (\`site_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  },
+  {
     name: 'site_withdrawals',
     label: '站长提现申请',
     ddl: `CREATE TABLE IF NOT EXISTS \`site_withdrawals\` (
