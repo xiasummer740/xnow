@@ -2572,3 +2572,80 @@ Beta 和生产在**同一台机器**上，共用：
 我用 `Select-String -Path client\src\**\*.vue` 扫文案，PowerShell 的通配符**不递归**，
 `components/site/*.vue` 全被漏掉了 —— 于是「跟随全场倍率」这句在售价页活了下来，
 直到看构建产物才发现。**扫文案一律用 grep 工具（递归），不要用 PowerShell 的 `**`。**
+
+---
+
+## 四十九、上线前的环境预检（108 期，只读）
+
+祥哥 106 期让我暂停，这之后没动过生产，只做只读检查。下面这些是「上线当晚才会暴露、
+上线前查不出来会白熬一晚」的前提，逐条验过：
+
+### 一、生产 `.env` 缺不缺变量
+
+| 变量 | 现状 | 结论 |
+|---|---|---|
+| `PORT` | 3000 | ✅ |
+| `DB_NAME` | xnow_db | ✅ |
+| `SITE_DIST_ROOT` | 未设置 | ✅ 走默认值 `../client/dist`，对 `/var/www/xnow/server` 正好是 `/var/www/xnow/client/dist` |
+| `SITE_DNS_SUFFIX` | 未设置 | ✅ 默认 `taikon.top` |
+| `MAIN_ORIGIN` | 未设置 | ✅ 默认 `https://xnow.taikon.top` |
+| `SERVER_PUBLIC_IP` | 未设置 | ⚠️ **上线脚本会自动补**，见下一节 |
+
+### 二、自有域名能不能绑（这条最容易翻车）
+
+自有域名要两件事依赖 `SERVER_PUBLIC_IP`：告诉站长 A 记录指向哪、比对 DNS 归属。
+生产 `.env` 里从来没有这个键，`deploy-prod.sh` L74-90 会幂等追加（已有就不动，支持 dry-run）。
+实测上线时会写入的值：
+
+```
+路由法 ip route get 1.1.1.1   → 192.129.210.52
+兜底 hostname -I              → 192.129.210.52
+外网自测 api.ipify.org        → 192.129.210.52   ← 三者一致
+```
+
+所以上线后站长绑定自有域名可以走 A 记录自动校验，不必退回 TXT 手工验证。
+
+### 三、证书签发前提
+
+```
+certbot 版本        0.40.0            ✅
+/var/www/acme-challenge  root:root 755，实测可写  ✅
+```
+
+两个环境共用这一个 ACME 目录，签发互不干扰（每站点独立 challenge 文件名）。
+
+### 四、nginx 名字冲突
+
+机器上现有的 server_name 里，与分站可能撞的：
+
+```
+*.taikon.top          ← Beta 的未知域名兜底（default_server，443）
+*.xnow.taikon.top     ← 平台自己的
+taikon.top / www / xnow / beta / demostore / laozhang / t1.xnow   ← 具体站
+```
+
+nginx 的匹配优先「精确名 > 通配」，所以：
+
+- 分站 `xxx.taikon.top` 上线后有自己的精确 vhost → 命中分站，不落兜底
+- 分站 vhost 若构建失败缺失 → 落到 Beta 兜底页（中性 404），**不会**把客户带给主站
+
+### 五、机器余量
+
+```
+磁盘      21G 可用 / 49% 已用
+node      v20.20.2
+pm2       7.0.4（2 个进程 online：生产 + Beta）
+nginx     1.18.0 (Ubuntu)
+备份      已有 60 份历史快照
+```
+
+### 六、这轮验证到的（补记）
+
+分站客户在**没配商户**的站点上点「立即安全支付」，弹窗写的是：
+
+> 在线充值暂未开通／本站暂时只能人工充值：联系客服，告诉他要充多少，客服会把余额直接加到你账户。
+
+按钮链接实测 `https://t.me/aming_support`（**站长的客服号**），`指向平台: false`。
+站长没填客服链接时按钮不渲染，只留一句「请联系站长」—— 三种情况都不会把客户交给平台。
+后端 `/api/pay/rmb/sign` 在分站无商户时直接返回 `NO_SITE_MERCHANT`，**绝不回退平台商户**
+（否则客户的付款会进平台账户，与方案②相悖）。
