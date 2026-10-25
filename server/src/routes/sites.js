@@ -602,12 +602,22 @@ router.post('/:id/request-support', authenticate, async (req, res) => {
       return res.status(403).json({ status: 'error', message: '只有站长本人可以申请协助' });
     }
     const hours = Math.min(72, Math.max(1, Number(req.body?.hours) || 6));
-    site.admin_access_until = Date.now() + hours * 3600 * 1000;
+    const until = Date.now() + hours * 3600 * 1000;
+    site.admin_access_until = until;
     await site.save();
+    // 通知主站老板：站长开门了（不带任何成本/上游信息，只说谁开了多久）
+    try {
+      await sendTgMessage(
+        `🤝 <b>站长申请协助</b>\n🏬 ${site.name}（#${site.id}）\n` +
+        `🌐 <code>${site.domain || '-'}</code>\n👤 站长: ${req.user.phone}\n` +
+        `⏱ 授权 ${hours} 小时，到 <code>${new Date(until).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}</code> 自动收回\n` +
+        `💡 密室 → 分站管理 → 该站「代管中」按钮可进入`
+      );
+    } catch (e) { /* TG 挂了不能影响授权本身 */ }
     res.json({
       status: 'success',
       message: `已授权主站管理员协助 ${hours} 小时，到期自动收回`,
-      data: { admin_access_until: Number(site.admin_access_until) },
+      data: { admin_access_until: until },
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -622,6 +632,12 @@ router.post('/:id/revoke-support', authenticate, async (req, res) => {
     }
     site.admin_access_until = 0;
     await site.save();
+    try {
+      await sendTgMessage(
+        `🔒 <b>站长收回协助</b>\n🏬 ${site.name}（#${site.id}）\n👤 站长: ${req.user.phone}\n` +
+        `💡 主站管理员已无法进入该站后台`
+      );
+    } catch (e) { /* 忽略 */ }
     res.json({ status: 'success', message: '已收回协助授权' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
