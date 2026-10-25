@@ -88,6 +88,10 @@ router.get('/config', async (req, res) => {
       data.font_style = req.site.font_style || '';
     data.icon_style = req.site.icon_style || '';
     data.icon_shape = req.site.icon_shape || '';
+  // 🎨 各模块自己的背景（颜色 / 渐变 / 图）
+  if (req.site.section_styles) {
+    try { data.section_styles = JSON.parse(req.site.section_styles); } catch { data.section_styles = null; }
+  }
       data.btn_shape = req.site.btn_shape || '';
       data.hero_layout = req.site.hero_layout || '';
       // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）

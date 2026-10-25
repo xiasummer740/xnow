@@ -91,7 +91,7 @@
     <SiteEditor />
 
     <!-- Use cases -->
-    <section v-if="appStore.moduleEnabled('audience')" :style="{ order: appStore.moduleOrder('audience') }" data-module="audience" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
+    <section v-if="appStore.moduleEnabled('audience')" :style="{ order: appStore.moduleOrder('audience'), ...appStore.moduleStyle('audience') }" data-module="audience" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('audience') || (appStore.lang === 'zh' ? '🎯 谁在用 ' + (appStore.siteName || '我们') : '🎯 Who It’s For') }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <router-link :to="appStore.isSubsite ? '/order' : '/vpn'" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-6 hover:border-emerald-500/40 transition group block">
@@ -113,7 +113,7 @@
     </section>
 
     <!-- How it works -->
-    <section v-if="appStore.moduleEnabled('steps')" :style="{ order: appStore.moduleOrder('steps') }" data-module="steps" class="site-section relative z-20 max-w-4xl mx-auto px-6 py-8">
+    <section v-if="appStore.moduleEnabled('steps')" :style="{ order: appStore.moduleOrder('steps'), ...appStore.moduleStyle('steps') }" data-module="steps" class="site-section relative z-20 max-w-4xl mx-auto px-6 py-8">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('steps') || (appStore.lang === 'zh' ? '📋 三步开始' : '📋 How It Works') }}</h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="site-card bg-slate-800/40 border border-slate-700/50 rounded-3xl p-8 text-center hover:border-amber-500/30 transition group">
@@ -135,7 +135,7 @@
     </section>
 
     <!-- Why us -->
-    <section v-if="appStore.moduleEnabled('advantages')" :style="{ order: appStore.moduleOrder('advantages') }" data-module="advantages" class="site-section site-band relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
+    <section v-if="appStore.moduleEnabled('advantages')" :style="{ order: appStore.moduleOrder('advantages'), ...appStore.moduleStyle('advantages') }" data-module="advantages" class="site-section site-band relative z-20 bg-slate-900/30 border-t border-slate-800/50 py-20">
       <div class="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
         <!-- 🧱 分站自定义的三张卡（站长在后台改图标/标题/正文；没填就用下面的默认文案） -->
         <template v-if="appStore.isSubsite && appStore.advantages.length">
@@ -168,7 +168,7 @@
     <!-- Service Preview -->
     <!-- 🎭 分站热门服务：三种结构不同的版式（表格 / 榜单 / 卡片） -->
     <section v-if="appStore.isSubsite && appStore.moduleEnabled('hot_services')"
-      :style="{ order: appStore.moduleOrder('hot_services') }"
+      :style="{ order: appStore.moduleOrder('hot_services'), ...appStore.moduleStyle('hot_services') }"
       data-module="hot_services" class="site-section relative z-20 mx-auto max-w-5xl px-6 py-16">
       <div class="mb-7 flex items-end justify-between">
         <div>
@@ -180,7 +180,7 @@
       <SubsiteServices :variant="appStore.servicesVariant || layout.services" :services="previewServices" :loading="previewLoading" :lang="appStore.lang" />
     </section>
 
-    <section v-else-if="appStore.moduleEnabled('hot_services')" :style="{ order: appStore.moduleOrder('hot_services') }" data-module="hot_services" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
+    <section v-else-if="appStore.moduleEnabled('hot_services')" :style="{ order: appStore.moduleOrder('hot_services'), ...appStore.moduleStyle('hot_services') }" data-module="hot_services" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-2 tracking-wider">📊 {{ appStore.sectionTitle('hot_services') || (appStore.lang === 'zh' ? '热门服务预览' : 'Popular Services') }}</h2>
       <p class="text-center text-slate-500 text-sm mb-8">{{ appStore.lang === 'zh' ? (userStore.token ? '按实时价格下单，秒级交付' : '登录后可查看全部服务与实时价格') : (userStore.token ? 'Live prices, instant delivery' : 'Login to browse all services') }}</p>
       <div v-if="previewLoading" class="flex justify-center py-8"><div class="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div></div>
@@ -199,7 +199,7 @@
     </section>
 
     <!-- FAQ -->
-    <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq') }" data-module="faq" class="site-section relative z-20 max-w-2xl mx-auto px-6 py-16">
+    <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq'), ...appStore.moduleStyle('faq') }" data-module="faq" class="site-section relative z-20 max-w-2xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('faq') || (appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ') }}</h2>
       <div class="space-y-3">
         <div v-for="(faq, i) in visibleFaqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
@@ -213,7 +213,7 @@
     </section>
 
     <!-- Footer CTA -->
-    <section v-if="appStore.moduleEnabled('cta')" :style="{ order: appStore.moduleOrder('cta') }" data-module="cta" class="site-section relative z-20 text-center py-12 pb-20">
+    <section v-if="appStore.moduleEnabled('cta')" :style="{ order: appStore.moduleOrder('cta'), ...appStore.moduleStyle('cta') }" data-module="cta" class="site-section relative z-20 text-center py-12 pb-20">
       <h2 class="text-2xl font-black text-white mb-4">{{ appStore.sectionTitle('cta') || (appStore.lang === 'zh' ? '准备好让你的社媒炸裂了吗？' : 'Ready to explode your social media?') }}</h2>
       <p class="text-slate-500 mb-8">{{ appStore.lang === 'zh' ? (appStore.isSubsite ? '注册只需 30 秒，马上就能下单。' : '注册只需30秒，即刻拥有全网最低价涨粉服务。') : 'Sign up in 30 seconds. Instant access to wholesale SMM services.' }}</p>
       <router-link to="/login" class="inline-block px-12 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-lg transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(251,191,36,0.4)]">{{ appStore.lang === 'zh' ? '🚀 免费注册' : '🚀 Sign Up Free' }}</router-link>

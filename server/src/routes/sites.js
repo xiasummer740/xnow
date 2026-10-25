@@ -954,7 +954,7 @@ router.put('/:id', authenticate, async (req, res) => {
             hero_btn1_text, hero_btn1_url, hero_btn2_text, hero_btn2_url, hero_bg_url,
             bufpay_id, bufpay_key, cryptomus_id, cryptomus_key,
             discount_rate, discount_label, discount_until,
-    bg_color, bg_image, font_scale } = req.body;
+    bg_color, bg_image, font_scale, section_styles } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
 
@@ -984,6 +984,38 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.json({ status: 'error', message: '背景色格式不支持' });
     }
     site.bg_color = v || null;
+  }
+  // 🎨 110 期：每个首页模块自己的背景（颜色 / 渐变 / 图）
+  //    结构 { 模块名: { bg: '' | '#RRGGBB' | 'grad1'..'grad9', img: '' | '/uploads/xxx.png' } }
+  //    只认识的模块名才收，别的键直接丢掉，避免前端塞垃圾进来。
+  if (section_styles !== undefined) {
+    const MODULE_KEYS = ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta', 'announce', 'stats'];
+    const GRAD_KEYS = ['grad1', 'grad2', 'grad3', 'grad4', 'grad5', 'grad6', 'grad7', 'grad8', 'grad9'];
+    let parsed = {};
+    try {
+      parsed = typeof section_styles === 'string' ? JSON.parse(section_styles) : (section_styles || {});
+    } catch {
+      return res.json({ status: 'error', message: '模块背景数据格式不对' });
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return res.json({ status: 'error', message: '模块背景数据格式不对' });
+    }
+    const clean = {};
+    for (const key of MODULE_KEYS) {
+      const v = parsed[key];
+      if (!v || typeof v !== 'object') continue;
+      const bg = String(v.bg || '').trim();
+      const img = String(v.img || '').trim();
+      if (bg && !/^#[0-9a-fA-F]{6}$/.test(bg) && !GRAD_KEYS.includes(bg)) {
+        return res.json({ status: 'error', message: `模块「${key}」的背景色格式不支持` });
+      }
+      if (img && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(img)) {
+        return res.json({ status: 'error', message: `模块「${key}」的背景图路径不对` });
+      }
+      if (!bg && !img) continue;
+      clean[key] = { bg, img };
+    }
+    site.section_styles = Object.keys(clean).length ? JSON.stringify(clean) : null;
   }
   // 🎨 背景图：只接受本站上传目录里的相对路径
   if (bg_image !== undefined) {

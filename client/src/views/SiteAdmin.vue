@@ -655,7 +655,7 @@ const previewBtnGhost = computed(() => ({
 const previewFooter = computed(() => ({ borderTop: `1px solid ${pv.value.border}` }))
 
 // 预览里只显示"已启用"的模块，顺序与勾选顺序一致 —— 这才叫预览
-const previewModules = computed(() => (form.value.modules || []).filter(m => m.enabled).slice(0, 4))
+const previewModules = computed(() => (form.value.modules || []).filter(m => m && m.enabled).slice(0, 4))
 
 const hotPrice = ref('')
 const samplePrice = computed(() => hotPrice.value || '—')
@@ -724,6 +724,8 @@ const form = ref({
   // 71期：背景色 / 背景图 / 字号 —— 之前只有首页悬浮编辑器能改，
   // 站长在后台面板里找不到，等于「设置里配不全」。
   bg_color: '', bg_image: '', font_scale: '',
+      // 🎨 各模块自己的背景 { 模块: { bg, img } }
+      sectionStyles: {},
   bufpay_id: '', bufpay_key: '', cryptomus_id: '', cryptomus_key: '',
   smtp_host: '', smtp_port: 465, smtp_user: '', smtp_pass: '',
   logo: '', hero_badge: '', hero_title: '', hero_subtitle: '', hero_desc: '',
@@ -843,7 +845,15 @@ const pickImage = (field) => {
       })
       const data = await res.json()
       if (data.status === 'success' && data.data && data.data.url) {
-        form.value[field] = data.data.url
+        // 🎨 mod:audience → 写进该模块自己的背景图
+        if (String(field).startsWith('mod:')) {
+          const key = String(field).slice(4)
+          if (!form.value.sectionStyles) form.value.sectionStyles = {}
+          if (!form.value.sectionStyles[key]) form.value.sectionStyles[key] = { bg: '', img: '' }
+          form.value.sectionStyles[key].img = data.data.url
+        } else {
+          form.value[field] = data.data.url
+        }
       } else {
         alert(data.message || '上传失败')
       }
@@ -905,6 +915,9 @@ const load = async () => {
         template: s.template || 'classic', color: s.color || 'cyan', accent: s.accent || '',
         ui_radius: s.ui_radius || '', ui_density: s.ui_density || '',
         bg_color: s.bg_color || '', bg_image: s.bg_image || '', font_scale: s.font_scale || '',
+      sectionStyles: (() => {
+        try { return s.section_styles ? JSON.parse(s.section_styles) : {}; } catch { return {}; }
+      })(),
         card_style: s.card_style || '', font_style: s.font_style || '',
         icon_style: s.icon_style || '', icon_shape: s.icon_shape || '',
         btn_shape: s.btn_shape || '', hero_layout: s.hero_layout || '',
@@ -963,14 +976,24 @@ const resetStyles = () => {
   form.value.hero_layout = ''
 }
 
+// ⚠️ 110 期修：老数据里的 home_modules 可能带 null / 不认识的 key（历史上模块增删过），
+//    直接渲染会抛 "Cannot read properties of undefined (reading 'key')"，
+//    整页装修就白屏了。这里统一洗一遍：丢掉坏条目、补齐新模块。
 const parseModules = (raw) => {
-  const defaults = Object.keys(MODULES).map((k, i) => ({ key: k, enabled: true, order: i }))
+  const KEYS = Object.keys(MODULES)
+  const defaults = KEYS.map((k, i) => ({ key: k, enabled: true, order: i }))
   if (!raw) return defaults
-  try {
-    const arr = JSON.parse(raw)
-    if (!Array.isArray(arr) || arr.length === 0) return defaults
-    return arr
-  } catch (e) { return defaults }
+  let arr = []
+  try { arr = JSON.parse(raw) } catch (e) { return defaults }
+  if (!Array.isArray(arr)) return defaults
+  const clean = arr
+    .filter(m => m && typeof m === 'object' && KEYS.includes(m.key))
+    .map((m, i) => ({ key: m.key, enabled: m.enabled !== false, order: i }))
+  // 补齐代码里新加、库里还没有的模块（否则站长永远看不到它们）
+  for (const k of KEYS) {
+    if (!clean.some(m => m.key === k)) clean.push({ key: k, enabled: true, order: clean.length })
+  }
+  return clean.length ? clean : defaults
 }
 
 const moveModule = (i, dir) => {
@@ -1020,10 +1043,11 @@ const save = async (silent = false) => {
       template: form.value.template, color: form.value.color, accent: form.value.accent,
       ui_radius: form.value.ui_radius, ui_density: form.value.ui_density,
       bg_color: form.value.bg_color || '', bg_image: form.value.bg_image || '', font_scale: form.value.font_scale || '',
+      section_styles: JSON.stringify(form.value.sectionStyles || {}),
       card_style: form.value.card_style, font_style: form.value.font_style,
       icon_style: form.value.icon_style, icon_shape: form.value.icon_shape,
       btn_shape: form.value.btn_shape, hero_layout: form.value.hero_layout,
-      home_modules: JSON.stringify(form.value.modules.map((m, i) => ({ key: m.key, enabled: !!m.enabled, order: i }))),
+      home_modules: JSON.stringify((form.value.modules || []).filter(m => m && m.key).map((m, i) => ({ key: m.key, enabled: !!m.enabled, order: i }))),
       bufpay_id: form.value.bufpay_id, bufpay_key: form.value.bufpay_key,
       cryptomus_id: form.value.cryptomus_id, cryptomus_key: form.value.cryptomus_key,
       smtp_host: form.value.smtp_host, smtp_port: form.value.smtp_port,

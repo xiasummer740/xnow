@@ -210,7 +210,8 @@
         <span class="text-[10px] text-slate-500">长按卡片拖动排序 · 关掉就不显示</span>
       </div>
       <div class="space-y-1.5">
-        <div v-for="(m, i) in form.modules" :key="m.key"
+        <template v-for="(m, i) in form.modules" :key="m.key">
+        <div
           draggable="true"
           @dragstart="onDragStart(i, $event)" @dragover.prevent="onDragOver(i)" @drop.prevent="onDrop(i)"
           @dragend="dragFrom = null"
@@ -223,6 +224,12 @@
             <div class="text-xs font-bold text-slate-100 truncate">{{ moduleTitle(m.key) }}</div>
             <div class="text-[10px] text-slate-500 truncate">{{ moduleHint(m.key) }}</div>
           </div>
+          <!-- 🎨 这一块自己的背景 -->
+          <button type="button" @click="modBgOpen = modBgOpen === m.key ? '' : m.key"
+                  class="shrink-0 px-1.5 py-1 rounded-md text-[10px] border"
+                  :class="hasModBg(m.key) ? 'bg-amber-500/20 border-amber-400 text-amber-300' : 'border-slate-600 text-slate-300'">
+            背景
+          </button>
           <!-- iOS 风格开关 -->
           <button type="button" @click="m.enabled = !m.enabled"
             class="shrink-0 w-10 h-6 rounded-full transition relative"
@@ -238,6 +245,45 @@
               class="px-1.5 text-[10px] leading-none text-slate-400 disabled:opacity-25 hover:text-amber-300">▼</button>
           </div>
         </div>
+        <!-- 🎨 展开：这一块的背景（色 / 渐变 / 图）-->
+        <div v-if="modBgOpen === m.key" class="rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 mb-1.5">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[10px] font-bold text-amber-300">「{{ moduleTitle(m.key) }}」的背景</span>
+            <button type="button" @click="clearModAll(m.key)" class="text-[10px] text-slate-400 underline">全部清除</button>
+          </div>
+          <!-- 纯色一排 -->
+          <div class="text-[9px] text-slate-500 mb-1">纯色</div>
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            <button v-for="sw in MOD_SWATCHES.filter(x => !x.key.startsWith('grad') && x.key !== '')" :key="'s' + m.key + sw.key"
+                    type="button" @click="setModBg(m.key, sw.key)"
+                    class="w-8 h-8 rounded-lg border-2 transition"
+                    :class="(modStyle(m.key).bg || '') === sw.key ? 'border-amber-400' : 'border-slate-700'"
+                    :style="{ background: swCss(sw.key) }" :title="sw.name"></button>
+            <button type="button" @click="setModBg(m.key, '')"
+                    class="w-8 h-8 rounded-lg border-2 text-[9px] text-slate-400 grid place-items-center"
+                    :class="!modStyle(m.key).bg ? 'border-amber-400' : 'border-slate-700'">无</button>
+          </div>
+          <!-- 渐变一排 -->
+          <div class="text-[9px] text-slate-500 mb-1">渐变</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button v-for="sw in MOD_SWATCHES.filter(x => x.key.startsWith('grad'))" :key="'g' + m.key + sw.key"
+                    type="button" @click="setModBg(m.key, sw.key)"
+                    class="w-8 h-8 rounded-lg border-2 transition"
+                    :class="(modStyle(m.key).bg || '') === sw.key ? 'border-amber-400' : 'border-slate-700'"
+                    :style="{ background: swCss(sw.key) }" :title="sw.name"></button>
+          </div>
+          <div class="flex items-center gap-2 mt-2 flex-wrap">
+            <button type="button" class="text-[10px] px-2 py-1 rounded-md bg-slate-800 border border-slate-700"
+                    :disabled="uploading === 'mod:' + m.key" @click="$emit('pick-image', 'mod:' + m.key)">
+              {{ uploading === 'mod:' + m.key ? '上传中…' : (modStyle(m.key).img ? '换一张背景图' : '上传背景图') }}
+            </button>
+            <button v-if="modStyle(m.key).img" type="button" @click="ensureMod(m.key).img = ''"
+                    class="text-[10px] px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-400">去掉图</button>
+            <span v-if="modStyle(m.key).img" class="text-[10px] text-emerald-400">已用自定义背景图</span>
+            <span v-else class="text-[10px] text-slate-500">不选色也不传图 = 跟整体一致</span>
+          </div>
+        </div>
+        </template>
       </div>
     </section>
 
@@ -547,6 +593,44 @@ const btnGhost = computed(() => ({
   fontSize: '9px', padding: '3px 9px', borderRadius: props.pv.btnRadius
 }))
 const moduleTitle = (k) => props.moduleLabel(k)
+
+// 🎨 110 期（祥哥：各模块和背景都可以自定义背景颜色和图片）
+//    每个模块可以单独设背景色/渐变/图，存在 form.sectionStyles[模块] = { bg, img }
+const modBgOpen = ref('')
+const MOD_SWATCHES = [
+  { key: '', name: '跟随整体' },
+  { key: '#0b1220', name: '深蓝' },
+  { key: '#12081a', name: '暗紫' },
+  { key: '#04070f', name: '纯黑' },
+  { key: '#0f172a', name: '石板' },
+  { key: 'grad4', name: '紫蓝渐变' },
+  { key: 'grad5', name: '青蓝渐变' },
+  { key: 'grad6', name: '橙红渐变' },
+  { key: 'grad7', name: '绿青渐变' },
+  { key: 'grad8', name: '玫粉渐变' },
+  { key: 'grad9', name: '金橙渐变' }
+];
+const GRAD_CSS = {
+  grad4: 'linear-gradient(135deg,#3b0764,#1e1b4b,#0c4a6e)',
+  grad5: 'linear-gradient(135deg,#042f2e,#083344,#0c2d6b)',
+  grad6: 'linear-gradient(135deg,#451a03,#4c0519,#1c1917)',
+  grad7: 'linear-gradient(135deg,#052e16,#064e3b,#083344)',
+  grad8: 'linear-gradient(135deg,#4a044e,#500724,#1c1917)',
+  grad9: 'linear-gradient(135deg,#422006,#451a03,#1c1917)'
+};
+const swCss = (key) => (key === '' ? 'transparent' : (GRAD_CSS[key] || key));
+const modStyle = (key) => (props.form.sectionStyles && props.form.sectionStyles[key]) || {};
+const hasModBg = (key) => !!(modStyle(key).bg || modStyle(key).img);
+function ensureMod(key) {
+  if (!props.form.sectionStyles) props.form.sectionStyles = {};
+  if (!props.form.sectionStyles[key]) props.form.sectionStyles[key] = { bg: '', img: '' };
+  return props.form.sectionStyles[key];
+}
+function setModBg(key, val) { ensureMod(key).bg = val; }
+function clearModAll(key) {
+  if (props.form.sectionStyles) delete props.form.sectionStyles[key];
+  modBgOpen.value = '';
+}
 
 // ── 风格选项（可视化）────────────────────────────────────────────
 const RADIUS_OPTS = [

@@ -3047,3 +3047,74 @@ POST /api/sites/25/prices/bulk → 500
 勾选一组 → 「改哪些」自动变 picked ✅   执行 → ✅ 已改好 12 条（进货价 +30%）✅
 验收 24/24（3 项只读跳过）
 ```
+---
+## 五十八、每个模块单独的背景色 / 渐变 / 背景图（110 期）
+
+祥哥：「还有各模块和背景都可以自定义背景颜色和图片」
+
+### 数据
+
+`sites.section_styles`（TEXT，JSON）：
+
+```json
+{ "audience": { "bg": "#12081a", "img": "" },
+  "steps":    { "bg": "grad8",   "img": "" },
+  "hot_services": { "bg": "grad4", "img": "/uploads/xxx.png" } }
+```
+
+- `bg` 只收 `''` / `#RRGGBB` / `grad1`~`grad9`
+- `img` 只收 `/uploads/<安全文件名>`（防 `javascript:` 之类）
+- 只认识这些模块名：`audience / steps / advantages / hot_services / faq / cta / announce / stats`，
+  别的键直接丢掉
+- 空值不落库（不会存一堆 `{bg:"",img:""}`）
+
+### 三个地方必须同步（和背景色同一个坑）
+
+1. **服务端白名单** `sites.js` 的 `MODULE_KEYS` / `GRAD_KEYS`
+2. **前端渐变表** `stores/app.ts` 的 `SITE_GRADS`（已提到模块级，全局背景和模块背景共用一张表）
+3. **装修页色块** `DesignStudio.vue` 的 `MOD_SWATCHES`
+
+只改前两处会出现「选了没反应」，只改后两处会出现「格式不支持」。
+
+### 界面
+
+装修页 →「首页模块」，每行右边多一个「背景」按钮（设过的会变琥珀色）：
+
+```
+纯色   [深蓝][暗紫][纯黑][石板][无]
+渐变   [紫蓝][青蓝][橙红][绿青][玫粉][金橙]
+       [上传背景图] [去掉图]     不选色也不传图 = 跟整体一致
+```
+
+保存走原有的「保存全部修改」，和模板/配色一起提交。
+
+### 顺手修掉的两个坑
+
+**① 装修页会白屏。** `home_modules` 里若混进 `null` 或不认识的 key（历史模块增删留下的），
+`v-for` 渲染到 `m.key` 就抛 `Cannot read properties of undefined (reading 'key')`，整页装修打不开。
+`parseModules()` 现在会洗掉坏条目，并把**代码里新加、库里还没有的模块补齐**（否则站长永远看不到新模块）。
+
+**② 分站吃的是 CDN 上的死 bundle。** 排查时发现 `demostore.taikon.top` 加载的
+`index-8cV8IRr7.js` 在服务器 `dist/assets/` 里**根本不存在** —— 服务器上的 `dist/site.html`
+还指着旧哈希，Cloudflare 把旧文件缓存着继续发，所以分站跑的是几天前的代码，
+主站（beta.taikon.top）却是新的。
+**部署后必查两条哈希一致**：
+
+```bash
+grep -o 'index-[A-Za-z0-9_-]*\.js' /var/www/xnow-beta/client/dist/index.html \
+                                    /var/www/xnow-beta/client/dist/site.html | sort -u
+# 只应出现一行；出现两行 = site.html 没重新生成，分站会继续吃旧代码
+```
+
+（`scripts/subsites-html.mjs` 必须 `cd client` 后再跑，和 `prerender.mjs` 一样。）
+
+### 验证
+
+```
+保存 grad8 + 纯色           → success（分站更新成功）
+非法颜色 "red"              → 模块「faq」的背景色格式不支持 ✅
+非法图片 "javascript:..."   → 模块「faq」的背景图路径不对 ✅
+客户站下发                  → {"audience":{"bg":"#12081a"},...} ✅
+客户站实测                  → audience rgb(18,8,26) / steps 渐变 / hot_services 渐变 ✅
+装修页 UI 全流程             → 选玫粉渐变 → 保存 → 客户站 steps 变渐变 ✅
+```

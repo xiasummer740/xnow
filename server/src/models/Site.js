@@ -24,7 +24,10 @@ const Site = sequelize.define('Site', {
   font_style: { type: DataTypes.STRING(12), allowNull: true },  // sans | rounded | serif | mono | kai | hei | song | yahei
   // 🎨 110 期（祥哥：图标字体能不能更丰富）：图标风格 + 图标形状，站长自己挑
   icon_style: { type: DataTypes.STRING(16), allowNull: true },  // brand | brand-mono | emoji | text
-  icon_shape: { type: DataTypes.STRING(12), allowNull: true },  // none | soft | circle
+  icon_shape: { type: DataTypes.STRING(12), allowNull: true },
+  // 🎨 110 期（祥哥：各模块和背景都可以自定义背景颜色和图片）
+  //    JSON：{ audience: {bg:'grad4', img:'/uploads/x.png'}, faq: {bg:'#101820'} }
+  section_styles: { type: DataTypes.TEXT, allowNull: true },  // none | soft | circle
   btn_shape: { type: DataTypes.STRING(12), allowNull: true },   // pill | rounded | square
   hero_layout: { type: DataTypes.STRING(12), allowNull: true }, // center | split | banner
   // 🎨 四十一期：全方位 DIY —— 首屏版式 / 服务列表版式（结构级，不只是换色）
