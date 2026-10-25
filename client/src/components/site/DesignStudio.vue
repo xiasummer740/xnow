@@ -203,6 +203,39 @@
       </div>
     </section>
 
+    <!-- ── 整站背景（110 期：原来藏在「细节风格」最下面，祥哥找不到）──── -->
+    <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-sm font-bold text-white">整站背景</h2>
+        <span class="text-[10px] text-slate-500">整个网站最大的那层底</span>
+      </div>
+      <p class="text-[10px] text-slate-500 mb-2.5 leading-relaxed">
+        选出底色 + 传一张自己的图。图和色可以同时用：图在上面，色在下面垫着（图加载慢也不会白屏）。
+        每个模块还能再单独设背景，见下面「首页模块」。
+      </p>
+
+      <div class="flex flex-wrap gap-1.5">
+        <button v-for="b in BG_PRESETS" :key="'bg' + b.key" type="button" @click="form.bg_color = b.key"
+          class="w-9 h-9 rounded-lg border-2 transition"
+          :class="form.bg_color === b.key ? 'border-amber-400 scale-110' : 'border-slate-700'"
+          :style="{ background: b.css }" :title="b.name"></button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 mt-2.5">
+        <button type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-amber-400"
+          :disabled="uploading === 'bg_image'" @click="$emit('pick-image', 'bg_image')">
+          {{ uploading === 'bg_image' ? '上传中…' : (form.bg_image ? '换一张整站背景图' : '上传自己的背景图') }}
+        </button>
+        <button v-if="form.bg_image" type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400"
+          @click="form.bg_image = ''">去掉背景图</button>
+        <span v-if="form.bg_image" class="text-[10px] text-emerald-400">已用自定义背景图</span>
+        <span v-else class="text-[10px] text-slate-500">只用底色</span>
+      </div>
+      <p v-if="form.bg_image" class="text-[10px] text-slate-500 mt-1.5">
+        图上面自动压了一层淡暗色，不然亮图会把白字吃掉。
+      </p>
+    </section>
+
     <!-- ── 首页模块：拖动排序 + 开关 ───────────────────────────── -->
     <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
       <div class="flex items-center justify-between mb-3">
@@ -428,25 +461,6 @@
         </div>
       </div>
 
-      <!-- 页面背景 -->
-      <div>
-        <label class="block text-[11px] text-slate-400 mb-1.5">页面背景</label>
-        <div class="flex flex-wrap gap-1.5">
-          <button v-for="b in BG_PRESETS" :key="'bg' + b.key" type="button" @click="form.bg_color = b.key"
-            class="w-9 h-9 rounded-lg border-2 transition"
-            :class="form.bg_color === b.key ? 'border-amber-400 scale-110' : 'border-slate-700'"
-            :style="{ background: b.css }" :title="b.name"></button>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 mt-2">
-          <button type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-amber-400"
-            :disabled="uploading === 'bg_image'" @click="$emit('pick-image', 'bg_image')">
-            {{ uploading === 'bg_image' ? '上传中…' : '上传自己的背景图' }}
-          </button>
-          <button v-if="form.bg_image" type="button" class="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400"
-            @click="form.bg_image = ''">去掉背景图</button>
-          <span v-if="form.bg_image" class="text-[10px] text-emerald-400">已选背景图</span>
-        </div>
-      </div>
     </section>
   </div>
 </template>

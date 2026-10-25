@@ -274,18 +274,27 @@ export const useAppStore = defineStore('app', {
       //    以后再加渐变，这三处必须一起改：SiteAdmin 的 BG_PRESETS、服务端白名单、这张表。
       const GRADS = SITE_GRADS;
       const bg = String(this.bgColor || '').trim();
+      // ① 先铺底色（纯色或渐变），背景图加载期间也有个底
       if (bg && /^#[0-9a-fA-F]{6}$/.test(bg)) {
         el.style.setProperty('--site-bg', bg);
-        el.style.setProperty('--site-bg-image', 'none');
       } else if (bg && GRADS[bg]) {
         el.style.setProperty('--site-bg', GRADS[bg]);
-        el.style.setProperty('--site-bg-image', 'none');
       } else {
         el.style.removeProperty('--site-bg');
-        el.style.removeProperty('--site-bg-image');
       }
-      if (!bg && this.bgImage && /^\/uploads\/[A-Za-z0-9._-]+$/.test(this.bgImage)) {
-        el.style.setProperty('--site-bg-image', `url("${this.bgImage}")`);
+      // ② 再铺背景图。
+      //    ⚠️ 110 期祥哥问「最大的背景有换色和自定义图片吗」时发现的 bug：
+      //    原来是 `if (!bg && bgImage)` —— 只要选过颜色，上传的图就被静默忽略，
+      //    站长传完看不到任何变化，还以为是没上传成功。现在两者并存：图上色下。
+      //    图上面再压一层半透明暗色，否则亮图会把白字吃掉。
+      const img = String(this.bgImage || '').trim();
+      if (img && /^\/uploads\/[A-Za-z0-9._-]+$/.test(img)) {
+        el.style.setProperty(
+          '--site-bg-image',
+          `linear-gradient(rgba(4, 7, 15, 0.55), rgba(4, 7, 15, 0.55)), url("${img}")`
+        );
+      } else {
+        el.style.setProperty('--site-bg-image', 'none');
       }
       const scale = { sm: '0.94', md: '1', lg: '1.08' }[String(this.fontScale || '')];
       if (scale && scale !== '1') el.style.setProperty('--site-font-scale', scale);

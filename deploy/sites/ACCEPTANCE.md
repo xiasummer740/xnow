@@ -3118,3 +3118,55 @@ grep -o 'index-[A-Za-z0-9_-]*\.js' /var/www/xnow-beta/client/dist/index.html \
 客户站实测                  → audience rgb(18,8,26) / steps 渐变 / hot_services 渐变 ✅
 装修页 UI 全流程             → 选玫粉渐变 → 保存 → 客户站 steps 变渐变 ✅
 ```
+---
+## 五十九、整站背景：换色 + 自定义图片（110 期，祥哥问「最大的背景能换吗」）
+
+### 以前是什么状况
+
+功能其实早就有，但**有一个会让人以为"根本没这功能"的 bug**：
+
+```js
+// 旧代码
+if (!bg && this.bgImage && /^\/uploads\//.test(this.bgImage)) { ... }
+//   ↑ 只要选过背景色（哪怕只是默认的 grad4），上传的背景图就被静默忽略
+```
+
+站长上传成功、提示也正常、库里 `bg_image` 也有值，但客户站**一点变化都没有** ——
+因为「背景色」的优先级永远压过「背景图」。
+
+### 现在
+
+图和色**可以同时用，图在上、色在下**：
+
+```js
+el.style.setProperty('--site-bg', 渐变或纯色)          // 垫底，图没加载出来也不白屏
+el.style.setProperty('--site-bg-image',
+  'linear-gradient(rgba(4,7,15,.55), rgba(4,7,15,.55)), url("/uploads/xxx.png")')
+//                        ↑ 自动压一层淡暗色，否则亮图会把白字吃掉
+```
+
+三种组合都实测通过：
+
+| 设置 | 客户站渲染 |
+|---|---|
+| 只选底色 | 纯色 / 渐变 |
+| 只用背景图 | 图 + 暗色层（底下是默认 #04070f） |
+| 底色 + 背景图 | 图 + 暗色层，底下垫着选的渐变 |
+
+### 界面上也挪了位置
+
+「页面背景」原来塞在「细节风格」卡片的最下面（圆角/密度/卡片/字体/图标/按钮之后），
+祥哥找不到。现在独立成一张 **「整站背景」** 卡片，位置在：
+
+```
+模板 → 配色 → 整站背景（12 个色块 + 上传背景图） → 首页模块（每块自己还能再设） → 细节风格
+```
+
+卡片里直接写明了两件事：图和色可以同时用、每个模块还能单独设。
+
+### 地方
+
+- 色板：`SiteAdmin.vue` 的 `BG_PRESETS`（12 档）+ 服务端白名单 + `stores/app.ts` 的 `SITE_GRADS`
+- 图片：`POST /api/sites/:id/upload` → `sites.bg_image`，只接受 `/uploads/` 相对路径
+- 效果：`stores/app.ts` 的 `applyTheme()` → `--site-bg` / `--site-bg-image`
+  → `site-theme.css` 的 `html[data-template] #app-root` 规则
