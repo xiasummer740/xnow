@@ -21,6 +21,8 @@ const routes = [
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       { path: 'api-doc', component: () => import('../views/ApiDoc.vue') },
       { path: 'affiliate', component: () => import('../views/Affiliate.vue') },
+      // 🛒 开通新分站必须先匹配（否则会被 :page 吃掉，变成 page='new' 的空页面）
+      { path: 'my-site/new', component: () => import('../views/SiteNew.vue') },
       { path: 'my-site/:page?', component: () => import('../views/SiteAdmin.vue') }
     ]
   },

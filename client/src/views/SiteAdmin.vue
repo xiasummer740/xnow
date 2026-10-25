@@ -77,6 +77,32 @@
     <!-- 已有分站 -->
     <!-- pb-24：右下角那个 LIVE 客服球会盖住页面最后一行字（截图自查发现）-->
     <div v-else class="space-y-5 pb-24">
+      <!-- 🏬 我的分站（多站时用来切换；也在这里开新站）-->
+      <section v-if="page === 'overview'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="font-bold text-sm text-white">我的分站 <span class="text-slate-500 font-normal">（{{ sitesList.length }} 个）</span></h2>
+          <router-link to="/my-site/new"
+            class="px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-900 text-[11px] font-bold">+ 开通新分站</router-link>
+        </div>
+        <div class="space-y-1.5">
+          <button v-for="s in sitesList" :key="s.id" type="button" @click="switchSite(s)"
+            class="w-full text-left flex items-center gap-2 rounded-xl border px-2.5 py-2 transition"
+            :class="Number(s.id) === Number(site && site.id) ? 'border-amber-400 bg-amber-400/10' : 'border-slate-800 bg-slate-950/60'">
+            <span class="shrink-0 w-5 h-5 grid place-items-center rounded-md text-[10px] font-bold"
+                  :class="Number(s.id) === Number(site && site.id) ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-400'">
+              {{ Number(s.id) === Number(site && site.id) ? '✓' : '' }}
+            </span>
+            <span class="flex-1 min-w-0">
+              <span class="block text-xs font-bold text-slate-100 truncate">{{ s.name }}</span>
+              <span class="block text-[10px] text-slate-500 truncate">{{ s.custom_domain || s.domain }}</span>
+            </span>
+            <span v-if="s.status === 'expired'" class="shrink-0 text-[10px] text-red-400">已停站</span>
+            <span v-else-if="s.plan === 'trial'" class="shrink-0 text-[10px] text-emerald-400">试用中</span>
+            <span class="shrink-0 text-[10px] text-slate-500">{{ Number(s.id) === Number(site && site.id) ? '管理这个' : '切过去' }}</span>
+          </button>
+        </div>
+      </section>
+
       <!-- 🚦 开站清单：新手不知道"开完站还差什么"，这里直接告诉他 -->
       <section v-if="page === 'overview' && pendingSteps.length" class="bg-gradient-to-br from-amber-500/10 to-slate-900/70 border border-amber-500/30 rounded-2xl p-5">
         <div class="flex items-center justify-between mb-3">
@@ -490,6 +516,15 @@ const saving = ref(false)
 const creating = ref(false)
 const binding = ref(false)
 const site = ref(null)
+// 🏬 110 期：一个人可以有好几个分站（每站 ¥99/月），原来只认 list[0]，
+//    第二个站建了也管不了、看不到。现在按 localStorage 记住当前在管哪个站。
+const sitesList = ref([])
+const currentSiteId = ref(Number(localStorage.getItem('xnow_site_current') || 0))
+const switchSite = (s) => {
+  currentSiteId.value = Number(s.id)
+  try { localStorage.setItem('xnow_site_current', String(s.id)) } catch (e) {}
+  load()
+}
 const stats = ref({})
 const bindDomain = ref('')
 const domainHint = ref('')
@@ -905,7 +940,12 @@ const load = async () => {
     const res = await fetch('/api/sites', { headers: headers() })
     const data = await res.json()
     const list = data.data || []
-    site.value = list[0] || null
+    sitesList.value = list
+    site.value = list.find(x => Number(x.id) === Number(currentSiteId.value)) || list[0] || null
+    if (site.value) {
+      currentSiteId.value = Number(site.value.id)
+      try { localStorage.setItem('xnow_site_current', String(site.value.id)) } catch (e) {}
+    }
     if (site.value) {
       const s = site.value
       form.value = {
