@@ -449,8 +449,15 @@ router.post('/', authenticate, async (req, res) => {
     const billing = await getBillingConfig();
     let plan = 'free';
     let expireAt = 0;
+    // 🎁 110 期（祥哥 2026-10-26）：主站管理员可以直接把分站「分配给」某个用户。
+    //    这种情况不扣用户的钱（算平台赠送），但仍然给一个真实有效期，
+    //    否则站点永不到期、面板永远显示已付费，续费提醒也不会触发。
+    const grantedByStaff = isStaff2 && ownerId !== req.user.id;
 
-    if (!isStaff2) {
+    if (grantedByStaff) {
+      plan = 'paid';
+      expireAt = Date.now() + billing.renewDays * 86400e3;
+    } else if (!isStaff2) {
       // ⚠️ 以数据库为准：token 里的 role 是签发那一刻的，代理降级后旧 token 仍是 agent
       const ownerRow = await User.findByPk(ownerId);
       if (!ownerRow) return res.json({ status: 'error', message: '用户不存在' });
@@ -481,7 +488,7 @@ router.post('/', authenticate, async (req, res) => {
     let paidAmount = 0;
     let newBalance = null;
     try {
-      if (plan === 'paid') {
+      if (plan === 'paid' && !grantedByStaff) {
         const payer = await User.findByPk(ownerId, { transaction: t, lock: t.LOCK.UPDATE });
         const pay = await chargeBalance(payer, billing.siteMonthly, '分站月费',
           `开站「${String(name).trim()}」月费 ¥${billing.siteMonthly}（${cleanDomain}，${billing.renewDays} 天）`, t);

@@ -62,7 +62,8 @@ const form = ref({
 });
 
 const fundModal = ref({ show: false, userId: null, phone: '', type: 'add', amount: 100 });
-const roleModal = ref({ show: false, userId: null, phone: '', role: 'user', currentExpire: null, addDays: 0 });
+const roleModal = ref({ show: false, userId: null, phone: '', role: 'user', currentExpire: null, addDays: 0,
+    sites: [], newSiteName: '', busy: false });
 const deleteUserModal = ref({ show: false, userId: null, phone: '', confirmText: '' });
 
 // === 服务端分页：交易流水 ===
@@ -351,7 +352,8 @@ const resetMultiplier = async (u) => {
 
 const openRoleModal = (u) => {
     if (['admin', 'super_admin'].includes(u.role)) return ui.showToast('管理员身份受到神圣保护，不可变动', 'error');
-    roleModal.value = { show: true, userId: u.id, phone: u.phone, role: u.role, currentExpire: u.vip_expire_at, addDays: 0 };
+    roleModal.value = { show: true, userId: u.id, phone: u.phone, role: u.role, currentExpire: u.vip_expire_at, addDays: 0,
+        sites: Array.isArray(u.sites) ? u.sites : [], newSiteName: '', busy: false };
 };
 
 const submitRole = async () => {
@@ -361,6 +363,62 @@ const submitRole = async () => {
         if (json.status === 'success') { ui.showToast('特权与时长调度成功', 'success'); roleModal.value.show = false; fetchDashboard(false); }
         else { ui.showToast(json.message || '调度失败', 'error'); }
     } catch (e) { ui.showToast('网络请求异常', 'error'); }
+};
+
+// 🏬 110 期（祥哥 2026-10-26）：管理员可以在用户详情里直接「分配分站」，
+//    不用让用户自己去付费开站，也不用管理员跑去分站管理页搜手机号。
+const siteExpired = (st) => Number(st.expire_at || 0) > 0 && Number(st.expire_at) < Date.now();
+
+const reloadRoleSites = async () => {
+    if (!roleModal.value.userId) return;
+    try {
+        const res = await fetch(`/api/admin/users?search=${encodeURIComponent(roleModal.value.phone || '')}&limit=5`, {
+            headers: { 'Authorization': `Bearer ${userStore.token}` }
+        });
+        const json = await res.json();
+        const row = (json.data?.items || []).find((x) => String(x.id) === String(roleModal.value.userId));
+        if (row) roleModal.value.sites = Array.isArray(row.sites) ? row.sites : [];
+    } catch (e) { /* 刷新失败保留旧列表 */ }
+};
+
+const grantSite = async () => {
+    if (roleModal.value.busy) return;
+    roleModal.value.busy = true;
+    try {
+        const name = (roleModal.value.newSiteName || '').trim()
+            || `${String(roleModal.value.phone || '').slice(-4)}的店`;
+        const res = await fetch('/api/sites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+            body: JSON.stringify({ name, owner_id: roleModal.value.userId })
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+            const dom = json.data?.domain || json.data?.site?.domain || json.site?.domain || '';
+            ui.showToast(dom ? `已开站：${dom}` : '已为该用户开通分站（赠送 30 天）', 'success');
+            roleModal.value.newSiteName = '';
+            await reloadRoleSites();
+        } else {
+            ui.showToast(json.message || '开站失败', 'error');
+        }
+    } catch (e) { ui.showToast('网络请求异常', 'error'); }
+    finally { roleModal.value.busy = false; }
+};
+
+const extendUserSite = async (st) => {
+    if (roleModal.value.busy) return;
+    roleModal.value.busy = true;
+    try {
+        const res = await fetch(`/api/admin/sites/${st.id}/action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+            body: JSON.stringify({ action: 'extend', days: 30 })
+        });
+        const json = await res.json();
+        if (json.status === 'success') { ui.showToast('已续 30 天（不扣用户余额）', 'success'); await reloadRoleSites(); }
+        else { ui.showToast(json.message || '续费失败', 'error'); }
+    } catch (e) { ui.showToast('网络请求异常', 'error'); }
+    finally { roleModal.value.busy = false; }
 };
 
 const openDeleteUserModal = (u) => {
@@ -1187,7 +1245,13 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
         </div>
 
         <div v-if="fundModal.show" class="fixed inset-0 z-[10005] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"><div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-sm w-full relative transform transition-all scale-100"><button @click="fundModal.show = false" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button><h3 class="text-xl font-black text-white mb-2 tracking-wide text-center">资金中心指令</h3><p class="text-slate-400 text-sm mb-6 text-center">目标账户: <span class="text-amber-400 font-bold">{{ fundModal.phone }}</span></p><div class="space-y-4 mb-8"><div><label class="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">操作金额 (CNY)</label><input type="number" v-model="fundModal.amount" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition font-mono text-lg" placeholder="0.00"></div></div><button @click="submitFund" :class="['w-full font-black text-lg py-3.5 rounded-xl transition transform hover:-translate-y-1 shadow-lg text-slate-900', fundModal.type === 'add' ? 'bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 shadow-[0_0_20px_rgba(251,191,36,0.3)]']">确认{{ fundModal.type === 'add' ? '加款' : '扣款' }}</button></div></div>
-        <div v-if="roleModal.show" class="fixed inset-0 z-[10006] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"><div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-md w-full relative transform transition-all scale-100"><button @click="roleModal.show = false" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button><h3 class="text-xl font-black text-white mb-2 tracking-wide text-center">用户特权与等级调度</h3><p class="text-slate-400 text-sm mb-6 text-center">目标账户: <span class="text-amber-400 font-bold">{{ roleModal.phone }}</span></p><div class="space-y-6 mb-8"><div><label class="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">分配身份</label><div class="grid grid-cols-2 gap-3"><button @click="roleModal.role = 'user'; roleModal.addDays = 0" :class="['py-3 rounded-xl border text-sm font-bold transition', roleModal.role === 'user' ? 'bg-slate-700 border-slate-500 text-white shadow-inner' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800']">黄金用户</button><button @click="roleModal.role = 'agent'" :class="['py-3 rounded-xl border text-sm font-bold transition flex flex-col items-center justify-center', roleModal.role === 'agent' ? 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.2)]' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800']">👑 至尊代理</button></div></div><div v-if="roleModal.role === 'agent'" class="animate-fade-in space-y-3 p-4 bg-slate-800/50 rounded-2xl border border-amber-500/20"><div class="flex justify-between items-center"><label class="block text-xs font-bold text-amber-400 uppercase tracking-wider">赠送代理时长 (天)</label><span class="text-[10px] text-slate-400">目前到期: {{ roleModal.currentExpire ? new Date(roleModal.currentExpire).toLocaleDateString() : '无' }}</span></div><div class="grid grid-cols-4 gap-2"><button @click="roleModal.addDays = 7" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 7 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+7天</button><button @click="roleModal.addDays = 30" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 30 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1月</button><button @click="roleModal.addDays = 90" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 90 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1季</button><button @click="roleModal.addDays = 365" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 365 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1年</button></div><div class="flex items-center space-x-3 mt-3"><span class="text-xs text-slate-400 whitespace-nowrap">自定义:</span><input type="number" v-model="roleModal.addDays" min="0" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-amber-400 outline-none focus:border-amber-400 transition font-mono text-sm" placeholder="输入天数"></div><p v-if="roleModal.addDays > 0" class="text-[10px] text-emerald-400 text-right mt-1">将在原时间上自动续期 {{ roleModal.addDays }} 天</p></div></div><button @click="submitRole" class="w-full font-black text-lg py-3.5 rounded-xl transition transform hover:-translate-y-1 shadow-lg text-white bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]">确认调度</button></div></div>
+        <div v-if="roleModal.show" class="fixed inset-0 z-[10006] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"><div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-md w-full relative transform transition-all scale-100"><button @click="roleModal.show = false" class="absolute top-4 right-4 text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button><h3 class="text-xl font-black text-white mb-2 tracking-wide text-center">用户特权与等级调度</h3><p class="text-slate-400 text-sm mb-6 text-center">目标账户: <span class="text-amber-400 font-bold">{{ roleModal.phone }}</span></p><div class="space-y-6 mb-8"><div><label class="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">分配身份</label><div class="grid grid-cols-2 gap-3"><button @click="roleModal.role = 'user'; roleModal.addDays = 0" :class="['py-3 rounded-xl border text-sm font-bold transition', roleModal.role === 'user' ? 'bg-slate-700 border-slate-500 text-white shadow-inner' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800']">黄金用户</button><button @click="roleModal.role = 'agent'" :class="['py-3 rounded-xl border text-sm font-bold transition flex flex-col items-center justify-center', roleModal.role === 'agent' ? 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.2)]' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800']">👑 至尊代理</button></div></div><div v-if="roleModal.role === 'agent'" class="animate-fade-in space-y-3 p-4 bg-slate-800/50 rounded-2xl border border-amber-500/20"><div class="flex justify-between items-center"><label class="block text-xs font-bold text-amber-400 uppercase tracking-wider">赠送代理时长 (天)</label><span class="text-[10px] text-slate-400">目前到期: {{ roleModal.currentExpire ? new Date(roleModal.currentExpire).toLocaleDateString() : '无' }}</span></div><div class="grid grid-cols-4 gap-2"><button @click="roleModal.addDays = 7" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 7 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+7天</button><button @click="roleModal.addDays = 30" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 30 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1月</button><button @click="roleModal.addDays = 90" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 90 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1季</button><button @click="roleModal.addDays = 365" :class="['py-1.5 rounded-lg border text-xs font-bold transition', roleModal.addDays === 365 ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600']">+1年</button></div><div class="flex items-center space-x-3 mt-3"><span class="text-xs text-slate-400 whitespace-nowrap">自定义:</span><input type="number" v-model="roleModal.addDays" min="0" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-amber-400 outline-none focus:border-amber-400 transition font-mono text-sm" placeholder="输入天数"></div><p v-if="roleModal.addDays > 0" class="text-[10px] text-emerald-400 text-right mt-1">将在原时间上自动续期 {{ roleModal.addDays }} 天</p></div></div><div class="mt-6 p-4 bg-slate-800/60 rounded-2xl border border-cyan-500/25 space-y-3">
+<div class="flex items-center justify-between"><label class="block text-xs font-bold text-cyan-300 uppercase tracking-wider">分配分站</label><span class="text-[10px] text-slate-400">管理员赠送，不扣用户余额</span></div>
+<div v-if="roleModal.sites.length" class="space-y-2"><div v-for="st in roleModal.sites" :key="st.id" class="flex items-center justify-between gap-2 bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-2"><div class="min-w-0"><div class="text-sm font-bold text-white truncate">{{ st.name }} <span v-if="st.status === 'stopped'" class="text-[10px] text-rose-400">已停站</span></div><a :href="`https://${st.domain}`" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-[12px] font-semibold text-cyan-300 hover:text-cyan-200 underline decoration-cyan-400/40 truncate"><span class="truncate">{{ st.domain }}</span><svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg></a><div class="text-[10px]" :class="siteExpired(st) ? 'text-rose-400 font-bold' : 'text-slate-400'">到期 {{ st.expire_at ? new Date(st.expire_at).toLocaleDateString() : '永久' }}{{ siteExpired(st) ? '（已过期）' : '' }}</div></div><button @click="extendUserSite(st)" :disabled="roleModal.busy" class="shrink-0 text-xs bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 px-3 py-1.5 rounded-lg font-bold disabled:opacity-40">+30 天</button></div></div>
+<div class="flex items-center gap-2"><input v-model="roleModal.newSiteName" placeholder="站点名称（可留空）" class="flex-1 min-w-0 bg-slate-950 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-cyan-400" /><button @click="grantSite" :disabled="roleModal.busy" class="shrink-0 text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-black px-3 py-2 rounded-lg disabled:opacity-40">{{ roleModal.busy ? '处理中…' : '🎁 免费开站' }}</button></div>
+<p class="text-[10px] text-slate-500 leading-relaxed">开站自动分配免费子域名，赠送 30 天；到期前用户可在「我的分站」自己续费（按月费）。</p>
+</div>
+<button @click="submitRole" class="w-full font-black text-lg py-3.5 rounded-xl transition transform hover:-translate-y-1 shadow-lg text-white bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]">确认调度</button></div></div>
         
         <div v-if="deleteUserModal.show" class="fixed inset-0 z-[10007] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
           <div class="bg-slate-900 border-2 border-red-500/50 p-8 rounded-3xl shadow-[0_0_80px_rgba(239,68,68,0.4)] max-w-md w-full relative transform transition-all scale-100">

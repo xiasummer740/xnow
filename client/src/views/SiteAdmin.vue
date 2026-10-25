@@ -200,7 +200,7 @@
             </span>
             <span class="flex-1 min-w-0">
               <span class="block text-xs font-bold text-slate-100 truncate">{{ s.name }}</span>
-              <span class="block text-[10px] text-slate-500 truncate">{{ s.custom_domain || s.domain }}</span>
+              <span class="block text-[12px] text-cyan-300/90 truncate underline decoration-cyan-400/30">{{ s.custom_domain || s.domain }}</span>
             </span>
             <span v-if="s.status === 'expired'" class="shrink-0 text-[10px] text-red-400">已停站</span>
             <span class="shrink-0 text-[10px] text-slate-500">{{ Number(s.id) === Number(site && site.id) ? '管理这个' : '切过去' }}</span>
@@ -538,7 +538,15 @@
       <section v-if="page === 'domain'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">域名</h2>
         <p class="text-xs text-slate-400">
-          当前站点域名：<span class="text-amber-300 font-bold">{{ site.domain }}</span>
+          当前站点域名：
+          <a :href="`https://${site.custom_domain || site.domain}`" target="_blank" rel="noopener"
+             class="inline-flex items-center gap-1 text-[15px] font-bold text-cyan-300 hover:text-cyan-200 underline decoration-cyan-400/40 hover:decoration-cyan-300">
+            {{ site.custom_domain || site.domain }}
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+            </svg>
+          </a>
           <span v-if="site.domain_status === 'active'" class="ml-2 text-emerald-400">已开通 ✅</span>
           <span v-else-if="site.domain_status === 'pending'" class="ml-2 text-amber-400">待验证</span>
           <span v-else-if="site.domain_status === 'failed'" class="ml-2 text-red-400">开通失败</span>

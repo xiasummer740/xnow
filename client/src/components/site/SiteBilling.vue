@@ -61,7 +61,14 @@
               <span class="text-[10px] px-1.5 py-0.5 rounded"
                     :class="planBadge(s).cls">{{ planBadge(s).text }}</span>
             </div>
-            <p class="text-[11px] text-slate-500 truncate">{{ s.domain }}</p>
+            <a :href="`https://${s.custom_domain || s.domain}`" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1 mt-1 max-w-full text-[13px] font-semibold text-cyan-300 hover:text-cyan-200 underline decoration-cyan-400/40 hover:decoration-cyan-300">
+              <span class="truncate">{{ s.custom_domain || s.domain }}</span>
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+              </svg>
+            </a>
             <p class="text-[12px] mt-1 tabular-nums" :class="isStopped(s) ? 'text-rose-300 font-bold' : (isTrial(s) ? 'text-amber-300' : 'text-slate-300')">
               {{ statusLine(s) }}
             </p>

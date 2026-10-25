@@ -725,7 +725,30 @@ router.get('/users', authenticate, async (req, res) => {
       where, order: [['created_at', 'DESC']], limit, offset,
       attributes: { exclude: ['password_hash', 'api_key'] }
     });
-    res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
+    // 🏬 110 期：列表里带上「这个人有没有分站」—— 密室要能直接给用户分配/续费分站，
+    //    不然管理员得先跑去分站管理页搜手机号，再回来操作。
+    let items = rows.map((r) => (typeof r.toJSON === 'function' ? r.toJSON() : r));
+    try {
+      const ids = items.map((u) => u.id);
+      if (ids.length) {
+        const sites = await Site.findAll({ where: { owner_id: ids }, order: [['id', 'ASC']] });
+        const byOwner = new Map();
+        for (const st of sites) {
+          const key = String(st.owner_id);
+          if (!byOwner.has(key)) byOwner.set(key, []);
+          byOwner.get(key).push({
+            id: st.id,
+            name: st.name,
+            domain: st.custom_domain || st.domain,
+            status: st.status,
+            expire_at: Number(st.expire_at) || 0,
+          });
+        }
+        items = items.map((u) => ({ ...u, sites: byOwner.get(String(u.id)) || [] }));
+      }
+    } catch (e) { /* 分站查询失败不该拖垮用户列表 */ }
+
+    res.json({ status: 'success', data: { items, total: count, page, pageSize: limit } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
