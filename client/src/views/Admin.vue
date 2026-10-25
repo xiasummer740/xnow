@@ -542,6 +542,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             :class="['px-4 py-2 rounded-lg text-sm font-bold transition', activeTab === t.key ? 'bg-amber-400/15 text-amber-400 border border-amber-400/30 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/70']">
             {{ t.label }}
           </button>
+          <router-link to="/admin/site-customers"
+            class="ml-auto px-4 py-2 rounded-lg text-sm font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-600/40 hover:bg-emerald-500/20 transition">
+            🏬 分站客户 →
+          </router-link>
         </div>
 
         <div v-if="activeTab === 'overview'" class="space-y-6">

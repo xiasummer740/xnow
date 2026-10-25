@@ -19,6 +19,7 @@ const routes = [
       { path: 'vip', component: () => import('../views/Vip.vue') },
       { path: 'admin', component: () => import('../views/Admin.vue') },
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
+  { path: 'admin/site-customers', component: () => import('../views/AdminSiteCustomers.vue') },
       { path: 'api-doc', component: () => import('../views/ApiDoc.vue') },
       { path: 'affiliate', component: () => import('../views/Affiliate.vue') },
       // 🛒 开通新分站必须先匹配（否则会被 :page 吃掉，变成 page='new' 的空页面）

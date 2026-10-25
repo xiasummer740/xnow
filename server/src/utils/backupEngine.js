@@ -7,7 +7,11 @@ import { Config } from '../models/index.js';
 import { sendTgMessage, sendTgDocument } from './tgBot.js';
 import { sendBackupEmail } from './email.js';
 
-const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
+// 📁 备份落盘目录：允许环境变量覆盖。
+//    ⚠️ 原来写死 /var/www/xnow/backups —— Beta 环境（/var/www/xnow-beta）跑定时备份时
+//    会把快照写进**生产**的备份库，两边文件名还不冲突（时间戳不同），混在一起根本分不出
+//    哪份是测试数据。Beta 的 .env 里配 BACKUP_DIR=/var/www/xnow-beta/backups 即可隔离。
+const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || '/var/www/xnow/backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 // 什么算一份快照：新格式是**归档包**（`.tar.gz`，里面装着数据库 + 补单记录），
@@ -22,6 +26,16 @@ export const isBackupFile = (f) => f.endsWith('.tar.gz') || f.endsWith('.sql.gz'
 //    路径与 paymentTracker.js 保持一致。
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PENDING_FILE = path.join(__dirname, '../../data/pending_payments.json');
+
+// 🖼 110 期补的两份"不在数据库里"的数据 —— 少任何一份，换服务器都会丢东西：
+//   ① 上传目录：站长自己传的站点背景图/logo。路径与 sites.js 的上传接口保持一致。
+//      （数据库只存 `/uploads/xxx.png` 这种字符串，图本身在磁盘上；图没了页面就变成白底）
+//   ② 分站 nginx 配置：每个自有域名一个 vhost 文件，决定"这个域名去哪个站点"。
+//      丢了以后分站自有域名全部 404 —— 这些由 `sites` 表里的域名可重建
+//      （见 deploy/sites/rebuild-vhosts.cjs），但能一起带走就省掉重装后逐个验证。
+const UPLOAD_DIR = process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads';
+const NGINX_SITE_DIR = '/etc/nginx/sites-enabled';
+const VHOST_PREFIX = 'xnow-site-';
 
 // 🔒 备份/恢复统一用 bash -o pipefail：任一步骤失败（如 mysqldump 连不上库）
 // 都会让整条管道以非 0 退出，杜绝「gzip 收尾吞错 → 空备份却报成功」的静默失败。
@@ -78,8 +92,47 @@ export const createBackup = () => {
                 if (hasPending) fs.copyFileSync(PENDING_FILE, path.join(tmp, 'pending_payments.json'));
                 else console.warn('[Backup] 补单记录文件不存在，本次归档只含数据库:', PENDING_FILE);
 
-                const members = ['xnow_db.sql', ...(hasPending ? ['pending_payments.json'] : [])]
-                    .map(m => `'${m}'`).join(' ');
+// 🖼 上传目录（站长传的背景图/logo）：MB 级，整包带走的成本很低，
+//    丢了的代价是"站长的站点突然变白底"，所以默认带、不做体积裁剪。
+const uploadsTmp = path.join(tmp, 'uploads');
+let hasUploads = false;
+try {
+if (fs.existsSync(UPLOAD_DIR)) {
+fs.cpSync(UPLOAD_DIR, uploadsTmp, { recursive: true });
+hasUploads = true;
+} else {
+console.warn('[Backup] 上传目录不存在，本次归档不含图片:', UPLOAD_DIR);
+}
+} catch (e) {
+// 图片打包失败**不该让整次备份失败** —— 数据库才是命根子
+console.warn('[Backup] 上传目录打包失败（已跳过）:', e.message);
+hasUploads = false;
+}
+
+// 🌐 分站 nginx 配置（每个自有域名一个文件，丢了 = 该域名 404）
+const nginxTmp = path.join(tmp, 'nginx-sites');
+let hasVhosts = false;
+try {
+if (fs.existsSync(NGINX_SITE_DIR)) {
+fs.mkdirSync(nginxTmp, { recursive: true });
+for (const f of fs.readdirSync(NGINX_SITE_DIR)) {
+if (!f.startsWith(VHOST_PREFIX)) continue;
+fs.copyFileSync(path.join(NGINX_SITE_DIR, f), path.join(nginxTmp, f));
+hasVhosts = true;
+}
+}
+} catch (e) {
+// 读 /etc/nginx 常需 root；普通用户跑服务时会 EACCES，同样只警告不失败
+console.warn('[Backup] 分站 nginx 配置打包失败（已跳过）:', e.message);
+hasVhosts = false;
+}
+
+                const members = [
+'xnow_db.sql',
+...(hasPending ? ['pending_payments.json'] : []),
+...(hasUploads ? ['uploads'] : []),
+...(hasVhosts ? ['nginx-sites'] : []),
+].map(m => `'${m}'`).join(' ');
                 exec(`tar czf '${filepath}' -C '${tmp}' ${members}`, (err2, _o2, se2) => {
                     try {
                         cleanup();
@@ -87,7 +140,7 @@ export const createBackup = () => {
                             reject(new Error('打包失败: ' + ((se2 || err2.message || '').trim() || '未知错误')));
                             return;
                         }
-                        resolve({ filename, filepath, size: fs.statSync(filepath).size, hasPending });
+                        resolve({ filename, filepath, size: fs.statSync(filepath).size, hasPending, hasUploads, hasVhosts });
                     } catch (e) { reject(e); }
                 });
             } catch (e) {
@@ -155,6 +208,36 @@ export const restoreBackup = (filepath) => {
                                 return;
                             }
                         }
+                        // 🖼 上传文件（站长背景图/logo）：库里存的是 /uploads/xxx 路径，
+                        //    文件本身必须回到原位，否则分站页面会引用到不存在的图。
+                        //    ⚠️ 与补单记录同一原则：**库已经灌成功**，这里失败只能如实报告，不能谎称整体失败。
+                        const uploadsInArchive = path.join(tmp, 'uploads');
+                        if (fs.existsSync(uploadsInArchive)) {
+                            try {
+                                fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+                                fs.cpSync(uploadsInArchive, UPLOAD_DIR, { recursive: true, force: true });
+                            } catch (e) {
+                                cleanup();
+                                reject(new Error('数据库已还原成功，但上传图片回写失败: ' + e.message));
+                                return;
+                            }
+                        }
+
+                        // 🌐 分站 nginx 配置：拷回 sites-enabled 并重载，分站自有域名才不会 404。
+                        //    没有 root 权限时会失败 —— 那时数据库与图片都已就位，
+                        //    只需要人工跑一次 `deploy/sites/rebuild-vhosts.cjs`，所以只告警不 reject。
+                        const nginxInArchive = path.join(tmp, 'nginx-sites');
+                        if (fs.existsSync(nginxInArchive)) {
+                            try {
+                                for (const f of fs.readdirSync(nginxInArchive)) {
+                                    fs.copyFileSync(path.join(nginxInArchive, f), path.join(NGINX_SITE_DIR, f));
+                                }
+                                exec('nginx -s reload', () => { /* 失败留给 rebuild-vhosts 兜底 */ });
+                            } catch (e) {
+                                console.warn('[Restore] 分站 nginx 配置回写失败（需 root，可跑 rebuild-vhosts 重建）:', e.message);
+                            }
+                        }
+
                         cleanup();
                         resolve(true);
                     } catch (e) { reject(e); }

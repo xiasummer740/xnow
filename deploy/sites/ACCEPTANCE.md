@@ -3583,3 +3583,47 @@ if (ownerRow.role !== 'agent') return '仅至尊代理可创建分站，请先�
 手机端（390px）：
 - 副按钮「只填三样就够」隐藏（底部本来就有吸底按钮，两个大按钮叠着很蠢）
 - 其余按单栏堆叠，吸底 CTA 保留
+---
+## 七十、分站客户总览 + 备份四件套（110 期）
+
+### ① 密室新页面 `/admin/site-customers`
+
+祥哥：「站长分站的用户所有的全面信息，密室要单独做一个页面记录和统计分析」。
+详见 `deploy/sites/GO-LIVE-REVIEW.md` §2.1。
+
+后端两个接口（都要 `admin`/`super_admin`）：
+- `GET /api/admin/site-customers` — 明细（分页/搜索/排序/按站筛选）+ 全量汇总 + 按站汇总
+- `GET /api/admin/site-customers/export` — CSV（UTF-8 BOM，Excel 直接开）
+
+权限实测：匿名 401；普通用户 403（分站客户/用户列表/CSV/财务四项全拒）；
+站长（代理）403；超管 200。
+
+### ② 备份真空洞：换服务器会丢两样东西
+
+原来备份包只有 `xnow_db.sql` + `pending_payments.json`：
+
+| 丢什么 | 后果 | 严重度 |
+|---|---|---|
+| `uploads/`（站长上传的背景图/logo） | 数据库只存 `/uploads/xxx.png`，图没了 → 分站页面白底 | 高 |
+| 分站 nginx vhost（每个自有域名一个） | 自有域名全部 404，而子域名正常 → **极难发现** | 高 |
+
+现在是四件套：`xnow_db.sql` + `pending_payments.json` + `uploads/` + `nginx-sites/`，
+还原时各回原位（vhost 写回后自动 `nginx -s reload`）。
+
+Beta 实测闭环：
+```
+备份 → 成员 xnow_db.sql / pending_payments.json / uploads/(2) / nginx-sites/(4)
+删掉一张图 → restoreBackup → 文件回来；数据库分站客户数仍为 3
+```
+
+### ③ 顺手修掉的环境隔离泄漏
+
+`BACKUP_DIR` 原写死 `/var/www/xnow/backups` → **Beta 定时备份会写进生产备份库**。
+现改为 `process.env.BACKUP_DIR`，Beta 配 `/var/www/xnow-beta/backups`。
+实测：Beta 备份后生产目录仍是 24 份。
+
+### ④ 兜底脚本 `deploy/sites/rebuild-vhosts.cjs`
+
+按 `sites` 表重建全部 vhost（支持 `--dry`）。用于还原包没带 vhost、或没 root 权限写回。
+
+### ⑤ README §5 灾备自检 7 条 → 10 条

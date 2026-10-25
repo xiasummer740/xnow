@@ -1106,4 +1106,164 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
   }
 });
 
+// ======================================================================
+// 🏬 分站客户总览（110 期，祥哥：「站长分站的用户所有的全面信息，
+//    密室要单独做一个页面记录和统计分析，备份也要一起」）
+//
+// 口径说明：
+//   · 「分站客户」= users.site_id > 0 的账号（在哪开的站就归哪个站）
+//   · 消费 = orders.charge 之和；成本 = orders.site_cost；毛利 = 两者差
+//   · 充值 = transactions 里正数流水之和（分站客户充值进的是站长商户，
+//     平台一分没收到，所以这里只做客户画像，不计入平台营收）
+// ======================================================================
+const SITE_CUSTOMER_SORTS = {
+  new: 'u.created_at DESC',
+  spend: 'spend DESC',
+  orders: 'orders DESC',
+  balance: 'u.balance DESC',
+  active: 'u.last_login_at DESC',
+};
+
+router.get('/site-customers', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const { search, site_id, sort, only } = req.query;
+
+    const where = ['u.site_id > 0'];
+    const params = [];
+    if (site_id && Number(site_id) > 0) { where.push('u.site_id = ?'); params.push(Number(site_id)); }
+    if (only === 'active7d') where.push('u.last_login_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    if (only === 'banned') where.push('u.is_banned = 1');
+    if (search) {
+      where.push('(u.phone LIKE ? OR u.email LIKE ? OR CAST(u.id AS CHAR) = ?)');
+      params.push('%' + search + '%', '%' + search + '%', String(search));
+    }
+    const whereSql = 'WHERE ' + where.join(' AND ');
+    // 排序只认白名单，绝不把请求参数拼进 SQL
+    const orderSql = SITE_CUSTOMER_SORTS[sort] || SITE_CUSTOMER_SORTS.new;
+
+    const [items] = await sequelize.query(`
+      SELECT u.id, u.phone, u.email, u.balance, u.site_id, u.is_banned,
+             u.created_at, u.last_login_at, u.last_login_ip, u.inviter_id,
+             s.name AS site_name,
+             COALESCE(NULLIF(s.custom_domain, ''), s.domain) AS site_domain,
+             s.status AS site_status, s.expire_at AS site_expire_at,
+             (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS orders,
+             (SELECT COALESCE(SUM(o.charge), 0) FROM orders o WHERE o.user_id = u.id) AS spend,
+             (SELECT MAX(o.created_at) FROM orders o WHERE o.user_id = u.id) AS last_order_at,
+             (SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = u.id AND t.amount > 0) AS recharged
+      FROM users u
+      LEFT JOIN sites s ON s.id = u.site_id
+      ${whereSql}
+      ORDER BY ${orderSql}
+      LIMIT ? OFFSET ?
+    `, { replacements: [...params, limit, offset] });
+
+    const [[{ total }]] = await sequelize.query(
+      `SELECT COUNT(*) AS total FROM users u ${whereSql}`, { replacements: params });
+
+    // 全量汇总（不受筛选影响，做"这个盘子有多大"的判断）
+    const [[summary]] = await sequelize.query(`
+      SELECT COUNT(*) AS customers,
+             SUM(CASE WHEN u.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS new7d,
+             SUM(CASE WHEN u.last_login_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS active7d,
+             SUM(CASE WHEN u.is_banned = 1 THEN 1 ELSE 0 END) AS banned,
+             COALESCE(SUM(u.balance), 0) AS customer_balance
+      FROM users u WHERE u.site_id > 0
+    `);
+    const [[orderAgg]] = await sequelize.query(`
+      SELECT COUNT(*) AS orders,
+             COUNT(DISTINCT o.user_id) AS buyers,
+             COALESCE(SUM(o.charge), 0) AS gmv,
+             COALESCE(SUM(o.site_cost), 0) AS cost,
+             COALESCE(SUM(o.charge - o.site_cost), 0) AS profit
+      FROM orders o WHERE o.site_id > 0
+    `);
+    const [[rechargeAgg]] = await sequelize.query(`
+      SELECT COALESCE(SUM(t.amount), 0) AS recharged, COUNT(*) AS times
+      FROM transactions t WHERE t.amount > 0 AND t.site_id > 0
+    `);
+
+    // 每个分站一行：客户数 / 订单 / 营收 / 毛利 / 客户余额
+    const [sites] = await sequelize.query(`
+      SELECT s.id, s.name, s.status, s.plan, s.expire_at, s.created_at,
+             COALESCE(NULLIF(s.custom_domain, ''), s.domain) AS domain,
+             s.agent_discount,
+             u.phone AS owner_phone, u.balance AS owner_balance,
+             (SELECT COUNT(*) FROM users cu WHERE cu.site_id = s.id) AS customers,
+             (SELECT COUNT(*) FROM users cu WHERE cu.site_id = s.id AND cu.last_login_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS active7d,
+             (SELECT COUNT(*) FROM orders o WHERE o.site_id = s.id) AS orders,
+             (SELECT COALESCE(SUM(o.charge), 0) FROM orders o WHERE o.site_id = s.id) AS gmv,
+             (SELECT COALESCE(SUM(o.site_cost), 0) FROM orders o WHERE o.site_id = s.id) AS cost,
+             (SELECT COALESCE(SUM(o.charge - o.site_cost), 0) FROM orders o WHERE o.site_id = s.id) AS profit,
+             (SELECT COALESCE(SUM(cu.balance), 0) FROM users cu WHERE cu.site_id = s.id) AS customer_balance,
+             (SELECT MAX(o.created_at) FROM orders o WHERE o.site_id = s.id) AS last_order_at
+      FROM sites s
+      LEFT JOIN users u ON u.id = s.owner_id
+      ORDER BY gmv DESC, s.id ASC
+    `);
+
+    res.json({
+      status: 'success',
+      data: {
+        items, total, page, pageSize: limit,
+        summary: {
+          ...summary,
+          orders: Number(orderAgg.orders || 0),
+          buyers: Number(orderAgg.buyers || 0),
+          gmv: Number(orderAgg.gmv || 0),
+          cost: Number(orderAgg.cost || 0),
+          profit: Number(orderAgg.profit || 0),
+          recharged: Number(rechargeAgg.recharged || 0),
+          recharge_times: Number(rechargeAgg.times || 0),
+        },
+        sites,
+      },
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 导出 CSV：换服务器/对账/给财务留档都用得上，且不依赖界面
+router.get('/site-customers/export', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const [rows] = await sequelize.query(`
+      SELECT u.id, u.phone, u.email, u.balance, u.site_id, u.is_banned,
+             u.created_at, u.last_login_at, u.last_login_ip,
+             s.name AS site_name, COALESCE(NULLIF(s.custom_domain, ''), s.domain) AS site_domain,
+             (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS orders,
+             (SELECT COALESCE(SUM(o.charge), 0) FROM orders o WHERE o.user_id = u.id) AS spend,
+             (SELECT MAX(o.created_at) FROM orders o WHERE o.user_id = u.id) AS last_order_at,
+             (SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = u.id AND t.amount > 0) AS recharged
+      FROM users u LEFT JOIN sites s ON s.id = u.site_id
+      WHERE u.site_id > 0 ORDER BY u.site_id ASC, u.id ASC LIMIT 50000
+    `);
+    const head = ['客户ID', '手机号', '邮箱', '余额', '分站ID', '分站名', '分站域名', '是否封禁',
+      '注册时间', '最后登录', '最后登录IP', '订单数', '消费总额', '最后下单', '充值总额'];
+    const esc = (v) => {
+      const t = v == null ? '' : String(v);
+      return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      lines.push([
+        r.id, r.phone, r.email, r.balance, r.site_id, r.site_name, r.site_domain, r.is_banned ? '已封禁' : '正常',
+        r.created_at ? new Date(r.created_at).toISOString() : '',
+        r.last_login_at ? new Date(r.last_login_at).toISOString() : '',
+        r.last_login_ip, r.orders, r.spend,
+        r.last_order_at ? new Date(r.last_order_at).toISOString() : '', r.recharged,
+      ].map(esc).join(','));
+    }
+    const csv = '\ufeff' + lines.join('\r\n');
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="site-customers-${stamp}.csv"`);
+    res.send(csv);
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 export default router;
+
