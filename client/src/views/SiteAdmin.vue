@@ -32,7 +32,38 @@
                    class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">退出代管 →</router-link>
     </div>
 
-<!-- 🧭 92 期：原来 11 个区块堆在一页，手机上滑很久还找不到。拆页后导航就这一条 -->
+<!-- 🚦 站被停了：顶部红条 + 一键续费（站长自己就能救回来） -->
+    <div v-if="site && site.status !== 'active' && !isStaffRole"
+         class="mb-3 rounded-2xl border border-red-600/50 bg-red-500/10 px-4 py-3 flex flex-wrap items-center gap-3">
+      <span class="text-lg">🚦</span>
+      <div class="min-w-0">
+        <div class="text-sm font-black text-red-300">你的站已停 —— 客户打开 {{ site.domain }} 看到的是「站点已下线」</div>
+        <div class="text-[11px] text-red-200/70 mt-0.5">
+          数据一条没丢。续费 {{ plan.site_monthly }} 元就能立刻恢复（{{ plan.renew_days }} 天）。
+        </div>
+      </div>
+      <button type="button" @click="renewSiteFee()" :disabled="busyStop"
+              class="ml-auto px-3.5 py-2 rounded-xl bg-red-500 text-white text-xs font-black disabled:opacity-50">
+        {{ busyStop ? '处理中…' : `立即续费 ¥${plan.site_monthly}` }}
+      </button>
+    </div>
+
+    <!-- 🔀 多站切换常驻顶部：改价/装修前一眼就知道自己在改哪个站 -->
+    <div v-if="!isStaffRole && sitesList.length > 1"
+         class="mb-3 rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2 flex items-center gap-2 flex-wrap">
+      <span class="text-[11px] text-slate-500 shrink-0">当前正在管理</span>
+      <select :value="site?.id" @change="pickSite($event)"
+              class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-200 max-w-[60vw]">
+        <option v-for="s in sitesList" :key="s.id" :value="s.id">
+          #{{ s.id }} {{ s.name }}{{ s.status === 'active' ? '' : '（已停）' }}
+        </option>
+      </select>
+      <span class="text-[10px] text-slate-600">后面所有改动只影响这一个站</span>
+      <button type="button" @click="go('overview')"
+              class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400">管理全部站点</button>
+    </div>
+
+    <!-- 🧭 92 期：原来 11 个区块堆在一页，手机上滑很久还找不到。拆页后导航就这一条 -->
     <nav v-if="site" class="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-4 bg-slate-950/95 backdrop-blur border-b border-slate-800 md:border-none md:bg-transparent">
       <div class="grid grid-cols-4 gap-1.5 md:flex md:flex-wrap md:overflow-visible">
         <button v-for="t in PAGE_TABS" :key="t.key" @click="go(t.key)"
@@ -692,6 +723,11 @@ const site = ref(null)
 //    第二个站建了也管不了、看不到。现在按 localStorage 记住当前在管哪个站。
 const sitesList = ref([])
 const currentSiteId = ref(Number(localStorage.getItem('xnow_site_current') || 0))
+const pickSite = (e) => {
+  const id = Number(e.target.value)
+  const target = sitesList.value.find(x => Number(x.id) === id)
+  if (target) switchSite(target)
+}
 const switchSite = (s) => {
   currentSiteId.value = Number(s.id)
   try { localStorage.setItem('xnow_site_current', String(s.id)) } catch (e) {}
