@@ -20,7 +20,7 @@ import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureC
 export const DEFAULTS = {
   siteMonthly: 99,      // 分站 ¥99/月
   agentMonthly: 99,     // 至尊代理 ¥99/月
-  trialHours: 24,       // 新站试用 1 天
+  trialHours: 0,        // ⛔ 110 期起取消试用（新站直接付费）；保留字段只为兼容历史 trial 站
   renewDays: 30,        // 一次续费 30 天
 };
 

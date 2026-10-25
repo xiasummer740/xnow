@@ -36,45 +36,23 @@
     <!-- 💰 110 期：没有代理也能开站，代理只是进货价更低。
          所以这里不再拦人，只在建站表单上方挂一句「开代理更划算」。 -->
 
-    <!-- 还没有分站 → 创建 -->
+    <!-- 还没有分站 → 引导去宣传页（110 期：入口页要能说服人，不能只是一张表单） -->
     <div v-else-if="!site" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6">
-      <h2 class="font-bold mb-4">开通你的分站</h2>
-      <div class="space-y-3">
-        <p class="text-[11px] text-amber-500/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 leading-relaxed">
-          💳 首个分站 <b>{{ plan.trial_hours }} 小时免费试用</b>，之后 <b>¥{{ plan.site_monthly }}/月</b>；
-          每个分站单独计费，到期未续费会停站（数据保留，续费即恢复）。
-        </p>
-        <p v-if="!billingState.isAgent" class="text-[11px] text-emerald-300 bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 leading-relaxed">
-          💡 你现在没有至尊代理资格，也能正常开站卖货，只是<b>进货价是原价</b>。
-          开通至尊代理（¥{{ plan.agent_monthly }}/月）后进货价打 8 折，同样的售价每单多赚 20%。
-        </p>
-        <div>
-          <label class="block text-xs text-slate-400 mb-1">
-            站点域名 <span class="text-slate-500">（可不填 —— 留空自动分配一个免费子域名，之后也能改成自己的域名）</span>
-          </label>
-          <input v-model="createForm.domain" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="myshop.xnow.taikon.top" />
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 mb-1">站点名称</label>
-          <input v-model="createForm.name" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" placeholder="我的数字营销" />
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 mb-1">
-            加价率（在进货价上加多少 %，越高客户付得越多、你赚得越多）
-          </label>
-          <input v-model.number="createForm.markup_pct" type="number" step="10" min="0" max="2000" inputmode="numeric" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-          <p class="text-[10px] text-amber-500/80 mt-1">
-            例：填 <b>50</b> = 客户看到的价格是你的进货价 × 1.5。系统会拦住亏本设置（低于 0% 不许保存）。
-          </p>
-        </div>
-        <button @click="createSite()" :disabled="creating" class="w-full py-2.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
-          {{ creating ? '开通中…' : '立即开通' }}
-        </button>
-        <p class="text-[11px] text-slate-500 leading-relaxed">
-          开通后你的分站靠预存余额自动发货：客户下单 → 扣客户余额 + 按你的你的成本价扣你的余额，
-          差额就是你的利润。余额不足会自动拒单，不会产生欠款。
-        </p>
-      </div>
+      <h2 class="font-bold text-lg mb-1.5">你还没有分站</h2>
+      <p class="text-xs text-slate-400 leading-relaxed mb-4">
+        ¥{{ plan.site_monthly }}/月 开一个，10 分钟装修完就能卖：<br />
+        自己的站名和域名 · 客户充值的钱进你自己的收款账户 · 下单自动交付 · 不抽成。
+      </p>
+      <ul class="space-y-1.5 mb-4">
+        <li v-for="b in noSitePerks" :key="b" class="flex gap-2 text-[11px] text-slate-300">
+          <span class="text-emerald-400 shrink-0">✓</span><span>{{ b }}</span>
+        </li>
+      </ul>
+      <button @click="$router.push('/my-site/new')"
+        class="w-full py-3 rounded-xl font-black text-sm bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900">
+        看看能给客户卖什么、能赚多少 →
+      </button>
+      <p class="text-[10px] text-slate-500 mt-2 text-center">开通即扣 ¥{{ plan.site_monthly }}，有效期 {{ plan.renew_days }} 天</p>
     </div>
 
     <!-- 已有分站 -->
@@ -115,7 +93,6 @@
               <span class="block text-[10px] text-slate-500 truncate">{{ s.custom_domain || s.domain }}</span>
             </span>
             <span v-if="s.status === 'expired'" class="shrink-0 text-[10px] text-red-400">已停站</span>
-            <span v-else-if="s.plan === 'trial'" class="shrink-0 text-[10px] text-emerald-400">试用中</span>
             <span class="shrink-0 text-[10px] text-slate-500">{{ Number(s.id) === Number(site && site.id) ? '管理这个' : '切过去' }}</span>
           </button>
         </div>
@@ -492,7 +469,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import DesignStudio from '../components/site/DesignStudio.vue'
 import CopyStudio from '../components/site/CopyStudio.vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -529,7 +506,7 @@ watch(page, (v) => {
 const loading = ref(true)
 const billingRef = ref(null)
 const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 99 })
-const plan = ref({ site_monthly: 99, agent_monthly: 99, trial_hours: 24 })
+const plan = ref({ site_monthly: 99, agent_monthly: 99, renew_days: 30 })
 const saving = ref(false)
 const creating = ref(false)
 const binding = ref(false)
@@ -1134,6 +1111,14 @@ const save = async (silent = false) => {
     return data.status === 'success'
   } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
 }
+
+// 无站时宣传页上的卖点（文案与 /my-site/new 保持一致口径）
+const noSitePerks = [
+  '自己的站名 / 域名 / 模板 / 配色，客户看不出背后是谁',
+  '客户充值的钱进你自己的收款商户，不经过平台',
+  '客户下单自动交付，不用手工发货',
+  '不抽成 —— 卖多少都是你的',
+]
 
 // 🚦 停站后的三种恢复动作
 const busyStop = ref(false)

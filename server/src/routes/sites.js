@@ -442,8 +442,8 @@ router.post('/', authenticate, async (req, res) => {
     // 💳 计费（87 期，祥哥 2026-10-25 定）：
     //    · 至尊代理 ¥99/月 只是资格，**不含分站**
     //    · 每开一个分站再 ¥99/月，想开几个买几个
-    //    · 名下第 1 个站给 1 天试用，到期未付费即停站（无宽限期，提前提醒）
-    //    · 之后再开站：先从主站余额扣 ¥99，开 30 天
+    //    · 每个站开站即从主站余额扣 ¥99，开 30 天（110 期取消 1 天试用）
+    //    · 余额不够直接拒，不允许欠费开站
     //    平台管理员开站不计费（方便自测）。
     const isStaff2 = ['admin', 'super_admin'].includes(req.user.role);
     const billing = await getBillingConfig();
@@ -469,13 +469,10 @@ router.post('/', authenticate, async (req, res) => {
         return res.json({ status: 'error', message: `每位站长最多开 ${maxSites} 个分站（你现在已有 ${owned} 个）。` });
       }
 
-      if (owned === 0) {
-        plan = 'trial';
-        expireAt = Date.now() + billing.trialHours * 3600e3;
-      } else {
-        plan = 'paid';
-        expireAt = Date.now() + billing.renewDays * 86400e3;
-      }
+      // 💰 110 期（祥哥定调）：取消「1 天免费体验」—— 开站就是付费开通，
+      //    每站 ¥99 / renewDays 天，第 1 个站也一样（不再有 owned===0 的免费分支）。
+      plan = 'paid';
+      expireAt = Date.now() + billing.renewDays * 86400e3;
     }
 
     // 建站 + 扣费放在同一个事务里：扣了钱却建站失败必须整体回滚
@@ -557,11 +554,10 @@ router.post('/', authenticate, async (req, res) => {
 
     sendTgMessage(`🏗️ <b>新分站创建</b>\n🌐 <b>域名:</b> <code>${cleanDomain}</code>\n📛 <b>名称:</b> ${name}\n👤 <b>站长UID:</b> <code>${ownerId}</code>\n💹 <b>倍率:</b> ${multiplierValue}`);
 
-    const planNote = plan === 'trial'
-      ? `｜🎁 已开始 ${billing.trialHours} 小时免费试用，到期前会提醒，之后 ¥${billing.siteMonthly}/月`
-      : plan === 'paid'
-        ? `｜💳 已扣 ¥${paidAmount}，有效期到 ${new Date(expireAt).toLocaleDateString('zh-CN')}`
-        : '';
+    // 💰 110 期：取消试用，开站一律付费（plan 只会是 'paid'）
+    const planNote = plan === 'paid'
+      ? `｜💳 已扣 ¥${paidAmount}，有效期到 ${new Date(expireAt).toLocaleDateString('zh-CN')}`
+      : '';
     res.json({
       status: 'success',
       message: `分站创建成功${publishNote}${planNote}`,

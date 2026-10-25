@@ -34,13 +34,14 @@ router.get('/plan', async (req, res) => {
       data: {
         agent_monthly: cfg.agentMonthly,
         site_monthly: cfg.siteMonthly,
-        trial_hours: cfg.trialHours,
+        // ⛔ 110 期取消 1 天体验：这里恒为 0，任何客户端都不该再拿它当"免费时长"
+      trial_hours: 0,
         renew_days: cfg.renewDays,
         rules: {
           agent_includes_site: false,          // 代理费不含分站
           no_grace_period: true,               // 到期就停，无宽限
           remind_days: [7, 3, 1],              // 提前提醒
-          trial_remind_hours: [6, 1],
+          trial_remind_hours: [],              // 试用已取消，不再有试用提醒
           data_kept_after_expire: true,        // 停站不删数据
         },
       },
