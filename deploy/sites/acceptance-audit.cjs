@@ -64,13 +64,29 @@ const login = async (cred, origin = BASE) => {
   if (!site) { console.error("  拿不到分站信息，中止"); process.exit(1); }
   const domain = site.domain || `${site.subdomain}.xnow.taikon.top`;
 
-  // ── ① 仅至尊代理可开分站 ────────────────────────────────────────────────
+  // ── ① 开店权限：110 期祥哥定「任何登录用户都能开分站」，代理只是进货价 8 折 ──
+  //     所以这里验证的是"能开 + 扣费正确"，不再是"必须 403"。
+  //     ⚠️ 只读模式下不建站，避免在库里留垃圾站点和扣掉的 ¥99。
   const plainUser = await login({ account: "18800000088", password: "demo123456" });
-  const createAsUser = await j(`${BASE}/api/sites`, {
-    method: "POST", headers: H(plainUser), body: JSON.stringify({ name: "越权测试" }),
-  });
-  rec("① 普通用户不能开分站", createAsUser.code === 403 || /仅至尊代理|权限|无权/.test(msg(createAsUser)),
-      `${createAsUser.code} ${msg(createAsUser).slice(0, 60)}`);
+  if (WRITE) {
+    const before = await j(`${BASE}/api/me`, { headers: H(plainUser) });
+    const createAsUser = await j(`${BASE}/api/sites`, {
+      method: "POST", headers: H(plainUser), body: JSON.stringify({ name: "审查临时站" + Date.now().toString().slice(-4) }),
+    });
+    const okCreate = createAsUser.code === 200 && createAsUser.body?.status === "success";
+    rec("① 普通用户也能开分站（110 期政策）", okCreate, `${createAsUser.code} ${msg(createAsUser).slice(0, 60)}`);
+    // 用后即删：这里建出来的站点必须自己收拾干净
+    const newId = createAsUser.body?.data?.id || createAsUser.body?.data?.site?.id;
+    if (newId) {
+      const site = await j(`${BASE}/api/sites/${newId}`, { headers: H(plainUser) });
+      const nm = site.body?.data?.name || "审查临时站";
+      await j(`${BASE}/api/admin/sites/${newId}/action`, {
+        method: "POST", headers: H(adminToken), body: JSON.stringify({ action: "delete", confirm: nm }),
+      });
+    }
+  } else {
+    skip("① 普通用户也能开分站", "只读模式（会建站+扣费，故跳过）");
+  }
   rec("① 代理有自己的分站", !!site, `site#${site.id} ${site.name} · ${domain}`);
 
   // ── ② 免费子域名可访问且不暴露主站 ──────────────────────────────────────
@@ -188,16 +204,27 @@ const login = async (cred, origin = BASE) => {
     skip("⑦ 模块排序写入", "只读模式");
   }
 
-  // ── ⑧ 支付方案②：分站自有商户优先，未配不回退平台商户 ──────────────────
+  // ── ⑧ 收款：站长没配商户时可用「主站代收」（110 期方案 A），但必须落台账 ──
+  //     旧断言要求"绝不回退平台商户"，已被祥哥的 A 方案取代。
   const pay = await j(`${SUB}/api/pay/rmb/sign`, {
     method: "POST", headers: C, body: JSON.stringify({ pay_type: "alipay", amount: 10 }),
   });
-  const payBody = JSON.stringify(pay.body);
-  const noFallback = pay.body?.code === "NO_SITE_MERCHANT" || /商户|未开通/.test(payBody);
-  rec("⑧ 未配商户时不回退平台商户", noFallback, payBody.slice(0, 100));
-  rec("⑧ 站内已配商户时走站长的", /has_bufpay|bufpay_id/.test(JSON.stringify(site)) ||
-      site.bufpay_id !== undefined, `站内商户字段：${site.bufpay_id ? "已配置" : "未配置（走方案①兜底）"}`);
-
+  const payBody = JSON.stringify(pay.body || {});
+  const toggleOn = Number(site.use_platform_merchant || 0) === 1;
+  const hasOwn = !!(site.bufpay_id && site.bufpay_key);
+  if (hasOwn) {
+    rec("⑧ 站长配了自己的商户 → 走自己的", pay.body?.status === "success" || /配置缺失/.test(payBody),
+        `自有商户已配置，下单返回 ${pay.body?.status || pay.code}`);
+  } else if (toggleOn) {
+    // 开关开着：允许用平台商户；平台自身没配商户时也必须给客户一句人话，且绝不泄露"主站"
+    rec("⑧ 开关开启 → 允许平台代收", pay.body?.status === "success" || pay.body?.code === "NO_SITE_MERCHANT",
+        `${pay.body?.status || pay.body?.code || pay.code} ${(pay.body?.message || "").slice(0, 50)}`);
+    rec("⑧ 客户可见文案不含「主站/站长」", !/主站|站长/.test(pay.body?.message || ""),
+        pay.body?.message || "(无提示)");
+  } else {
+    const blocked = pay.code === 403 || pay.body?.code === "NO_SITE_MERCHANT";
+    rec("⑧ 开关关闭 → 拒绝在线充值", blocked, `${pay.code} ${pay.body?.code || ""} ${(pay.body?.message || "").slice(0, 40)}`);
+  }
   // ── ⑨ 分站自有 SMTP ────────────────────────────────────────────────────
   // 站内 SMTP 只有这 4 个字段（发件人 = 站名，不带独立的 from/secure）
   const smtpKeys = ["smtp_host", "smtp_port", "smtp_user", "smtp_pass"];

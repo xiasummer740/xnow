@@ -65,9 +65,11 @@ const globalLimiter = rateLimit({
   message: { status: 'error', message: '系统触发防 CC 保护，请求过于频繁，请稍后再试' }
 });
 
-// 💰 站长收款码图片：只按文件名直读，目录不对外列目录
-const QR_DIR = process.env.SITE_QR_DIR || path.resolve(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', '..', 'xnow-qr');
-app.use('/qr', express.static(QR_DIR, { index: false, dotfiles: 'deny', maxAge: '1h' }));
+// 💰 站长收款码图片（密室在**主站域名**上显示，必须走 /api/ 这条路）
+// ⚠️ 别挂 /qr 或 /uploads/：生产主站的 nginx 只转发 /api/ 和 /assets/，
+//    其余全落 SPA 兜底 —— 返回 index.html 且 HTTP 200，图片是破的但状态码看不出来。
+const QR_DIR = process.env.SITE_QR_DIR || path.join(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', 'qr');
+app.use('/api/qr', express.static(QR_DIR, { index: false, dotfiles: 'deny', maxAge: '1h' }));
 
 app.use('/api/', globalLimiter);
 

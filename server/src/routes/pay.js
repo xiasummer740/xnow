@@ -61,7 +61,7 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
             if (Number(req.site.use_platform_merchant || 0) !== 1) {
                 return res.json({
                     status: 'error',
-                    message: '本站在线充值暂未开通，请联系客服充值（站长可开启「使用主站收款」）',
+                    message: '本站在线充值暂未开通，请联系客服处理',
                     code: 'NO_SITE_MERCHANT',
                 });
             }
@@ -71,7 +71,14 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
         if (siteCreds) { conf.bufpay_id = siteCreds.id; conf.bufpay_key = siteCreds.key; conf.site_name = siteCreds.name; }
         const cleanBufId = (val) => { if (!val) return ''; const match = val.match(/\/(\d+)$/); if (match) return match[1]; return val.replace(/[^0-9]/g, ''); };
         const realBufId = cleanBufId(conf.bufpay_id);
-        if (!realBufId || !conf.bufpay_key) return res.json({ status: 'error', message: '支付配置缺失' });
+        if (!realBufId || !conf.bufpay_key) {
+          // 分站代收场景下，这是"平台侧还没配商户"，对客户说什么都没用 —— 给一句能懂的话
+          return res.json(
+            req.__platformCollected
+              ? { status: 'error', message: '本站在线充值暂未开通，请联系客服处理', code: 'NO_SITE_MERCHANT' }
+              : { status: 'error', message: '支付配置缺失' }
+          );
+        }
 
         const amountFloat = parseFloat(amount);
         const isFreeFee = amountFloat >= 500;

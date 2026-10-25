@@ -13,7 +13,28 @@ import { LineChart, PieChart, BarChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
 use([CanvasRenderer, LineChart, PieChart, BarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent]);
 
-const userStore = useUserStore(); const ui = useUiStore(); const uiStore = ui; const app = useAppStore();
+const userStore = useUserStore(); const ui = useUiStore(); const uiStore = ui;
+
+// 🏬 概览页的分站概况（110 期）
+const siteStats = ref({ total: 0, active: 0, expiring: 0, customers: 0, gmv: '0.00', cost: '0.00', profit: '0.00' });
+const loadSiteStats = async () => {
+  try {
+    const r = await fetch('/api/admin/site-customers?limit=1', { headers: { Authorization: 'Bearer ' + localStorage.getItem('xnow_token') } }).then(x => x.json());
+    if (r.status !== 'success') return;
+    const sites = r.data?.sites || [];
+    const sum = r.data?.summary || {};
+    const soon = Date.now() + 7 * 86400000;
+    siteStats.value = {
+      total: sites.length,
+      active: sites.filter((x) => x.status === 'active').length,
+      expiring: sites.filter((x) => x.expire_at && Number(x.expire_at) > Date.now() && Number(x.expire_at) < soon).length,
+      customers: Number(sum.customers || 0),
+      gmv: Number(sum.gmv || 0).toFixed(2),
+      cost: Number(sum.cost || 0).toFixed(2),
+      profit: Number(sum.profit || 0).toFixed(2),
+    };
+  } catch (e) { /* 概览数字拿不到不影响其他功能 */ }
+}; const app = useAppStore();
 const loading = ref(false); const syncing = ref(false); const announceSyncing = ref(false); const editorRef = ref(null);
 const upstreamPreview = ref('');
 const tabs = [
@@ -531,6 +552,7 @@ const orderStatusPieOption = computed(() => {
   };
 });
 
+onMounted(() => { loadSiteStats() });
 onMounted(() => { fetchDashboard(true); fetchVpnStatus(); refreshTimer = setInterval(() => { syncing.value = true; fetchDashboard(false); }, 10000); });
 onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 </script>
@@ -582,6 +604,47 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             <div class="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl shadow-lg relative overflow-hidden"><div class="absolute -right-4 -top-4 text-purple-500/10 text-8xl">📦</div><div class="text-slate-400 text-xs font-bold mb-1">全站累计处理订单</div><div class="text-3xl font-black text-purple-400 font-mono mt-2">{{ data.totalOrders || '0' }}</div></div>
         </div>
 
+          <!-- 🏬 110 期：分站业务概况（原来概览页只有主站数字，下面一片空白） -->
+          <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+              <div>
+                <h2 class="text-sm font-black text-white">🏬 分站业务</h2>
+                <p class="text-[11px] text-slate-500 mt-0.5">站长自己定价、自己装修；主站只在这里看数据、做运维、结货款。</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <router-link to="/admin/site-withdrawals"
+                             class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-600/40 hover:bg-amber-500/25 transition">
+                  💸 提现 <span v-if="pendingCount > 0" class="ml-0.5 text-red-400 font-black">{{ pendingCount }}</span>
+                </router-link>
+                <router-link to="/admin/sites"
+                             class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-violet-500/15 text-violet-300 border border-violet-600/40 hover:bg-violet-500/25 transition">
+                  分站管理 →
+                </router-link>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div class="rounded-xl bg-slate-950/50 border border-slate-800 px-3 py-2.5">
+                <div class="text-[10px] text-slate-500">分站总数</div>
+                <div class="text-xl font-black text-white font-mono">{{ siteStats.total }}</div>
+                <div class="text-[10px] text-emerald-400">运营中 {{ siteStats.active }}</div>
+              </div>
+              <div class="rounded-xl bg-slate-950/50 border border-slate-800 px-3 py-2.5">
+                <div class="text-[10px] text-slate-500">7 天内到期</div>
+                <div class="text-xl font-black font-mono" :class="siteStats.expiring > 0 ? 'text-amber-400' : 'text-slate-400'">{{ siteStats.expiring }}</div>
+                <div class="text-[10px] text-slate-600">到期才停站</div>
+              </div>
+              <div class="rounded-xl bg-slate-950/50 border border-slate-800 px-3 py-2.5">
+                <div class="text-[10px] text-slate-500">分站客户消费</div>
+                <div class="text-xl font-black text-cyan-300 font-mono">¥{{ siteStats.gmv }}</div>
+                <div class="text-[10px] text-slate-600">{{ siteStats.customers }} 个客户</div>
+              </div>
+              <div class="rounded-xl bg-slate-950/50 border border-slate-800 px-3 py-2.5">
+                <div class="text-[10px] text-slate-500">站长毛利合计</div>
+                <div class="text-xl font-black text-emerald-300 font-mono">¥{{ siteStats.profit }}</div>
+                <div class="text-[10px] text-slate-600">成本 ¥{{ siteStats.cost }}</div>
+              </div>
+            </div>
+          </section>
         </div> <!-- end overview -->
 
         <!-- 🌐 访问流量 -->

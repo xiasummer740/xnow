@@ -1292,10 +1292,22 @@ router.post('/sites/:id/action', authenticate, async (req, res) => {
       if (String(req.body?.confirm || '').trim() !== String(site.name).trim()) {
         return res.status(400).json({ status: 'error', message: '确认名称不匹配，已取消删除' });
       }
-      const { removeVhost } = await import('../utils/siteDomain.js');
-      try { await removeVhost(site); } catch (e) { /* 摘 vhost 失败也要继续删数据 */ }
+      const { removeVhost, parkDomain, reloadNginx } = await import('../utils/siteDomain.js');
+      const domains = [site.custom_domain, site.domain].filter(Boolean);
+      const removed = [];
+      let needReload = false;
+      for (const d of domains) {
+        try { if (removeVhost(site.id, d)) { removed.push(d); needReload = true; } } catch (e) { /* 摘不掉也继续删数据 */ }
+        // 立 410 墓碑：域名不会回落到默认 server 显示主站首页
+        try { if (parkDomain(d)) needReload = true; } catch (e) {}
+      }
+      if (needReload) { try { reloadNginx(); } catch (e) {} }
       await site.destroy();
-      return res.json({ status: 'success', message: `已删除站点：${site.name}` });
+      return res.json({
+        status: 'success',
+        message: `已删除站点：${site.name}`,
+        data: { removed_domains: removed, parked: domains },
+      });
     }
 
     return res.status(400).json({ status: 'error', message: '未知动作：' + action });

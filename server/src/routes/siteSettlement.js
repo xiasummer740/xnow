@@ -2,30 +2,54 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import crypto from 'crypto';
 import { Site, User, SiteCollection, SiteWithdrawal, sequelize } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 
 const router = express.Router();
 
-// 收款码图片：单独目录，不进 git、跟站点上传分开放
-const QR_DIR = process.env.SITE_QR_DIR || path.resolve(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', '..', 'xnow-qr');
+// 收款码图片：放在 uploads 下的 qr/ 子目录，这样 nginx 的 /uploads/ alias 能直接读到
+const QR_DIR = process.env.SITE_QR_DIR || path.join(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', 'qr');
 try { fs.mkdirSync(QR_DIR, { recursive: true }); } catch (e) {}
 
-const upload = multer({
+const uploadRaw = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, QR_DIR),
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname || '').toLowerCase() || '.png';
-      cb(null, `qr-site${req.params.id}-${Date.now()}${ext}`);
+      // 随机文件名：收款码是要扫码付钱的图，不能让外人靠自增规律猜别人的
+      cb(null, `qr-s${req.params.id}-${crypto.randomBytes(9).toString('hex')}${ext}`);
     },
   }),
   limits: { fileSize: 4 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ok = /^image\/(png|jpe?g|webp)$/.test(file.mimetype || '');
-    cb(ok ? null : new Error('只收 PNG/JPG/WEBP 图片'), ok);
+    if (ok) return cb(null, true);
+    const err = new Error('只收 PNG / JPG / WEBP 图片');
+    err.code = 'BAD_TYPE';
+    cb(err);
   },
 });
+
+// multer 的错误要翻译成人话，不能让它冒到 500
+const upload = {
+  single: (field) => (req, res, next) =>
+    uploadRaw.single(field)(req, res, (err) => {
+      if (!err) return next();
+      const msg =
+        err.code === 'LIMIT_FILE_SIZE' ? '图片超过 4MB，压缩一下再传'
+        : err.code === 'BAD_TYPE' ? err.message
+        : '上传失败，请重试';
+      return res.status(400).json({ status: 'error', message: msg });
+    }),
+};
+
+// 校验没过时把已经落盘的文件删掉，别在服务器上堆垃圾
+const dropUpload = (file) => {
+  if (!file || !file.filename) return;
+  try { fs.unlinkSync(path.join(QR_DIR, file.filename)); } catch (e) {}
+};
 
 const HOUR = 3600 * 1000;
 const WEEK = 7 * 24 * HOUR;
@@ -39,27 +63,30 @@ const ownerSite = async (req) => {
   return { site };
 };
 
-// 未结算金额 = 平台代收总额 - 已提现已结算 - 正在申请的
+// 未结算金额 = 台账总额 - 已结算掉的部分 - 正在申请中的提现
 const summaryOf = async (siteId) => {
   const [[row]] = await sequelize.query(
-    `SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS cnt
-       FROM site_collections WHERE site_id = ? AND withdrawal_id IS NULL`, { replacements: [siteId] });
-  const [[paid]] = await sequelize.query(
-    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'paid'`,
+    `SELECT COALESCE(SUM(amount - used_amount),0) AS total,
+            SUM(CASE WHEN amount - used_amount > 0.000001 THEN 1 ELSE 0 END) AS cnt
+       FROM site_collections WHERE site_id = ?`, { replacements: [siteId] });
+  const [[used]] = await sequelize.query(
+    `SELECT COALESCE(SUM(used_amount),0) AS amount FROM site_collections WHERE site_id = ?`,
     { replacements: [siteId] });
   const [[pending]] = await sequelize.query(
     `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'pending'`,
     { replacements: [siteId] });
-  const [[allPaid]] = await sequelize.query(
-    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_collections WHERE site_id = ? AND withdrawal_id IS NOT NULL`,
+  const [[paid]] = await sequelize.query(
+    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'paid'`,
     { replacements: [siteId] });
+  const left = Number(row.total || 0);
+  const pendingAmt = Number(pending.amount || 0);
   return {
-    collected: fmt(row.total),            // 未结算的代收款
+    collected: fmt(left),                     // 还没结算的代收（可提现的池子）
     collected_count: Number(row.cnt || 0),
-    withdrawn: fmt(allPaid.amount),       // 历史已清账
-    pending_withdraw: fmt(pending.amount),// 审批中的申请
-    available: fmt(Math.max(0, Number(row.total) - Number(pending.amount))),
-    total_paid: fmt(paid.amount),
+    withdrawn: fmt(used.amount),              // 历史已结算金额（= 已转账给站长的代收款）
+    pending_withdraw: fmt(pendingAmt),        // 审批中的申请
+    available: fmt(Math.max(0, left - pendingAmt)),
+    total_paid: fmt(paid.amount),             // 历史已确认转账总额
   };
 };
 
@@ -108,7 +135,7 @@ router.get('/sites/:id/settlement', authenticate, async (req, res) => {
         can_request: Date.now() >= canRequestAt,
         withdrawals: rows.map(r => ({
           id: r.id, amount: fmt(r.amount), status: r.status, note: r.note,
-          admin_note: r.admin_note, qr: r.qr_path ? '/qr/' + path.basename(r.qr_path) : '',
+          admin_note: r.admin_note, qr: r.qr_path ? '/api/qr/' + path.basename(r.qr_path) : '',
           created_at: r.created_at, paid_at: r.paid_at,
         })),
       },
@@ -120,17 +147,18 @@ router.get('/sites/:id/settlement', authenticate, async (req, res) => {
 router.post('/sites/:id/withdraw', authenticate, upload.single('qr'), async (req, res) => {
   try {
     const { site, error } = await ownerSite(req);
-    if (error) return res.status(error[0]).json({ status: 'error', message: error[1] });
+    if (error) { dropUpload(req.file); return res.status(error[0]).json({ status: 'error', message: error[1] }); }
     if (!req.file) return res.status(400).json({ status: 'error', message: '请上传你的收款码图片' });
 
     const amount = Number(req.body?.amount);
-    if (!(amount > 0)) return res.status(400).json({ status: 'error', message: '金额不对' });
-    if (amount < MIN_WITHDRAW) return res.status(400).json({ status: 'error', message: `最低提现 ¥${MIN_WITHDRAW}` });
+    if (!(amount > 0)) { dropUpload(req.file); return res.status(400).json({ status: 'error', message: '金额不对' }); }
+    if (amount < MIN_WITHDRAW) { dropUpload(req.file); return res.status(400).json({ status: 'error', message: `最低提现 ¥${MIN_WITHDRAW}` }); }
 
     // 一周一次优先判：否则额度被上次申请占满时，站长只会看到「可提现只有 ¥0」，
     // 根本不知道真正的限制是"下周才能再申请"。
     const lastW = await SiteWithdrawal.findOne({ where: { site_id: site.id }, order: [['id', 'DESC']] });
     if (lastW && Date.now() < new Date(lastW.created_at).getTime() + WEEK) {
+      dropUpload(req.file);
       const nextAt = new Date(new Date(lastW.created_at).getTime() + WEEK);
       return res.status(429).json({
         status: 'error',
@@ -140,6 +168,7 @@ router.post('/sites/:id/withdraw', authenticate, upload.single('qr'), async (req
 
     const sum = await summaryOf(site.id);
     if (amount > sum.available + 1e-6) {
+      dropUpload(req.file);
       return res.status(400).json({ status: 'error', message: `可提现只有 ¥${sum.available}` });
     }
 
@@ -188,7 +217,7 @@ router.get('/admin/site-withdrawals', authenticate, async (req, res) => {
         id: r.id, site_id: r.site_id, site_name: s?.name || '-', domain: s?.domain || '',
         owner_phone: u?.phone || '-', owner_balance: fmt(u?.balance || 0),
         amount: fmt(r.amount), status: r.status, note: r.note, admin_note: r.admin_note,
-        qr: r.qr_path ? '/qr/' + path.basename(r.qr_path) : '',
+        qr: r.qr_path ? '/api/qr/' + path.basename(r.qr_path) : '',
         created_at: r.created_at, paid_at: r.paid_at,
         unsettled: sum.collected,
       };
@@ -236,22 +265,27 @@ router.post('/admin/site-withdrawals/:id/confirm', authenticate, async (req, res
     if (!row) return res.status(404).json({ status: 'error', message: '申请不存在' });
     if (row.status !== 'pending') return res.status(400).json({ status: 'error', message: '这条已经处理过了' });
 
-    // 按时间顺序把最早的代收记录挂到这次提现上，直到凑够金额
+    // 按时间顺序扣最早的代收记录，**按金额精确扣**（一行可能只被扣掉一部分）
     const [rows] = await sequelize.query(
-      `SELECT id, amount FROM site_collections
-        WHERE site_id = ? AND withdrawal_id IS NULL ORDER BY id ASC`, { replacements: [row.site_id] });
+      `SELECT id, amount, used_amount FROM site_collections
+        WHERE site_id = ? AND amount - used_amount > 0.000001 ORDER BY id ASC`,
+      { replacements: [row.site_id] });
     let left = Number(row.amount);
-    const used = [];
+    const touched = [];
     for (const c of rows) {
       if (left <= 1e-6) break;
-      used.push(c.id);
-      left -= Number(c.amount);
-    }
-    if (used.length) {
+      const rest = Number(c.amount) - Number(c.used_amount || 0);
+      if (rest <= 1e-6) continue;
+      const take = Math.min(rest, left);
       await sequelize.query(
-        `UPDATE site_collections SET withdrawal_id = ? WHERE id IN (${used.map(() => '?').join(',')})`,
-        { replacements: [row.id, ...used] });
+        `UPDATE site_collections SET used_amount = used_amount + ?, withdrawal_id = ? WHERE id = ?`,
+        { replacements: [Number(take.toFixed(6)), row.id, c.id] });
+      touched.push(c.id);
+      left = Number((left - take).toFixed(6));
     }
+    // 台账不够时不能装作没事：钱已经按 receipt 转出去了，但账对不上要让人知道
+    const shortfall = Number(left.toFixed(6));
+    const used = touched;
 
     row.status = 'paid';
     row.admin_id = Number(req.user.id);
@@ -266,7 +300,14 @@ router.post('/admin/site-withdrawals/:id/confirm', authenticate, async (req, res
       );
     } catch (e) {}
 
-    res.json({ status: 'success', message: `已确认转账 ¥${fmt(row.amount).toFixed(2)}，台账已清`, data: { settled_rows: used.length } });
+    res.json({
+      status: 'success',
+      message: shortfall > 1e-6
+        ? `已确认转账 ¥${fmt(row.amount).toFixed(2)}，但台账只对得上 ¥${fmt(row.amount - shortfall).toFixed(2)}（差 ¥${fmt(shortfall).toFixed(2)}，请查代收记录）`
+        : `已确认转账 ¥${fmt(row.amount).toFixed(2)}，台账已清`,
+      warning: shortfall > 1e-6 ? `台账差 ¥${fmt(shortfall).toFixed(2)}` : null,
+      data: { settled_rows: used.length, shortfall },
+    });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
