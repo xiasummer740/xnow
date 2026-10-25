@@ -6,7 +6,7 @@ import { getBillingConfig, chargeBalance, genSubdomain, renewSite, restoreSiteDo
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
-import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp, domainVhostOwner, resolveDistRoot } from '../utils/siteDomain.js';
+import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, ensureSelfSignedCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp, domainVhostOwner, resolveDistRoot } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
 import multer from 'multer';
 import fs from 'fs';
@@ -536,9 +536,14 @@ router.post('/', authenticate, async (req, res) => {
     let publishNote = '';
     {
       try {
-        const cert = await ensureCert(cleanDomain, resolveDistRoot());
         const backendPort = parseInt(process.env.PORT) || 3000;
         const distRoot = resolveDistRoot();
+        // ⚠️ 顺序不能改：先用自签把 vhost 立起来 + reload，certbot 才够得着
+        //    /.well-known/acme-challenge/（否则落到主站 → 404 → 只能拿自签证书）
+        const bootCert = ensureSelfSignedCert(cleanDomain);
+        writeVhost({ siteId: site.id, domain: cleanDomain, backendPort, distRoot, cert: bootCert });
+        reloadNginx();
+        const cert = await ensureCert(cleanDomain, distRoot);
         writeVhost({ siteId: site.id, domain: cleanDomain, backendPort, distRoot, cert });
         reloadNginx();
         site.domain_status = 'active';

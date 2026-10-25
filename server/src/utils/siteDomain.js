@@ -171,6 +171,25 @@ export const verifyDomainOwnership = async (domain, token) => {
 };
 
 // 证书：有 certbot 就用 LE，没有就自签（保证能用，但标 insecure）
+// 🔧 110 期（2026-10-26 生产事故修复）：建站时**必须先把 vhost 立起来，再去签正式证书**。
+//    原因：certbot 的 HTTP-01 挑战要访问 http://<域名>/.well-known/acme-challenge/xxx，
+//    而那一刻 nginx 里还没有这个域名的 server 块 —— 请求落到默认站点（主站）→ 404 →
+//    签发失败 → 掉进自签兜底。站长看到的就是"临时证书、浏览器不安全"。
+//    Beta 上没暴露，是因为演示站的 vhost 早就存在（重签自然成功）。
+export const ensureSelfSignedCert = (domain) => {
+  const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
+  const crt = path.join(SSL_DIR, `${safe}.crt`);
+  const key = path.join(SSL_DIR, `${safe}.key`);
+  if (fs.existsSync(crt) && fs.existsSync(key)) return { crt, key, mode: 'existing' };
+  fs.mkdirSync(SSL_DIR, { recursive: true });
+  execSync(
+    `openssl req -x509 -nodes -newkey rsa:2048 -days 3650 ` +
+    `-keyout ${key} -out ${crt} -subj "/CN=${safe}"`,
+    { stdio: 'pipe', timeout: 60000 }
+  );
+  return { crt, key, mode: 'selfsigned' };
+};
+
 export const ensureCert = async (domain, webroot) => {
   const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
   const crt = path.join(SSL_DIR, `${safe}.crt`);
