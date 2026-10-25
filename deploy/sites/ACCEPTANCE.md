@@ -2793,3 +2793,37 @@ AUDIT_WRITE=1 node acceptance-audit.cjs    → 24/24（0 跳过）
 
 排查时的正确做法：直接比对**线上分包内容**（`curl` 拿到 `SiteAdmin-xxxx.js` 搜关键词），
 而不是猜。线上分包里 `**客户点充值` 为 0 处 → 证明新代码真的上线了，问题在浏览器侧。
+---
+## 五十三、「分站怎么会有我的分站页面」（110 期）
+
+祥哥在分站窗口里看到 `demostore.taikon.top/my-site/email`，问：「分站怎么会有我的分站页面呢？」
+
+### 结论：是我的错，而且确实是个漏洞
+
+- 侧边栏本来就**不显示**「我的分站」（74 期就加了 `v-if="!appStore.isSubsite"`）
+- 但**手输 URL 能打开**。他看到的那个标签，正是我用 URL 直接开的
+- 危害：站长在自己店里点开这个页面时，屏幕上摆着整套多租户控制台；
+  客户只要猜到 `/my-site` 也能看到这层 UI（接口会 403，但"这家店背后有一套系统"这件事已经泄露了）
+
+### 修法
+
+分站域名下 `/my-site*` 一律踢回首页，UI 都不渲染（与 62 期挡 `/admin`、`/api-doc` 同一处守卫）：
+
+```ts
+if (localStorage.getItem('xnow_is_subsite') === '1'
+    && (to.path.startsWith('/admin') || to.path === '/api-doc' || to.path.startsWith('/my-site'))) {
+  return next('/');
+}
+```
+
+### 验证
+
+```
+分站 demostore.taikon.top/my-site         → 实际路径 /   页面含「我的分站」: 否 ✅
+分站 demostore.taikon.top/my-site/email   → 实际路径 /   页面含「我的分站」: 否 ✅
+分站 demostore.taikon.top/my-site/pricing → 实际路径 /   页面含「我的分站」: 否 ✅
+主站 beta.taikon.top/my-site              → 正常打开「我的分站」✅（站长该在这儿管）
+```
+
+**站长管分站的正确入口是主站**（正式环境 `xnow.taikon.top/my-site`，Beta 是 `beta.taikon.top/my-site`），
+分站域名只给客户看。

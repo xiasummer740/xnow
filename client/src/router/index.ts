@@ -55,8 +55,12 @@ router.beforeEach((to, from, next) => {
   //    六十二期：祥哥在分站侧边栏看到「灾备中心」—— 那是平台的服务器备份页，
   //    出现在站长的店里既没用，又等于告诉客户"这家店背后有平台"。
   //    即使当前登录的是平台超管，在分站域名下也不给入口（手输 URL 一样挡）。
+  // 🔒 110 期：祥哥指着分站窗口问「怎么会有我的分站页面」——
+  //    侧边栏本来就不显示，但手输 /my-site 还能打开（我给他开的标签就是这么来的）。
+  //    站长管分站应该去主站账号里管；分站域名上留这个页面等于告诉客户「这家店背后有一套系统」。
+  //    所以分站域名下 /my-site 一律踢回首页，连 UI 都不渲染。
   if (localStorage.getItem('xnow_is_subsite') === '1'
-      && (to.path.startsWith('/admin') || to.path === '/api-doc')) {
+      && (to.path.startsWith('/admin') || to.path === '/api-doc' || to.path.startsWith('/my-site'))) {
     return next('/');
   }
 
