@@ -1,4 +1,6 @@
 <script setup>
+import { useUiStore } from '../../stores/ui'
+
 // 👥 客户价（93 期）：祥哥要的"不同客户不同价，可自定义可百分比"
 //    · 分组价：建几个组（VIP / 老客户…），每组一个折扣（0.95 = 95 折）
 //    · 单独定价：某个客户单独给一个折扣，优先级高于分组
@@ -6,6 +8,7 @@
 //    后端：GET/POST/PUT/DELETE /api/sites/:id/customer-groups、GET/PUT /api/sites/:id/customers
 import { ref, computed, onMounted } from 'vue';
 import { useUserStore } from '../../stores/user';
+const uiStore = useUiStore()
 
 const props = defineProps({ siteId: { type: [Number, String], required: true } });
 const emit = defineEmits(['saved']);
@@ -99,7 +102,7 @@ async function updateGroup(g, patch) {
 }
 
 async function removeGroup(g) {
-  if (!confirm(`删除分组「${g.name}」？组内 ${g.members} 个客户会恢复原价。`)) return;
+  if (!await uiStore.confirm(`删除分组「${g.name}」？组内 ${g.members} 个客户会恢复原价。`)) return;
   const r = await fetch(`/api/sites/${props.siteId}/customer-groups/${g.id}`, { method: 'DELETE', headers: auth() });
   const d = await r.json();
   if (d.status !== 'success') { flash(d.message || '删除失败', false); return; }

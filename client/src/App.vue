@@ -8,11 +8,80 @@
     <router-view class="relative z-10"
                  :class="appStore?.isSubsite && appStore?.supportUrl ? 'pb-28' : ''" />
     
-    <div v-if="uiStore?.toast?.show" :class="['fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-[10000] transition-all border border-white/10 backdrop-blur-md', uiStore.toast.type === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white']">{{ uiStore.toast.message }}</div>
-    
-    <div v-if="uiStore?.modal?.show" class="fixed inset-0 z-[10001] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div class="bg-slate-900/90 border border-slate-700 p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center relative overflow-hidden transform transition-all scale-100"><div class="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/20 rounded-full blur-[40px] pointer-events-none"></div><h3 class="text-xl font-black text-white mb-3 tracking-wider relative z-10">{{ uiStore.modal.title }}</h3><p class="text-slate-300 text-sm leading-relaxed mb-8 relative z-10">{{ uiStore.modal.message }}</p><div class="flex justify-center space-x-4 relative z-10"><button v-if="uiStore.modal.isConfirm" @click="uiStore.closeModal(false)" class="cursor-pointer px-6 py-2.5 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 hover:text-white transition">取消</button><button @click="uiStore.closeModal(true)" class="cursor-pointer px-8 py-2.5 rounded-xl font-black text-slate-900 bg-gradient-to-r from-amber-400 to-yellow-500 hover:scale-105 transition shadow-[0_0_15px_rgba(251,191,36,0.3)]">确认</button></div></div>
+    <!-- 🔔 Toast：右上角堆叠，不挡操作 -->
+    <div class="fixed top-3 right-3 z-[10050] flex flex-col items-end gap-2 pointer-events-none">
+      <transition-group name="x-toast">
+        <div v-for="t in uiStore?.toasts || []" :key="t.id"
+             class="pointer-events-auto flex items-start gap-2.5 max-w-[86vw] sm:max-w-sm px-3.5 py-2.5 rounded-2xl border shadow-[0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-md"
+             :class="{
+               'bg-emerald-500/15 border-emerald-400/40 text-emerald-100': t.type === 'success',
+               'bg-red-500/15 border-red-400/40 text-red-100': t.type === 'error',
+               'bg-amber-500/15 border-amber-400/40 text-amber-100': t.type === 'warning',
+               'bg-slate-800/85 border-slate-600/60 text-slate-100': t.type === 'info'
+             }">
+          <span class="text-base leading-5 shrink-0">
+            {{ t.type === 'success' ? '✅' : t.type === 'error' ? '⚠️' : t.type === 'warning' ? '🔔' : '💬' }}
+          </span>
+          <span class="text-[13px] font-bold leading-5 break-words">{{ t.message }}</span>
+          <button class="ml-1 shrink-0 text-[13px] opacity-50 hover:opacity-100" @click="uiStore.dismissToast(t.id)">✕</button>
+        </div>
+      </transition-group>
     </div>
+
+    <!-- 💬 弹窗：alert / confirm / prompt 共用一套，替代系统原生弹窗 -->
+    <transition name="x-modal">
+      <div v-if="uiStore?.modal?.show"
+           class="fixed inset-0 z-[10060] flex items-end sm:items-center justify-center bg-[#03060f]/70 backdrop-blur-[6px] p-3 sm:p-4"
+           @click.self="uiStore.closeModal(false)">
+        <div class="w-full sm:max-w-[420px] rounded-[22px] overflow-hidden relative
+                    bg-gradient-to-b from-[#141d33] to-[#0b1222] border border-slate-700/70
+                    shadow-[0_30px_80px_rgba(0,0,0,0.65)]">
+          <!-- 顶部光晕：危险=红，普通=金 -->
+          <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-56 h-32 rounded-full blur-[46px] pointer-events-none"
+               :class="uiStore.modal.danger ? 'bg-red-500/25' : 'bg-amber-500/20'"></div>
+
+          <div class="relative px-5 pt-6 pb-4">
+            <div class="flex items-start gap-3">
+              <div class="w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center text-xl
+                          border"
+                   :class="uiStore.modal.danger
+                     ? 'bg-red-500/15 border-red-500/40'
+                     : 'bg-amber-400/15 border-amber-400/40'">
+                {{ uiStore.modal.icon || (uiStore.modal.danger ? '⚠️' : '💬') }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <h3 class="text-[15px] font-black text-white leading-6">{{ uiStore.modal.title }}</h3>
+                <p v-if="uiStore.modal.message"
+                   class="mt-1.5 text-[13px] leading-6 text-slate-300 whitespace-pre-line break-words">{{ uiStore.modal.message }}</p>
+              </div>
+            </div>
+
+            <div v-if="uiStore.modal.kind === 'prompt'" class="mt-4">
+              <input v-model="uiStore.modal.input"
+                     :placeholder="uiStore.modal.placeholder"
+                     class="w-full bg-[#0a1120] border border-slate-700 focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20
+                            rounded-xl px-3.5 py-2.5 text-[14px] text-slate-100 outline-none transition"
+                     @keyup.enter="uiStore.closeModal(true)" />
+            </div>
+          </div>
+
+          <div class="relative px-5 pb-5 pt-1 flex items-center gap-2">
+            <button v-if="uiStore.modal.kind !== 'alert'"
+                    class="flex-1 h-11 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 text-[13px] font-bold transition"
+                    @click="uiStore.closeModal(false)">
+              {{ uiStore.modal.cancelText }}
+            </button>
+            <button class="flex-1 h-11 rounded-xl text-[13px] font-black transition active:scale-[0.98]"
+                    :class="uiStore.modal.danger
+                      ? 'bg-red-500 hover:bg-red-400 text-white'
+                      : 'bg-amber-400 hover:bg-amber-300 text-slate-900'"
+                    @click="uiStore.closeModal(true)">
+              {{ uiStore.modal.confirmText }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- 🏬 分站：站长没填客服链接就整块不显示。
          否则这里会挂平台自己的 Telegram 机器人（t.me/Xnow001Bot），
@@ -234,5 +303,18 @@ const doRandomAction = () => {
   width: 100%;
   height: 100%;
   transform: rotate(5deg);
+}
+</style>
+
+<style>
+.x-toast-enter-active, .x-toast-leave-active { transition: all .22s ease; }
+.x-toast-enter-from { opacity: 0; transform: translateY(-8px) scale(.96); }
+.x-toast-leave-to { opacity: 0; transform: translateX(12px); }
+.x-modal-enter-active, .x-modal-leave-active { transition: opacity .18s ease; }
+.x-modal-enter-from, .x-modal-leave-to { opacity: 0; }
+.x-modal-enter-active > div, .x-modal-leave-active > div { transition: transform .2s cubic-bezier(.2,.9,.3,1.2); }
+.x-modal-enter-from > div, .x-modal-leave-to > div { transform: translateY(14px) scale(.97); }
+@media (min-width: 640px) {
+  .x-modal-enter-from > div, .x-modal-leave-to > div { transform: scale(.96); }
 }
 </style>

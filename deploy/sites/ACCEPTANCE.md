@@ -3862,3 +3862,43 @@ IP 归属地走 `/api/admin/geo/batch`，**一页一次批量**（逐条外呼�
 
 未配置 `tg_bot_token` 时静默跳过。实测：假 token 触发后日志出现 `[TG Bot Send Error] 401`，
 证明调用链真的走到 Telegram；测试完假 token 已删除（残留 0 条）。
+---
+## 七十八、弹窗改版 + 收款码三种上传方式（110 期祥哥定）
+
+祥哥：「这些弹窗的UI 界面 视觉效果全部改一下，不要用系统的，做好看点」
+祥哥：「收款码那里点选择文件上传图片，可以拖动上传或者微信复制粘贴都行」
+
+### 一、全站不再用系统原生弹窗
+
+改造前 `alert / confirm / prompt` 共 **52 处**，散在 8 个页面。现在 **0 处**。
+
+`stores/ui.ts` 升级为三合一：
+
+| 方法 | 用途 | 返回 |
+|---|---|---|
+| `uiStore.notify(msg)` | 替代 `alert()`，按文案自动判定成功/失败 | — |
+| `uiStore.confirm(msg, opts)` | 替代 `confirm()`，危险操作用 `danger: true` 变红 | `Promise<boolean>` |
+| `uiStore.prompt(msg, opts)` | 替代 `prompt()`，带输入框 | `Promise<string \| null>` |
+| `uiStore.showToast(msg, type)` | 右上角堆叠提示，可多条 | — |
+
+视觉：深蓝玻璃卡片 + 金色（危险=红）光晕 + 圆形图标位 + 44px 高的按钮；
+手机端从底部弹出（拇指够得到），桌面端居中；遮罩带模糊，点遮罩 = 取消。
+
+⚠️ 坑：`alert()` 是同步的，`confirm/prompt` 改成 `await` 后**所在函数必须是 async** ——
+`Admin.vue` 的 `insertLink / insertImage` 是同步箭头函数，已一并改成 `async`；
+`Admin.vue` 里 store 实例叫 `ui` 不叫 `uiStore`，补了别名否则运行期 `undefined`。
+
+### 二、收款码上传：点 / 拖 / 粘贴
+
+| 方式 | 说明 |
+|---|---|
+| 点击 | 弹出系统选图（手机可直接拍照） |
+| 拖拽 | 文件拖进虚线框，拖进来时边框变绿、文案变「松手就上传」 |
+| 粘贴 | **微信/QQ 里复制图片后 Ctrl+V 直接粘**（只在收款页生效） |
+
+- 选好后显示缩略图 + 文件名 + 「换一张」，不再是一个看不出选没选的原生 file input
+- 前端先挡：非 PNG/JPG/WEBP、超过 4MB 直接提示，不浪费一次上传
+- 没选图时「申请提现」按钮是灰的（disabled），不会再弹「请先选择你的收款码图片」
+
+实测：`点这里选图片 · 拖进来 · 或直接粘贴（Ctrl+V）` 正常渲染；确认弹窗正常弹出；
+Toast 正常显示「已关闭：客户只能由你手动加余额」。

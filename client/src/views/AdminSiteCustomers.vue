@@ -291,10 +291,13 @@
 </template>
 
 <script setup>
+import { useUiStore } from '../stores/ui'
+
 import { useWithdrawBadge } from '../composables/useWithdrawBadge.js'
 const { pendingCount } = useWithdrawBadge()
 
 import { ref, computed, onMounted } from 'vue'
+const uiStore = useUiStore()
 
 const loading = ref(false)
 const items = ref([])
@@ -472,21 +475,21 @@ const saveNote = async () => {
       d.value.data.admin_note = d.value.note
       const row = items.value.find(x => x.id === d.value.data.id)
       if (row) row.admin_note = d.value.note
-      alert('备注已保存')
-    } else alert(r.message || '保存失败')
-  } catch (e) { alert('网络异常：' + e.message) }
+      uiStore.notify('备注已保存')
+    } else uiStore.notify(r.message || '保存失败')
+  } catch (e) { uiStore.notify('网络异常：' + e.message) }
 }
 
 const sendNotify = async () => {
-  if (!d.value.title && !d.value.content) return alert('请输入通知标题或内容')
+  if (!d.value.title && !d.value.content) return uiStore.notify('请输入通知标题或内容')
   try {
     const r = await fetch(`/api/admin/users/${d.value.data.id}/notify`, {
       method: 'POST', headers: headers(),
       body: JSON.stringify({ title: d.value.title, content: d.value.content }),
     }).then(x => x.json())
-    if (r.status === 'success') { d.value.title = ''; d.value.content = ''; alert('通知已发送') }
-    else alert(r.message || '发送失败')
-  } catch (e) { alert('网络异常：' + e.message) }
+    if (r.status === 'success') { d.value.title = ''; d.value.content = ''; uiStore.notify('通知已发送') }
+    else uiStore.notify(r.message || '发送失败')
+  } catch (e) { uiStore.notify('网络异常：' + e.message) }
 }
 
 const exportCsv = async () => {
@@ -499,7 +502,7 @@ const exportCsv = async () => {
     a.download = `site-customers-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
-  } catch (e) { alert('导出失败：' + e.message) }
+  } catch (e) { uiStore.notify('导出失败：' + e.message) }
 }
 
 onMounted(load)

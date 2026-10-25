@@ -98,10 +98,13 @@
 </template>
 
 <script setup>
+import { useUiStore } from '../stores/ui'
+
 import { useWithdrawBadge } from '../composables/useWithdrawBadge.js'
 const { pendingCount, refreshWithdrawBadge } = useWithdrawBadge()
 
 import { ref, reactive, onMounted } from 'vue'
+const uiStore = useUiStore()
 
 const loading = ref(false)
 const busy = ref(0)
@@ -134,27 +137,27 @@ const load = async () => {
 }
 
 const confirmWd = async (it) => {
-  if (!confirm(`确认已经给「${it.site_name}」转账 ¥${money(it.amount)}？确认后台账会清掉，不可撤销。`)) return
+  if (!await uiStore.confirm(`确认已经给「${it.site_name}」转账 ¥${money(it.amount)}？确认后台账会清掉，不可撤销。`)) return
   busy.value = it.id
   try {
     const r = await fetch(`/api/admin/site-withdrawals/${it.id}/confirm`, {
       method: 'POST', headers: headersJson(), body: JSON.stringify({ note: noteOf[it.id] || '' }),
     }).then(x => x.json())
-    alert(r.message || (r.status === 'success' ? '已清账' : '失败'))
+    uiStore.notify(r.message || (r.status === 'success' ? '已清账' : '失败'))
     await load()
     refreshWithdrawBadge()
   } finally { busy.value = 0 }
 }
 
 const rejectWd = async (it) => {
-  const note = prompt('驳回原因（会显示给站长）：', '收款码不清晰，请重新上传')
+  const note = await uiStore.prompt('驳回原因（会显示给站长）：', { defaultValue: '收款码不清晰，请重新上传' })
   if (note === null) return
   busy.value = it.id
   try {
     const r = await fetch(`/api/admin/site-withdrawals/${it.id}/reject`, {
       method: 'POST', headers: headersJson(), body: JSON.stringify({ note }),
     }).then(x => x.json())
-    alert(r.message || (r.status === 'success' ? '已驳回' : '失败'))
+    uiStore.notify(r.message || (r.status === 'success' ? '已驳回' : '失败'))
     await load()
     refreshWithdrawBadge()
   } finally { busy.value = 0 }

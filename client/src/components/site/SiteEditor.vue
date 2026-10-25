@@ -105,9 +105,12 @@
 </template>
 
 <script setup>
+import { useUiStore } from '../../stores/ui'
+
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useUserStore } from '../../stores/user';
+const uiStore = useUiStore()
 
 const appStore = useAppStore();
 const userStore = useUserStore();
@@ -337,7 +340,7 @@ const applyTpl = async (key) => {
     appStore.themeTemplate = prev;
     appStore.applyTheme();
     tplPick.value = prev;
-    alert('换模板失败：' + e.message);
+    uiStore.notify('换模板失败：' + e.message);
   } finally {
     tplSaving.value = false;
   }
@@ -407,7 +410,7 @@ const pickBg = () => {
   inp.onchange = async () => {
     const f = inp.files && inp.files[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { alert('图片太大了，请选 5MB 以内的'); return; }
+    if (f.size > 5 * 1024 * 1024) { uiStore.notify('图片太大了，请选 5MB 以内的'); return; }
     uploadingBg.value = true;
     try {
       const fd = new FormData();
@@ -420,7 +423,7 @@ const pickBg = () => {
       look.value.bgImage = j.data.url;
       look.value.bgColor = '';
     } catch (e) {
-      alert('上传失败：' + e.message);
+      uiStore.notify('上传失败：' + e.message);
     } finally {
       uploadingBg.value = false;
     }
@@ -454,7 +457,7 @@ const saveLook = async () => {
     appStore.applyTheme();
     lookOpen.value = false;
   } catch (e) {
-    alert('保存失败：' + e.message);
+    uiStore.notify('保存失败：' + e.message);
   } finally {
     savingLook.value = false;
   }
@@ -475,7 +478,7 @@ const save = async () => {
     if (j.status !== 'success') throw new Error(j.message || '保存失败');
     exit();
   } catch (e) {
-    alert('保存失败：' + e.message);
+    uiStore.notify('保存失败：' + e.message);
   } finally {
     saving.value = false;
   }
@@ -491,7 +494,7 @@ const cancel = () => {
 };
 
 const reset = async () => {
-  if (!confirm('恢复成平台推荐的默认布局吗？你改过的顺序和标题会清空。')) return;
+  if (!await uiStore.confirm('恢复成平台推荐的默认布局吗？你改过的顺序和标题会清空。')) return;
   appStore.homeModules = [];
   appStore.sectionTitles = {};
   await save();

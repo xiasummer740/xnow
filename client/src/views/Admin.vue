@@ -13,7 +13,7 @@ import { LineChart, PieChart, BarChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
 use([CanvasRenderer, LineChart, PieChart, BarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent]);
 
-const userStore = useUserStore(); const ui = useUiStore(); const app = useAppStore();
+const userStore = useUserStore(); const ui = useUiStore(); const uiStore = ui; const app = useAppStore();
 const loading = ref(false); const syncing = ref(false); const announceSyncing = ref(false); const editorRef = ref(null);
 const upstreamPreview = ref('');
 const tabs = [
@@ -107,7 +107,7 @@ const openOrderDetail = (o) => { orderDetail.value = { show: true, data: o, note
 const closeOrderDetail = () => { orderDetail.value.show = false; };
 
 const refundOrder = async (o) => {
-  if (!confirm(`确定退款订单 ${o.order_no}？金额: ¥${o.charge}`)) return;
+  if (!await uiStore.confirm(`确定退款订单 ${o.order_no}？金额: ¥${o.charge}`)) return;
   try {
     const res = await fetch('/api/admin/orders/refund', {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
@@ -268,7 +268,7 @@ const copyUpstreamToEditor = () => {
 
 const announcePushing = ref(false);
 const pushAnnouncementToAll = async () => {
-  if (!confirm('确定将当前公告推送给所有用户？')) return;
+  if (!await uiStore.confirm('确定将当前公告推送给所有用户？')) return;
   announcePushing.value = true;
   try {
     const res = await fetch('/api/admin/announcement/push', {
@@ -285,8 +285,8 @@ const pushAnnouncementToAll = async () => {
 const handleLogoUpload = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { form.value.site_logo = e.target.result; ui.showToast('Logo 读取成功，请点击保存', 'success'); }; reader.readAsDataURL(file); };
 const execCmd = (cmd, val = null) => { document.execCommand(cmd, false, val); syncEditorContent(); };
 const syncEditorContent = () => { if (editorRef.value) form.value.announcement = editorRef.value.innerHTML; };
-const insertLink = () => { const url = prompt('请输入链接地址 (需包含 http:// 或 https://):', 'https://'); if (url) execCmd('createLink', url); };
-const insertImage = () => { const url = prompt('请输入图片网络地址 (URL):', 'https://'); if (url) execCmd('insertImage', url); };
+const insertLink = async () => { const url = await uiStore.prompt('链接地址（需包含 http:// 或 https://）', { title: '插入链接', defaultValue: 'https://', placeholder: 'https://' }); if (url) execCmd('createLink', url); };
+const insertImage = async () => { const url = await uiStore.prompt('图片地址（URL）', { title: '插入图片', defaultValue: 'https://', placeholder: 'https://' }); if (url) execCmd('insertImage', url); };
 
 const openFundModal = (user, type) => { fundModal.value = { show: true, userId: user.id, phone: user.phone, type: type, amount: 100 }; };
 const submitFund = async () => {
@@ -364,10 +364,10 @@ const toggleBan = async (u) => {
     const isBanAction = !u.is_banned;
     let reason = '';
     if (isBanAction) {
-        reason = prompt(`🚨 请输入封禁 UID ${u.id} 的原因 (必填):`, '恶意违规操作');
+        reason = await uiStore.prompt(`请输入封禁 UID ${u.id} 的原因`, { title: '封禁账号', defaultValue: '恶意违规操作', placeholder: '写清楚原因，会记进审计日志', danger: true, confirmText: '确定封禁' });
         if (reason === null) return; 
     } else {
-        if (!confirm(`确定要解封 UID ${u.id} (${u.phone}) 吗？`)) return;
+        if (!await uiStore.confirm(`确定要解封 UID ${u.id} (${u.phone}) 吗？`)) return;
     }
 
     try {
@@ -383,7 +383,7 @@ const toggleBan = async (u) => {
 
 let refreshTimer = null; watch(() => app.globalRefreshTrigger, () => fetchDashboard(false));
 const fetchVpnStatus = async () => { try { const r = await fetch('/api/vpn/status'); const d = await r.json(); vpnShopEnabled.value = d.enabled; } catch (e) {} };
-const toggleVpnShop = async () => { vpnToggling.value = true; try { const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') { vpnShopEnabled.value = d.enabled; } else { alert(d.message || '操作失败'); } } catch (e) { alert('请求失败，请检查网络'); } finally { vpnToggling.value = false; } };
+const toggleVpnShop = async () => { vpnToggling.value = true; try { const r = await fetch('/api/vpn/admin/toggle-shop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify({ enabled: !vpnShopEnabled.value }) }); const d = await r.json(); if (d.status === 'success') { vpnShopEnabled.value = d.enabled; } else { uiStore.notify(d.message || '操作失败'); } } catch (e) { uiStore.notify('请求失败，请检查网络'); } finally { vpnToggling.value = false; } };
 // 💰 财务大盘
 const financeData = ref(null); const financeLoading = ref(false);
 const fetchFinance = async () => {

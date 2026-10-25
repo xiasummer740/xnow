@@ -1,9 +1,12 @@
 <script setup>
+import { useUiStore } from '../../stores/ui'
+
 // 💰 站长自己的价格体系：单服务定价 + 活动折扣
 //    后端：GET/PUT /api/sites/:id/prices、PUT /api/sites/:id（折扣三字段）
 //    红线：任何价格乘上折扣都不得低于站长的进货价，后端会拦（这里只负责把话说清楚）。
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUserStore } from '../../stores/user';
+const uiStore = useUiStore()
 
 const props = defineProps({
   siteId: { type: [Number, String], required: true },
@@ -175,7 +178,7 @@ async function runBulk() {
   const how = bulkMode.value === 'margin' ? `进货价 +${bulkMargin.value}%`
     : bulkMode.value === 'rate' ? `统一 ¥${bulkFixed.value}`
     : '恢复跟随全站统一价';
-  if (!confirm(`确定把 ${scopeName} 全部改成「${how}」？\n这会直接写进你的价格表（可以再改回来）。`)) return;
+  if (!await uiStore.confirm(`确定把 ${scopeName} 全部改成「${how}」？\n这会直接写进你的价格表（可以再改回来）。`)) return;
   bulkBusy.value = true;
   try {
     const r = await fetch(`/api/sites/${props.siteId}/prices/bulk`, {

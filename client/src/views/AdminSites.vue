@@ -138,10 +138,13 @@
 </template>
 
 <script setup>
+import { useUiStore } from '../stores/ui'
+
 import { useWithdrawBadge } from '../composables/useWithdrawBadge.js'
 const { pendingCount } = useWithdrawBadge()
 
 import { ref, computed, onMounted } from 'vue'
+const uiStore = useUiStore()
 
 const loading = ref(false)
 const sites = ref([])
@@ -196,20 +199,20 @@ const enterSite = (s) => {
 }
 const act = async (s, action) => {
   if (action === 'delete') {
-    const typed = prompt(`删除站点会连同它的域名配置一起删掉，且不可恢复。\n要删除「${s.name}」，请输入站点名确认：`)
+    const typed = await uiStore.prompt(`删除站点会连同它的域名配置一起删掉，且不可恢复。\n要删除「${s.name}」，请输入站点名确认：`)
     if (typed === null) return
-    if (String(typed).trim() !== String(s.name).trim()) return alert('名称不匹配，已取消')
+    if (String(typed).trim() !== String(s.name).trim()) return uiStore.notify('名称不匹配，已取消')
   }
-  if (action === 'stop' && !confirm(`停站后这个域名会立刻显示下线页，确定停「${s.name}」？`)) return
+  if (action === 'stop' && !await uiStore.confirm(`停站后这个域名会立刻显示下线页，确定停「${s.name}」？`)) return
   busy.value = s.id
   try {
     const r = await fetch(`/api/admin/sites/${s.id}/action`, {
       method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, days: 30, confirm: action === 'delete' ? s.name : undefined }),
     }).then(x => x.json())
-    if (r.status === 'success') { alert(r.message || '完成'); await load() }
-    else alert(r.message || '操作失败')
-  } catch (e) { alert('网络异常：' + e.message) }
+    if (r.status === 'success') { uiStore.notify(r.message || '完成'); await load() }
+    else uiStore.notify(r.message || '操作失败')
+  } catch (e) { uiStore.notify('网络异常：' + e.message) }
   finally { busy.value = 0 }
 }
 

@@ -415,7 +415,7 @@
 
         <div class="grid grid-cols-3 gap-2">
           <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2">
-            <div class="text-[10px] text-slate-500">待结算</div>
+            <div class="text-[10px] text-slate-500">可提现</div>
             <div class="text-base font-black text-emerald-300">¥{{ money(settlement.available) }}</div>
           </div>
           <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2">
@@ -428,6 +428,16 @@
           </div>
         </div>
 
+        <div v-if="settlement.available <= 0 && Number(settlement.pending_withdraw) > 0"
+             class="rounded-xl border border-amber-700/40 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
+          你有一笔 ¥{{ money(settlement.pending_withdraw) }} 的提现正在审核中，这部分金额已占住额度；
+          主站确认转账后会自动清账，到账后就能再申请。
+        </div>
+        <div v-if="settlement.available <= 0 && Number(settlement.pending_withdraw) <= 0 && settlement.available <= 0"
+             class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-500">
+          还没有可提现的余额 —— 客户用在线支付充值的钱才会记到这里（主站代收）。
+        </div>
+
         <div v-if="settlement.available > 0" class="rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-2">
           <template v-if="settlement.can_request">
             <div class="flex flex-wrap items-center gap-2">
@@ -437,14 +447,41 @@
               <span class="text-[10px] text-slate-600">可提 ¥{{ money(settlement.available) }} · 最低 ¥{{ settlement.min_withdraw }}</span>
               <button type="button" @click="withdrawAll" class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300">全部</button>
             </div>
+            <!-- 收款码：点 / 拖 / 粘贴（微信里复制图片也能直接粘） -->
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1.5">你的收款码</label>
+              <div v-if="!qrPreview"
+                   role="button" tabindex="0"
+                   @click="qrInput?.click()"
+                   @keydown.enter="qrInput?.click()"
+                   @dragover.prevent="qrDrag = true"
+                   @dragleave.prevent="qrDrag = false"
+                   @drop.prevent="onQrDrop"
+                   class="rounded-xl border-2 border-dashed px-3 py-4 text-center cursor-pointer transition"
+                   :class="qrDrag ? 'border-emerald-400 bg-emerald-500/10' : 'border-slate-700 bg-slate-950/50 hover:border-slate-500'">
+                <div class="text-xl">{{ qrDrag ? '📥' : '📤' }}</div>
+                <div class="text-[11px] text-slate-300 font-bold mt-1">
+                  {{ qrDrag ? '松手就上传' : '点这里选图片 · 拖进来 · 或直接粘贴（Ctrl+V）' }}
+                </div>
+                <div class="text-[10px] text-slate-600 mt-0.5">PNG / JPG / WEBP，4MB 以内；微信里复制图片也能粘</div>
+              </div>
+              <div v-else class="flex items-center gap-3 rounded-xl border border-emerald-600/40 bg-emerald-500/5 p-2">
+                <img :src="qrPreview" alt="收款码预览" class="w-16 h-16 object-contain bg-white rounded-lg border border-slate-700" />
+                <div class="min-w-0 flex-1">
+                  <div class="text-[11px] text-emerald-300 font-bold">已选好收款码</div>
+                  <div class="text-[10px] text-slate-500 truncate">{{ qrName || '图片' }}</div>
+                </div>
+                <button type="button" @click="clearQr"
+                        class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 shrink-0">换一张</button>
+              </div>
+              <input ref="qrInput" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="pickQr" />
+            </div>
+
             <div class="flex flex-wrap items-center gap-2">
-              <label class="text-[11px] text-slate-400">收款码</label>
-              <input type="file" accept="image/png,image/jpeg,image/webp" @change="pickQr"
-                     class="text-[11px] text-slate-400 file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-slate-800 file:text-slate-300" />
               <input v-model="withdraw.note" placeholder="备注（可不填，比如微信号）"
                      class="flex-1 min-w-[140px] bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px]" />
-              <button type="button" @click="submitWithdraw" :disabled="withdrawing"
-                      class="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-900 text-[11px] font-black disabled:opacity-50">
+              <button type="button" @click="submitWithdraw" :disabled="withdrawing || !qrFile"
+                      class="px-3 py-2 rounded-lg bg-emerald-500 text-slate-900 text-[11px] font-black disabled:opacity-40">
                 {{ withdrawing ? '提交中…' : '申请提现' }}
               </button>
             </div>
@@ -710,11 +747,13 @@ import DesignStudio from '../components/site/DesignStudio.vue'
 import CopyStudio from '../components/site/CopyStudio.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { useUiStore } from '../stores/ui'
 import SiteBilling from '../components/site/SiteBilling.vue'
 import SitePricing from '../components/site/SitePricing.vue'
 import SiteCustomers from '../components/site/SiteCustomers.vue'
 
 const userStore = useUserStore()
+const uiStore = useUiStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -748,7 +787,6 @@ const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.u
 // 💰 平台代收 / 提现
 const settlement = ref({ available: 0, withdrawn: 0, pending_withdraw: 0, use_platform_merchant: 0, min_withdraw: 10, can_request: true, withdrawals: [] })
 const withdraw = ref({ amount: 0, note: '' })
-const withdrawFile = ref(null)
 const withdrawing = ref(false)
 const money = (v) => Number(v || 0).toFixed(2)
 const whenText = (v) => {
@@ -768,26 +806,62 @@ const togglePlatformMerchant = async () => {
   const r = await fetch(`/api/sites/${site.value.id}/platform-merchant`, {
     method: 'POST', headers: headers(), body: JSON.stringify({ enabled: enable }),
   }).then(x => x.json())
-  alert(r.message || (r.status === 'success' ? '已保存' : '失败'))
+  uiStore.notify(r.message || (r.status === 'success' ? '已保存' : '失败'))
   await loadSettlement()
 }
-const pickQr = (e) => { withdrawFile.value = e.target.files?.[0] || null }
+const qrInput = ref(null)
+const qrFile = ref(null)
+const qrPreview = ref('')
+const qrName = ref('')
+const qrDrag = ref(false)
+
+const acceptQr = (file) => {
+  if (!file) return
+  if (!/^image\/(png|jpe?g|webp)$/.test(file.type || '')) return uiStore.showToast('只支持 PNG / JPG / WEBP 图片', 'error')
+  if (file.size > 4 * 1024 * 1024) return uiStore.showToast('图片太大了，4MB 以内', 'error')
+  if (qrPreview.value) URL.revokeObjectURL(qrPreview.value)
+  qrFile.value = file
+  qrName.value = file.name || '粘贴的图片'
+  qrPreview.value = URL.createObjectURL(file)
+}
+const pickQr = (e) => { acceptQr(e.target.files?.[0] || null); if (e.target) e.target.value = '' }
+const onQrDrop = (e) => {
+  qrDrag.value = false
+  const f = e.dataTransfer?.files?.[0]
+  if (f) acceptQr(f)
+}
+const clearQr = () => {
+  if (qrPreview.value) URL.revokeObjectURL(qrPreview.value)
+  qrFile.value = null; qrPreview.value = ''; qrName.value = ''
+}
+// 微信/QQ 里复制图片后 Ctrl+V 直接粘（只在收款页生效）
+const onPasteImage = (e) => {
+  if (page.value !== 'payment') return
+  const items = e.clipboardData?.items || []
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const f = it.getAsFile()
+      if (f) { acceptQr(f); e.preventDefault() }
+      return
+    }
+  }
+}
 const withdrawAll = () => { withdraw.value.amount = Number(settlement.value.available || 0) }
 const submitWithdraw = async () => {
   if (!site.value) return
-  if (!withdrawFile.value) return alert('请先选择你的收款码图片')
+  if (!qrFile.value) return uiStore.showToast('请先上传你的收款码（点、拖、粘贴都行）', 'warning')
   if (!(Number(withdraw.value.amount) >= Number(settlement.value.min_withdraw || 10))) {
-    return alert(`最低提现 ¥${settlement.value.min_withdraw || 10}`)
+    return uiStore.notify(`最低提现 ¥${settlement.value.min_withdraw || 10}`)
   }
   withdrawing.value = true
   try {
     const fd = new FormData()
     fd.append('amount', String(withdraw.value.amount))
     fd.append('note', withdraw.value.note || '')
-    fd.append('qr', withdrawFile.value)
+    fd.append('qr', qrFile.value)
     const r = await fetch(`/api/sites/${site.value.id}/withdraw`, { method: 'POST', headers: headers(), body: fd }).then(x => x.json())
-    alert(r.message || (r.status === 'success' ? '已提交' : '提交失败'))
-    if (r.status === 'success') { withdraw.value = { amount: 0, note: '' }; withdrawFile.value = null }
+    uiStore.notify(r.message || (r.status === 'success' ? '已提交' : '提交失败'))
+    if (r.status === 'success') { withdraw.value = { amount: 0, note: '' }; clearQr() }
     await loadSettlement()
   } finally { withdrawing.value = false }
 }
@@ -800,16 +874,16 @@ const requestSupport = async () => {
   }).then(x => x.json())
   if (r.status === 'success') {
     site.value.admin_access_until = r.data.admin_access_until
-    alert(r.message || '已开启协助窗口')
-  } else alert(r.message || '开启失败')
+    uiStore.notify(r.message || '已开启协助窗口')
+  } else uiStore.notify(r.message || '开启失败')
 }
 const revokeSupport = async () => {
   if (!site.value) return
   const r = await fetch(`/api/sites/${site.value.id}/revoke-support`, {
     method: 'POST', headers: headers(),
   }).then(x => x.json())
-  if (r.status === 'success') { site.value.admin_access_until = 0; alert('已收回协助授权') }
-  else alert(r.message || '收回失败')
+  if (r.status === 'success') { site.value.admin_access_until = 0; uiStore.notify('已收回协助授权') }
+  else uiStore.notify(r.message || '收回失败')
 }
 
 const supportLeft = computed(() => {
@@ -1196,8 +1270,8 @@ const pickImage = (field) => {
   input.onchange = async () => {
     const f = input.files && input.files[0]
     if (!f) return
-    if (f.size > 3 * 1024 * 1024) { alert('图片不能超过 3MB，建议先压缩一下'); return }
-    if (!site.value || !site.value.id) { alert('请先创建分站'); return }
+    if (f.size > 3 * 1024 * 1024) { uiStore.notify('图片不能超过 3MB，建议先压缩一下'); return }
+    if (!site.value || !site.value.id) { uiStore.notify('请先创建分站'); return }
     uploading.value = field
     try {
       const fd = new FormData()
@@ -1219,10 +1293,10 @@ const pickImage = (field) => {
           form.value[field] = data.data.url
         }
       } else {
-        alert(data.message || '上传失败')
+        uiStore.notify(data.message || '上传失败')
       }
     } catch (e) {
-      alert('上传失败：' + e.message)
+      uiStore.notify('上传失败：' + e.message)
     } finally {
       uploading.value = ''
     }
@@ -1448,10 +1522,10 @@ const save = async (silent = false) => {
     }
     const res = await fetch(`/api/sites/${site.value.id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) })
     const data = await res.json()
-    if (!silent) alert(data.status === 'success' ? '✅ 已保存，访客刷新即可看到新外观' : `❌ ${data.message}`)
+    if (!silent) uiStore.notify(data.status === 'success' ? '✅ 已保存，访客刷新即可看到新外观' : `❌ ${data.message}`)
     if (data.status === 'success') { savedSig.value = formSig.value; await load() }
     return data.status === 'success'
-  } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
+  } catch (e) { if (!silent) uiStore.notify('保存失败'); return false } finally { saving.value = false }
 }
 
 // 预览卡里的三行服务（展示"你的站、你定的价"）
@@ -1511,13 +1585,13 @@ const createSite = async () => {
       body: JSON.stringify(payload)
     })
     const data = await res.json()
-    alert(data.status === 'success' ? `✅ ${data.message}` : `❌ ${data.message}`)
+    uiStore.notify(data.status === 'success' ? `✅ ${data.message}` : `❌ ${data.message}`)
     if (data.status === 'success') {
       createForm.value.domain = ''
       load()
       billingRef.value?.load?.()
     }
-  } catch (e) { alert('开通失败') } finally { creating.value = false }
+  } catch (e) { uiStore.notify('开通失败') } finally { creating.value = false }
 }
 
 // 🔓 解绑自有域名（94 期）：站长填错 / 想换域名时得能退回来。
@@ -1526,7 +1600,7 @@ const createSite = async () => {
 const unbinding = ref(false)
 const unbindDomain = async () => {
   if (!site.value) return
-  if (!confirm(`确定解除绑定 ${site.value.custom_domain}？\n解绑后这个域名不再指向你的站点，系统送的子域名不受影响。`)) return
+  if (!await uiStore.confirm(`确定解除绑定 ${site.value.custom_domain}？\n解绑后这个域名不再指向你的站点，系统送的子域名不受影响。`)) return
   unbinding.value = true
   try {
     const res = await fetch(`/api/sites/${site.value.id}/domain`, {
@@ -1553,7 +1627,7 @@ const bindOwnDomain = async () => {
     })
     const data = await res.json()
     if (data.status === 'success') {
-      alert(`✅ ${data.message}`)
+      uiStore.notify(`✅ ${data.message}`)
       load()
     } else if (data.status === 'pending') {
       domainHint.value = `${data.message}\n${data.detail || ''}\n\n${data.hint || ''}`
@@ -1613,9 +1687,16 @@ const loadMoreCustomers = () => loadCustomers(true)
 
 
 onMounted(async () => {
+  window.addEventListener('paste', onPasteImage)
+
 
   await load()
   if (site.value) { loadOrders(); loadHotPrice() }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('paste', onPasteImage)
+  if (qrPreview.value) URL.revokeObjectURL(qrPreview.value)
 })
 </script>
 
