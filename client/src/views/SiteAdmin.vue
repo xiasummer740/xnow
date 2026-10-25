@@ -21,12 +21,14 @@
           主站管理员视角：下面是全部 {{ sitesList.length }} 个站，点任意一个进入它的站长后台。
         </template>
         <template v-else>
-          你现在是 <b>#{{ site?.id }} {{ site?.name }}</b> 的站长 —— 这里的装修、定价、收款、邮件只影响这一个站。
+          主站管理员代管中：下面是 <b>#{{ site?.id }} {{ site?.name }}</b> 的站长后台，改动只影响这一个站。
         </template>
       </span>
-      <router-link to="/admin" class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">回管理密室</router-link>
-      <router-link v-if="page !== 'overview'" :to="'/my-site/overview'"
-                   class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">返回分站管理</router-link>
+      <!-- 站长后台里不出现「密室」入口：站长没有密室，员工代管也只是回到分站列表 -->
+      <router-link v-if="page === 'overview'" to="/admin"
+                   class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">回管理密室</router-link>
+      <router-link v-else to="/my-site/overview"
+                   class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">退出代管 →</router-link>
     </div>
 
 <!-- 🧭 92 期：原来 11 个区块堆在一页，手机上滑很久还找不到。拆页后导航就这一条 -->
@@ -611,13 +613,19 @@ const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.u
 //   概览 tab    → 分站管理（全部站列表，主站管理员视角）
 //   其它 tab    → 站长后台（某个站自己的后台，视同站长本人）
 const heading = computed(() => {
-  if (!isStaffRole.value) return '我的分站'
-  return page.value === 'overview' ? '分站管理' : '站长后台'
+  if (page.value !== 'overview') return '站长后台'
+  return isStaffRole.value ? '分站管理' : '我的分站'
 })
 const subheading = computed(() => {
-  if (!isStaffRole.value) return '改名字、换模板、填收款、绑域名、看收益 —— 都在这里'
-  if (page.value === 'overview') return '全部站点的运营情况 —— 点下面任意一个进入它的站长后台'
-  return `#${site.value?.id ?? ''} ${site.value?.name ?? ''} · 你正以这个站站长的身份操作`
+  if (page.value === 'overview') {
+    return isStaffRole.value
+      ? '全部站点的运营情况 —— 点下面任意一个进入它的站长后台'
+      : '改名字、换模板、填收款、绑域名、看收益 —— 都在这里'
+  }
+  const tag = `#${site.value?.id ?? ''} ${site.value?.name ?? ''}`
+  return isStaffRole.value
+    ? `${tag} · 主站管理员代管中`
+    : `${tag} · 你正在经营这个站`
 })
 const plan = ref({ site_monthly: 99, agent_monthly: 99, renew_days: 30 })
 const saving = ref(false)
