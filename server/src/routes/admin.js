@@ -252,14 +252,20 @@ router.post("/user/role", authenticate, async (req, res) => {
 
 router.post('/user/update', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
-  const { userId, type, amount, multiplier } = req.body;
+  const { userId, type, amount, multiplier, reason } = req.body;
   try {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ status: 'error' });
     if (type === 'fund') {
       user.balance = (parseFloat(user.balance) + parseFloat(amount)).toFixed(6);
       await user.save();
-      await Transaction.create({ user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance, type: '后台调账', description: '管理员手动调账: ' + (amount > 0 ? '+' : '') + amount });
+      // 📝 原因必记：以前只写"管理员手动调账 +100"，过一个月谁也说不清为什么调（测试？补偿？退款？）
+      const why = String(reason || '').trim().slice(0, 40);
+      await Transaction.create({
+        user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance,
+        type: '后台调账',
+        description: '管理员手动调账: ' + (amount > 0 ? '+' : '') + amount + (why ? '（' + why + '）' : ''),
+      });
       await logAudit(req, 'user_fund', 'user', userId, { amount, newBalance: user.balance });
     } else if (type === 'multiplier') {
       // 🔒 倍率只允许正有限数（'default'/空=重置），负数/0/NaN 直接拒，防下单价格被写坏
@@ -380,11 +386,16 @@ router.get('/users/:id/analysis', authenticate, async (req, res) => {
         MAX(created_at) as last_order_at
       FROM orders WHERE user_id = ?`, { replacements: [uid], type: sq.QueryTypes.SELECT });
 
+    // ⚠️ 只有"客户真的付了钱"才算充值。历史教训：管理员加款（type=后台调账）和退款入账
+    //    都挂在 amount>0 上，被一起算成"总充值"，看着像客户充了钱（2026-10-26 祥哥自己测试
+    //    加款 ¥1000，用户详情显示"总充值 ¥1000"，差点被当成真实入账）。
     const [depositStats] = await sq.query(`
-      SELECT COALESCE(SUM(amount),0) as total_deposit,
-        COUNT(*) as deposit_count,
+      SELECT COALESCE(SUM(CASE WHEN amount>0 AND type NOT IN ('后台调账','退款入账') THEN amount ELSE 0 END),0) as total_deposit,
+        COUNT(CASE WHEN amount>0 AND type NOT IN ('后台调账','退款入账') THEN 1 END) as deposit_count,
+        COALESCE(SUM(CASE WHEN type='后台调账' THEN amount ELSE 0 END),0) as admin_adjust,
+        COALESCE(SUM(CASE WHEN type='退款入账' THEN amount ELSE 0 END),0) as refunded,
         COALESCE(SUM(CASE WHEN type='推广返佣' THEN amount ELSE 0 END),0) as total_commission
-      FROM transactions WHERE user_id=? AND amount>0`, { replacements: [uid], type: sq.QueryTypes.SELECT });
+      FROM transactions WHERE user_id=?`, { replacements: [uid], type: sq.QueryTypes.SELECT });
 
     const serviceBreakdown = await sq.query(`
       SELECT service_id,service_name,COUNT(*) as order_count,
@@ -1178,7 +1189,7 @@ router.get('/site-customers', authenticate, async (req, res) => {
              (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS orders,
              (SELECT COALESCE(SUM(o.charge), 0) FROM orders o WHERE o.user_id = u.id) AS spend,
              (SELECT MAX(o.created_at) FROM orders o WHERE o.user_id = u.id) AS last_order_at,
-             (SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = u.id AND t.amount > 0) AS recharged
+             (SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = u.id AND t.amount > 0 AND t.type NOT IN ('后台调账','退款入账')) AS recharged
       FROM users u
       LEFT JOIN sites s ON s.id = u.site_id
       ${whereSql}
@@ -1360,7 +1371,7 @@ router.get('/site-customers/export', authenticate, async (req, res) => {
              (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) AS orders,
              (SELECT COALESCE(SUM(o.charge), 0) FROM orders o WHERE o.user_id = u.id) AS spend,
              (SELECT MAX(o.created_at) FROM orders o WHERE o.user_id = u.id) AS last_order_at,
-             (SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = u.id AND t.amount > 0) AS recharged
+             (SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = u.id AND t.amount > 0 AND t.type NOT IN ('后台调账','退款入账')) AS recharged
       FROM users u LEFT JOIN sites s ON s.id = u.site_id
       WHERE u.site_id > 0 ORDER BY u.site_id ASC, u.id ASC LIMIT 50000
     `);
