@@ -2,8 +2,11 @@
   <div class="p-4 md:p-6 max-w-5xl mx-auto text-slate-200">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-black">我的分站</h1>
-        <p class="text-xs text-slate-500 mt-1">改名字、换模板、填收款、绑域名、看收益 —— 都在这里</p>
+        <h1 class="text-2xl font-black">{{ isStaffRole ? '分站管理' : '我的分站' }}</h1>
+        <p class="text-xs text-slate-500 mt-1">
+          <template v-if="isStaffRole">全部站点的运营情况 —— 点下面任意一个进入它的管理后台</template>
+          <template v-else>改名字、换模板、填收款、绑域名、看收益 —— 都在这里</template>
+        </p>
       </div>
       <button @click="load()" class="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">刷新</button>
     </div>
@@ -153,7 +156,7 @@
       <!-- 🏬 我的分站（多站时用来切换；也在这里开新站）-->
       <section v-if="page === 'overview'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2.5">
-          <h2 class="font-bold text-sm text-white">我的分站 <span class="text-slate-500 font-normal">（{{ sitesList.length }} 个）</span></h2>
+          <h2 class="font-bold text-sm text-white">{{ isStaffRole ? '全部分站' : '我的分站' }} <span class="text-slate-500 font-normal">（{{ sitesList.length }} 个）</span></h2>
           <router-link to="/my-site/new"
             class="px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-900 text-[11px] font-bold">+ 开通新分站</router-link>
         </div>
@@ -583,6 +586,9 @@ watch(page, (v) => {
 const loading = ref(true)
 const billingRef = ref(null)
 const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 99 })
+// 员工视角：这里列的是**全部**分站（GET /api/sites 对 staff 返回全量），
+// 所以标题与文案不能写「我的分站」
+const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.userInfo?.role))
 const plan = ref({ site_monthly: 99, agent_monthly: 99, renew_days: 30 })
 const saving = ref(false)
 const creating = ref(false)
