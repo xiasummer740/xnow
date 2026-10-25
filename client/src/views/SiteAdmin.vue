@@ -764,7 +764,16 @@ const presets = [
   { key: 'candy_orange', name: '活泼橙', desc: '亲和、好上手', colorHex: '#f97316',
     data: { template: 'classic', color: 'orange', accent: '', ui_radius: 'pill', ui_density: 'relaxed', card_style: 'glass', font_style: 'rounded', btn_shape: 'pill', hero_layout: 'split' } },
   { key: 'deep_green', name: '沉稳绿', desc: '老练、可靠、稳重', colorHex: '#22c55e',
-    data: { template: 'saas', color: 'green', accent: '', ui_radius: 'soft', ui_density: 'normal', card_style: 'solid', font_style: 'sans', btn_shape: 'rounded', hero_layout: 'split' } }
+    data: { template: 'saas', color: 'green', accent: '', ui_radius: 'soft', ui_density: 'normal', card_style: 'solid', font_style: 'sans', btn_shape: 'rounded', hero_layout: 'split' } },
+    // 🎨 110 期：渐变风（背景是真双色渐变，而不是同一个色的深浅）
+    { name: '紫蓝渐变', sw: 'linear-gradient(135deg,#a855f7,#3b82f6)',
+      data: { template: 'neon', color: 'purple', accent: '', ui_radius: 'round', ui_density: 'normal', card_style: 'glass', font_style: 'sans', btn_shape: 'pill', hero_layout: 'center', bg_color: 'grad4' } },
+    { name: '青蓝渐变', sw: 'linear-gradient(135deg,#22d3ee,#2563eb)',
+      data: { template: 'glass', color: 'cyan', accent: '', ui_radius: 'soft', ui_density: 'normal', card_style: 'glass', font_style: 'sans', btn_shape: 'rounded', hero_layout: 'split', bg_color: 'grad5' } },
+    { name: '橙红渐变', sw: 'linear-gradient(135deg,#fb923c,#ef4444)',
+      data: { template: 'classic', color: 'orange', accent: '', ui_radius: 'round', ui_density: 'normal', card_style: 'solid', font_style: 'hei', btn_shape: 'pill', hero_layout: 'banner', bg_color: 'grad6' } },
+    { name: '玫粉渐变', sw: 'linear-gradient(135deg,#e879f9,#f43f5e)',
+      data: { template: 'magazine', color: 'red', accent: '', ui_radius: 'soft', ui_density: 'relaxed', card_style: 'glass', font_style: 'serif', btn_shape: 'pill', hero_layout: 'center', bg_color: 'grad8' } }
 ]
 
 const activePreset = computed(() => {
@@ -774,7 +783,8 @@ const activePreset = computed(() => {
     (p.data.accent || '') === (f.accent || '') &&
     p.data.ui_radius === (f.ui_radius || '') && p.data.ui_density === (f.ui_density || '') &&
     p.data.card_style === (f.card_style || '') && p.data.font_style === (f.font_style || '') &&
-    p.data.btn_shape === (f.btn_shape || '') && p.data.hero_layout === (f.hero_layout || ''))
+    p.data.btn_shape === (f.btn_shape || '') && p.data.hero_layout === (f.hero_layout || '') &&
+    (p.data.bg_color || '') === (f.bg_color || ''))
   return hit ? hit.key : ''
 })
 
@@ -800,7 +810,14 @@ const BG_PRESETS = [
   { key: '#12081a', name: '暗紫',    css: '#12081a' },
   { key: 'grad1',  name: '深空渐变', css: 'linear-gradient(160deg,#0b1220,#131a2e,#1b1030)' },
   { key: 'grad2',  name: '深海渐变', css: 'linear-gradient(160deg,#04070f,#0d1b2a,#10243a)' },
-  { key: 'grad3',  name: '紫夜渐变', css: 'linear-gradient(160deg,#120a1f,#1d1030,#2a1033)' }
+  { key: 'grad3',  name: '紫夜渐变', css: 'linear-gradient(160deg,#120a1f,#1d1030,#2a1033)' },
+  // 🎨 110 期（祥哥：颜色都是单色吗，没有渐变吗）—— 补 6 套真双色渐变
+  { key: 'grad4',  name: '紫蓝渐变', css: 'linear-gradient(135deg,#3b0764 0%,#1e1b4b 45%,#0c4a6e 100%)' },
+  { key: 'grad5',  name: '青蓝渐变', css: 'linear-gradient(135deg,#042f2e 0%,#083344 45%,#0c2d6b 100%)' },
+  { key: 'grad6',  name: '橙红渐变', css: 'linear-gradient(135deg,#451a03 0%,#4c0519 55%,#1c1917 100%)' },
+  { key: 'grad7',  name: '绿青渐变', css: 'linear-gradient(135deg,#052e16 0%,#064e3b 45%,#083344 100%)' },
+  { key: 'grad8',  name: '玫粉渐变', css: 'linear-gradient(135deg,#4a044e 0%,#500724 50%,#1c1917 100%)' },
+  { key: 'grad9',  name: '金橙渐变', css: 'linear-gradient(135deg,#422006 0%,#451a03 50%,#1c1917 100%)' }
 ]
 const FONT_SCALES = [
   { key: 'sm', name: '小' }, { key: 'md', name: '标准' }, { key: 'lg', name: '大' }

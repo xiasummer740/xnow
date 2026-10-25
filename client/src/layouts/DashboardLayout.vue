@@ -2,7 +2,7 @@
   <div class="h-[100dvh] w-full flex bg-transparent relative overflow-hidden">
     <div v-if="isSidebarOpen" @click="isSidebarOpen = false" class="fixed inset-0 bg-black/60 z-[9998] md:hidden backdrop-blur-sm transition-opacity"></div>
 
-    <aside :class="['fixed md:relative z-[9999] md:z-50 h-full w-60 bg-slate-900/95 border-r border-slate-800 flex flex-col backdrop-blur-xl transition-transform duration-300 ease-in-out', isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0']">
+    <aside :class="['fixed md:relative z-[9999] md:z-50 h-full md:h-[100dvh] w-60 bg-slate-900/95 border-r border-slate-800 flex flex-col backdrop-blur-xl transition-transform duration-300 ease-in-out', isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0']">
       <div class="h-16 flex items-center px-5 border-b border-slate-800">
         <a href="/" class="flex items-center w-full hover:opacity-80 transition" title="返回首页">
           <img v-if="!appStore.isSubsite || (appStore.siteLogo && appStore.siteLogo !== '/logo.png')" :src="appStore.siteLogo || '/logo.png'" onerror="this.onerror=null; this.src='/logo.png';" class="h-8 w-8 object-contain mr-2.5" alt="Logo">

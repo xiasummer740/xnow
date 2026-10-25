@@ -664,7 +664,9 @@ const isPresetActive = (p) => {
   const d = p.data || {}
   return Object.keys(d).every((k) => String(props.form[k] ?? '') === String(d[k] ?? ''))
 }
-const presetGradient = (p) => `linear-gradient(135deg, ${p.colorHex}, ${p.colorHex}55)`
+// 🎨 110 期：风格卡片原来一律画成「同色深→浅」，所以祥哥说"颜色都是单色吗，没有渐变吗"。
+//    现在预设可以自带 sw（真双色渐变），有就用，没有才退回原来的单色深浅。
+const presetGradient = (p) => p.sw || `linear-gradient(135deg, ${p.colorHex}, ${p.colorHex}55)`
 const wireBg = (key) => {
   if (key === 'neon') return 'rgba(12,4,24,.9)'
   if (key === 'glass') return 'rgba(255,255,255,.05)'

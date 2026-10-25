@@ -124,6 +124,20 @@ function togglePick(it) {
   if (i >= 0) picked.value.splice(i, 1); else picked.value.push(id);
 }
 function pickAllVisible() { picked.value = items.value.map(it => Number(it.service_id)); }
+// ✅ 110 期（祥哥：没有某类某分组批量全选吗）—— 整组勾选 / 取消整组
+function groupAllPicked(groupItems) {
+  return groupItems.length > 0 && groupItems.every(it => isPicked(it));
+}
+function toggleGroup(groupItems) {
+  const ids = groupItems.map(it => Number(it.service_id));
+  if (groupAllPicked(groupItems)) {
+    picked.value = picked.value.filter(x => !ids.includes(Number(x)));
+  } else {
+    const set = new Set(picked.value.map(Number));
+    ids.forEach(i => set.add(i));
+    picked.value = [...set];
+  }
+}
 function clearPicked() { picked.value = []; }
 
 const pickMargin = ref(30);
@@ -520,6 +534,10 @@ onMounted(load);
           <span class="text-[11px] font-bold text-amber-300">已勾选 {{ picked.length }} 条</span>
           <div class="flex gap-1.5">
             <button @click="pickAllVisible" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">全选这几百条</button>
+            <button v-if="activeCategory || activePlatform" @click="pickAllVisible"
+                    class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">
+              {{ activeCategory ? '全选本类' : '全选本平台' }}
+            </button>
             <button @click="clearPicked" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">取消</button>
           </div>
         </div>
@@ -543,7 +561,14 @@ onMounted(load);
           <div v-if="!activeCategory" class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur px-1 py-1.5 mb-1.5
                       text-[11px] font-bold text-sky-300/90 border-b border-slate-800 flex items-center justify-between">
             <span :title="g.name">{{ shortCat(g.name) }}</span>
-            <span class="text-slate-500 font-normal">{{ g.items.length }} 条</span>
+            <span class="flex items-center gap-2">
+              <span class="text-slate-500 font-normal">{{ g.items.length }} 条</span>
+              <button type="button" @click.stop="toggleGroup(g.items)"
+                      class="px-2 py-0.5 rounded-md text-[10px] border"
+                      :class="groupAllPicked(g.items) ? 'bg-amber-500 border-amber-400 text-slate-900 font-bold' : 'border-slate-600 text-slate-300'">
+                {{ groupAllPicked(g.items) ? '取消本组' : '全选本组' }}
+              </button>
+            </span>
           </div>
           <button v-for="it in g.items" :key="it.service_id" type="button" @click="openSheet(it)"
                   class="w-full text-left rounded-xl border p-3 mb-2 transition active:scale-[0.995]"
