@@ -21,7 +21,8 @@
           主站管理员视角：下面是全部 {{ sitesList.length }} 个站，点任意一个进入它的站长后台。
         </template>
         <template v-else>
-          主站管理员代管中：下面是 <b>#{{ site?.id }} {{ site?.name }}</b> 的站长后台，改动只影响这一个站。
+          站长已授权代管，剩余 <b>{{ supportLeft }}</b> 小时 —— 下面是
+          <b>#{{ site?.id }} {{ site?.name }}</b> 的站长后台，改动只影响这一个站，到点自动收回。
         </template>
       </span>
       <!-- 站长后台里不出现「密室」入口：站长没有密室，员工代管也只是回到分站列表 -->
@@ -172,6 +173,36 @@
         </button>
         <p v-if="stopMsg" class="text-[11px] mt-2" :class="stopMsgOk ? 'text-emerald-400' : 'text-red-400'">{{ stopMsg }}</p>
       </section>
+
+    <!-- 🤝 申请协助：站长自己控制"主站管理员能不能进我的后台、能进多久" -->
+    <section v-if="!isStaffRole && site && page === 'overview'"
+             class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="font-bold text-sm text-white">🤝 申请协助</h2>
+          <p class="text-[11px] text-slate-500 mt-1">
+            不会配收款/邮箱，或者页面样式坏了自己搞不定？开一个限时窗口让主站管理员进来帮你看。
+            <span class="text-slate-600">窗口到期自动关闭，随时可以手动收回。</span>
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <template v-if="supportLeft > 0">
+            <span class="text-[11px] text-amber-300">协助窗口开放中，剩余 {{ supportLeft }} 小时</span>
+            <button @click="revokeSupport" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[11px] font-bold">立即收回</button>
+          </template>
+          <template v-else>
+            <select v-model.number="supportHours" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px]">
+              <option :value="1">1 小时</option>
+              <option :value="6">6 小时</option>
+              <option :value="24">24 小时</option>
+            </select>
+            <button @click="requestSupport" class="px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-900 text-[11px] font-bold">
+              开协助窗口
+            </button>
+          </template>
+        </div>
+      </div>
+    </section>
 
     <!-- 🏬 我的分站（多站时用来切换；也在这里开新站）-->
       <section v-if="page === 'overview'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
@@ -609,6 +640,31 @@ const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 
 // 员工视角：这里列的是**全部**分站（GET /api/sites 对 staff 返回全量），
 // 所以标题与文案不能写「我的分站」
 const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.userInfo?.role))
+const supportHours = ref(6)
+const requestSupport = async () => {
+  if (!site.value) return
+  const r = await fetch(`/api/sites/${site.value.id}/request-support`, {
+    method: 'POST', headers: headers(), body: JSON.stringify({ hours: supportHours.value }),
+  }).then(x => x.json())
+  if (r.status === 'success') {
+    site.value.admin_access_until = r.data.admin_access_until
+    alert(r.message || '已开启协助窗口')
+  } else alert(r.message || '开启失败')
+}
+const revokeSupport = async () => {
+  if (!site.value) return
+  const r = await fetch(`/api/sites/${site.value.id}/revoke-support`, {
+    method: 'POST', headers: headers(),
+  }).then(x => x.json())
+  if (r.status === 'success') { site.value.admin_access_until = 0; alert('已收回协助授权') }
+  else alert(r.message || '收回失败')
+}
+
+const supportLeft = computed(() => {
+  const until = Number(site.value?.admin_access_until || 0)
+  if (!until) return 0
+  return Math.max(0, Math.round((until - Date.now()) / 3600000 * 10) / 10)
+})
 // 员工看到的这一页有**两种身份**，必须一眼分清：
 //   概览 tab    → 分站管理（全部站列表，主站管理员视角）
 //   其它 tab    → 站长后台（某个站自己的后台，视同站长本人）
@@ -1062,6 +1118,12 @@ const load = async () => {
       currentSiteId.value = Number(site.value.id)
       try { localStorage.setItem('xnow_site_current', String(site.value.id)) } catch (e) {}
     }
+    // 站长后台只属于站长。主站管理员想看/改某个站，必须由站长在后台「申请协助」开一段限时窗口；
+    // 没窗口就送回密室的「分站管理」。（110 期祥哥定调）
+    if (isStaffRole.value) {
+      const until = Number(site.value?.admin_access_until || 0)
+      if (!site.value || until <= Date.now()) { router.replace('/admin/sites'); return }
+    }
     if (site.value) {
       const s = site.value
       form.value = {
@@ -1392,6 +1454,7 @@ const loadMoreCustomers = () => loadCustomers(true)
 
 
 onMounted(async () => {
+
   await load()
   if (site.value) { loadOrders(); loadHotPrice() }
 })

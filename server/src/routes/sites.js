@@ -592,6 +592,40 @@ const effectiveDiscount = (site) => {
 // site_service_prices.rate 是 DECIMAL(14,6)：整数部分只有 8 位
 const RATE_MAX = 99999999.999999;
 
+// 🤝 站长申请协助：给自己的站开一段"主站管理员可代管"的窗口
+//    owner 自己才能开；时长限制 1~72 小时；重复调用会覆盖（= 续期），不会被叠加滥用。
+router.post('/:id/request-support', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '站点不存在' });
+    if (Number(site.owner_id) !== Number(req.user.id)) {
+      return res.status(403).json({ status: 'error', message: '只有站长本人可以申请协助' });
+    }
+    const hours = Math.min(72, Math.max(1, Number(req.body?.hours) || 6));
+    site.admin_access_until = Date.now() + hours * 3600 * 1000;
+    await site.save();
+    res.json({
+      status: 'success',
+      message: `已授权主站管理员协助 ${hours} 小时，到期自动收回`,
+      data: { admin_access_until: Number(site.admin_access_until) },
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// 站长手动收回授权
+router.post('/:id/revoke-support', authenticate, async (req, res) => {
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '站点不存在' });
+    if (Number(site.owner_id) !== Number(req.user.id)) {
+      return res.status(403).json({ status: 'error', message: '只有站长本人可以收回授权' });
+    }
+    site.admin_access_until = 0;
+    await site.save();
+    res.json({ status: 'success', message: '已收回协助授权' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 router.get('/:id/prices', authenticate, async (req, res) => {
   try {
     const site = await Site.findByPk(req.params.id);

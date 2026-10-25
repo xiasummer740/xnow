@@ -4,7 +4,7 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Config, User, Order, Transaction, Service, AuditLog, Notification, PageView, sequelize } from '../models/index.js';
+import { Config, User, Order, Transaction, Service, AuditLog, Notification, PageView, Site, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
 import { resolveGeoMap } from '../utils/geo.js';
@@ -1190,7 +1190,7 @@ router.get('/site-customers', authenticate, async (req, res) => {
 
     // 每个分站一行：客户数 / 订单 / 营收 / 毛利 / 客户余额
     const [sites] = await sequelize.query(`
-      SELECT s.id, s.name, s.status, s.plan, s.expire_at, s.created_at,
+      SELECT s.id, s.name, s.status, s.plan, s.expire_at, s.created_at, s.admin_access_until,
              COALESCE(NULLIF(s.custom_domain, ''), s.domain) AS domain,
              s.agent_discount,
              u.phone AS owner_phone, u.balance AS owner_balance,
@@ -1228,6 +1228,82 @@ router.get('/site-customers', authenticate, async (req, res) => {
 });
 
 // 导出 CSV：换服务器/对账/给财务留档都用得上，且不依赖界面
+// 🛠️ 主站管理员对分站的运维动作（110 期祥哥定调：能看 + 能运维，但**改不了装修和价格**）
+//    stop    强制停站     → status='expired'，stop_reason='admin'
+//    resume  恢复运营     → status='active'，清 stop_reason，重建自有域名 vhost
+//    extend  延期 N 天    → expire_at 往后推（平台赠送时长，不动站长余额）
+//    delete  删除站点     → 只在 body.confirm 等于站名时执行，防误点
+router.post('/sites/:id/action', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const site = await Site.findByPk(req.params.id);
+    if (!site) return res.status(404).json({ status: 'error', message: '站点不存在' });
+    const action = String(req.body?.action || '');
+
+    if (action === 'stop') {
+      // 停站必须动 nginx：先拆真实 vhost，再立 410 墓碑。
+      // 只改数据库是不够的 —— 域名还会按旧 vhost 继续正常打开（实测过）。
+      const { removeVhost, parkDomain, reloadNginx } = await import('../utils/siteDomain.js');
+      for (const d of [site.domain, site.custom_domain].filter(Boolean)) {
+        try { removeVhost(site.id, d); } catch (e) { /* 拆不掉也要继续 */ }
+        try { parkDomain(d); } catch (e) { /* 墓碑立不上就只改库，至少别再对外服务 */ }
+      }
+      try { reloadNginx(); } catch (e) { /* nginx 重载失败不影响入库 */ }
+      site.status = 'expired';
+      site.stop_reason = 'admin';
+      await site.save();
+      try {
+        const { clearSiteCache } = await import('../utils/siteDomain.js');
+        clearSiteCache();
+      } catch (e) { /* 老版本没有缓存清理，忽略 */ }
+      return res.json({ status: 'success', message: `已停站：${site.name}（域名现在是下线页）` });
+    }
+
+    if (action === 'resume') {
+      site.status = 'active';
+      site.stop_reason = null;
+      await site.save();
+      // 自有域名可能已被摘掉，这里按数据库重建一次（失败不阻塞）
+      let vhost = 'skipped';
+      try {
+        const { restoreSiteDomain } = await import('../utils/siteBilling.js');
+        await restoreSiteDomain(site);
+        vhost = 'ok';
+      } catch (e) {
+        vhost = 'failed: ' + e.message;
+      }
+      return res.json({ status: 'success', message: `已恢复运营：${site.name}`, data: { vhost } });
+    }
+
+    if (action === 'extend') {
+      const days = Math.min(365, Math.max(1, Number(req.body?.days) || 30));
+      const base = Math.max(Date.now(), Number(site.expire_at) || 0);
+      site.expire_at = base + days * 86400 * 1000;
+      if (site.status !== 'active') { site.status = 'active'; site.stop_reason = null; }
+      await site.save();
+      return res.json({
+        status: 'success',
+        message: `已延期 ${days} 天：${site.name}`,
+        data: { expire_at: Number(site.expire_at) },
+      });
+    }
+
+    if (action === 'delete') {
+      if (String(req.body?.confirm || '').trim() !== String(site.name).trim()) {
+        return res.status(400).json({ status: 'error', message: '确认名称不匹配，已取消删除' });
+      }
+      const { removeVhost } = await import('../utils/siteDomain.js');
+      try { await removeVhost(site); } catch (e) { /* 摘 vhost 失败也要继续删数据 */ }
+      await site.destroy();
+      return res.json({ status: 'success', message: `已删除站点：${site.name}` });
+    }
+
+    return res.status(400).json({ status: 'error', message: '未知动作：' + action });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
 router.get('/site-customers/export', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   try {

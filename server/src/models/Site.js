@@ -13,6 +13,9 @@ const Site = sequelize.define('Site', {
   // 🚦 110 期：站为什么被停 —— 'plan'（本站月费到期）/ 'agent'（站主的至尊代理到期连带停）
   //    必须分开记：代理续费只恢复 'agent' 的站，不能顺手把「欠站费」的站也放出来。
   stop_reason: { type: DataTypes.STRING(16), allowNull: true },
+  // 🤝 110 期：站长授权主站管理员临时代管到这个时刻（毫秒时间戳，0 = 没授权）。
+  //    主站管理员没有代改站点的常态权限 —— 只有站长在后台点了「申请协助」才开一扇限时的门。
+  admin_access_until: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
   announcement: { type: DataTypes.TEXT, allowNull: true },
   // 🎨 三期主题系统
   template: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'classic' },
