@@ -211,6 +211,23 @@ router.get('/admin/site-withdrawals', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── 主站管理员：未处理提现角标（密室 tab 上的红点数字，轮询用，必须轻） ──
+router.get('/admin/site-withdrawals/badge', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  try {
+    const [[row]] = await sequelize.query(
+      `SELECT COUNT(*) AS cnt, COALESCE(SUM(amount),0) AS sum
+         FROM site_withdrawals WHERE status = 'pending'`);
+    res.json({
+      status: 'success',
+      data: {
+        pending_cnt: Number(row.cnt || 0),
+        pending_sum: Number(Number(row.sum || 0).toFixed(2)),
+      },
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── 主站管理员：确认已转账（清账） ──
 router.post('/admin/site-withdrawals/:id/confirm', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });

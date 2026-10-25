@@ -35,7 +35,8 @@
           <!-- 站长后台（/my-site）只属于站长；主站管理员的分站入口在密室（分站列表 / 分站客户） -->
         <router-link v-if="!isStaffRole" to="/my-site" @click="handleNav('/my-site')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>{{ appStore.lang === 'zh' ? (isStaffRole ? '分站管理' : '我的分站') : (isStaffRole ? 'Subsites' : 'My Site') }}</span>
             <span v-if="!isAgentRole && !isStaffRole" class="nav-badge">¥99/月</span></router-link>
-          <router-link to="/admin" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>{{ appStore.t('menu_admin') }}</span></router-link>
+          <router-link to="/admin" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>{{ appStore.t('menu_admin') }}</span><span v-if="pendingWithdraws > 0"
+              class="ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-black leading-none">{{ pendingWithdraws > 99 ? '99+' : pendingWithdraws }}</span></router-link>
           <router-link to="/admin/backup" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/backup')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg><span>{{ appStore.t('menu_backup') || '灾备中心' }}</span></router-link>
           <router-link v-if="!appStore.isSubsite" to="/api-doc" @click="handleNav('/api-doc')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg><span>{{ appStore.t('menu_api') || '开发者 API' }}</span></router-link>
         </template>
@@ -148,6 +149,9 @@
 </template>
 
 <script setup>
+import { useWithdrawBadge } from '../composables/useWithdrawBadge.js'
+const { pendingCount: pendingWithdraws } = useWithdrawBadge()
+
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useAppStore } from '../stores/app';

@@ -1,4 +1,7 @@
 <script setup>
+import { useWithdrawBadge } from '../composables/useWithdrawBadge.js'
+const { pendingCount } = useWithdrawBadge()
+
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, shallowRef } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
@@ -564,6 +567,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
           <router-link to="/admin/site-withdrawals"
             class="px-4 py-2 rounded-lg text-sm font-bold text-amber-300 bg-amber-500/10 border border-amber-600/40 hover:bg-amber-500/20 transition">
             💸 提现 →
+          <span v-if="pendingCount > 0"
+                class="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-none">
+            {{ pendingCount > 99 ? '99+' : pendingCount }}
+          </span>
           </router-link>
         </div>
 

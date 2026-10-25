@@ -11,7 +11,12 @@
                    class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300">
         客户
       </router-link>
-      <router-link to="/admin/site-withdrawals" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300">提现</router-link>
+      <router-link to="/admin/site-withdrawals" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300">提现
+        <span v-if="pendingCount > 0"
+              class="ml-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-black leading-none">
+          {{ pendingCount > 99 ? '99+' : pendingCount }}
+        </span>
+      </router-link>
       <router-link to="/admin" class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400">返回密室</router-link>
     </div>
 
@@ -133,6 +138,9 @@
 </template>
 
 <script setup>
+import { useWithdrawBadge } from '../composables/useWithdrawBadge.js'
+const { pendingCount } = useWithdrawBadge()
+
 import { ref, computed, onMounted } from 'vue'
 
 const loading = ref(false)
