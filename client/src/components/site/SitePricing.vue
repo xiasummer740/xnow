@@ -182,6 +182,24 @@ const bulkMode = ref('margin');      // margin | rate | clear
 const bulkMargin = ref(30);
 const bulkFixed = ref('');
 const bulkBusy = ref(false);
+// 📌 110 期：整批改价的结果常驻在按钮下面。
+//    之前只 flash 4 秒、还显示在页面最底部 —— 站长点完看不到数字变化，以为"没生效"。
+// ⚠️ 执行完 emit('saved') 会让父组件 load() → v-if 短暂为假 → 本组件被重建，
+//    本地 ref 会归零，结果块就"消失"了。所以结果存一份到 sessionStorage，重建后还能读回来。
+const BULK_KEY = `xnow_bulk_result_${props.siteId}`;
+const bulkResult = ref('');
+const bulkResultOk = ref(true);
+onMounted(() => {
+  try {
+    const raw = sessionStorage.getItem(BULK_KEY);
+    if (raw) { const r = JSON.parse(raw); bulkResult.value = r.text || ''; bulkResultOk.value = r.ok !== false; }
+  } catch { /* 忽略 */ }
+});
+function setBulkResult(text, ok) {
+  bulkResult.value = text;
+  bulkResultOk.value = ok;
+  try { sessionStorage.setItem(BULK_KEY, JSON.stringify({ text, ok })); } catch { /* 忽略 */ }
+}
 async function runBulk() {
   if (bulkBusy.value) return;
   if (bulkScope.value === 'category' && !activeCategory.value) return flash('先在下面选一个分类，再整批改', false);
@@ -211,9 +229,12 @@ async function runBulk() {
       }),
     });
     const d = await r.json();
-    flash(d.message || (d.status === 'success' ? '已改好' : '改价失败'), d.status === 'success');
-    if (d.status === 'success') { picked.value = []; await load(); emit('saved'); }
+    const ok = d.status === 'success';
+    setBulkResult(d.message || (ok ? '已改好' : '改价失败'), ok);
+    flash(d.message || (ok ? '已改好' : '改价失败'), ok);
+    if (ok) { picked.value = []; await load(); emit('saved'); }
   } catch (e) {
+    setBulkResult('改价失败：' + e.message, false);
     flash('改价失败：' + e.message, false);
   } finally {
     bulkBusy.value = false;
@@ -489,6 +510,12 @@ onMounted(load);
           </p>
         </div>
       </details>
+      <!-- ✅ 整批改价结果放折叠面板外面：执行完 load() 一刷新，details 会自动收回，
+           放在里面就等于看不见（110 期实测踩到） -->
+      <div v-if="bulkResult" class="rounded-xl px-3 py-2.5 text-[12px] font-bold leading-relaxed"
+           :class="bulkResultOk ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/15 text-red-300 border border-red-500/40'">
+        {{ bulkResultOk ? '✅ ' : '❌ ' }}{{ bulkResult }}
+      </div>
 
       <div class="flex gap-2 mb-2">
         <input v-model="query" @keyup.enter="load" placeholder="搜服务名 / 分类，例如 TikTok 粉丝"

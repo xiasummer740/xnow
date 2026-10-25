@@ -231,11 +231,20 @@ export const useAppStore = defineStore('app', {
       }
 
       // 🎨 六十三期：外观三板斧（背景色 / 背景图 / 字号）。只在分站生效。
-      //    背景色支持 #RRGGBB 或三套内置渐变（grad1/2/3），其余一律忽略。
+      //    ⚠️ 110 期踩过两次：后台新加了 grad4~grad9 的双色渐变，
+      //    （1）保存接口的白名单没跟着加 → 弹「背景色格式不支持」；
+      //    （2）这里的映射表也没跟着加 → 存进去了但客户站看不到效果（不报错，更坑）。
+      //    以后再加渐变，这三处必须一起改：SiteAdmin 的 BG_PRESETS、服务端白名单、这张表。
       const GRADS: Record<string, string> = {
         grad1: 'linear-gradient(160deg, #0b1220 0%, #131a2e 55%, #1b1030 100%)',
         grad2: 'linear-gradient(160deg, #04070f 0%, #0d1b2a 60%, #10243a 100%)',
-        grad3: 'linear-gradient(160deg, #120a1f 0%, #1d1030 55%, #2a1033 100%)'
+        grad3: 'linear-gradient(160deg, #120a1f 0%, #1d1030 55%, #2a1033 100%)',
+        grad4: 'linear-gradient(135deg, #3b0764 0%, #1e1b4b 45%, #0c4a6e 100%)',
+        grad5: 'linear-gradient(135deg, #042f2e 0%, #083344 45%, #0c2d6b 100%)',
+        grad6: 'linear-gradient(135deg, #451a03 0%, #4c0519 55%, #1c1917 100%)',
+        grad7: 'linear-gradient(135deg, #052e16 0%, #064e3b 45%, #083344 100%)',
+        grad8: 'linear-gradient(135deg, #4a044e 0%, #500724 50%, #1c1917 100%)',
+        grad9: 'linear-gradient(135deg, #422006 0%, #451a03 50%, #1c1917 100%)'
       };
       const bg = String(this.bgColor || '').trim();
       if (bg && /^#[0-9a-fA-F]{6}$/.test(bg)) {

@@ -14,6 +14,12 @@ const loading = ref(false);
 // 🏬 分站没配收款商户时：在线充值不可用，页面要一直提示「联系客服」（toast 一闪就没了，客户会以为按钮坏了）
 const noMerchant = ref(false);
 const txs = ref([]);
+// 🏷 流水名称（客户可见）：历史数据里存的是「站长手动充值 / 后台调账」这类内部叫法，
+//    客户看到会以为这家店上面还有人。展示前统一换掉。
+const typeLabel = (t) => String(t?.type || '')
+  .replace(/站长/g, '管理员')
+  .replace(/后台调账/g, '人工调账')
+  .replace(/后台/g, '管理员');
 
 const isRMB = computed(() => payType.value === 'wechat' || payType.value === 'alipay');
 
@@ -116,7 +122,7 @@ const handlePay = async () => {
             if (signData.status !== 'success') {
                 loading.value = false;
                 if (signData.code === 'NO_SITE_MERCHANT') {
-                    // 🏬 站长还没填自己的收款商户 —— 钱不能进平台账户，只能走人工充值
+                    // 🏬 管理员还没填自己的收款商户 —— 钱不能进平台账户，只能走人工充值
                     noMerchant.value = true;
                 }
                 return ui.showToast(signData.message || '获取签名失败', 'error');
@@ -233,13 +239,13 @@ const cleanDescription = (t) => {
                         {{ loading ? '正在连接收银台...' : app.t('pay_btn') }}
                     </button>
 
-                    <!-- 🏬 站长收款商户还没配好时的常驻说明（toast 一闪就没，客户会以为按钮坏了）-->
+                    <!-- 🏬 管理员收款商户还没配好时的常驻说明（toast 一闪就没，客户会以为按钮坏了）-->
                     <div v-if="noMerchant" class="mt-4 rounded-2xl border border-amber-500/30 bg-amber-400/10 p-4 text-sm text-amber-100 text-left">
                         <p class="font-bold mb-1">在线充值暂未开通</p>
                         <p class="text-amber-200/80 text-[13px]">本站暂时只能人工充值：联系客服，告诉他要充多少，客服会把余额直接加到你账户。</p>
                         <a v-if="app.supportUrl" :href="app.supportUrl" target="_blank" rel="noopener noreferrer"
                            class="inline-block mt-3 px-4 py-2 rounded-xl bg-amber-400 text-slate-900 font-bold text-sm">联系客服充值</a>
-                        <p v-else class="mt-3 text-amber-200/70 text-[12px]">（本站未提供客服链接，请用你平时的联系方式联系站长）</p>
+                        <p v-else class="mt-3 text-amber-200/70 text-[12px]">（本站未提供客服链接，请用你平时的联系方式联系管理员）</p>
                     </div>
                 </div>
             </div>
@@ -281,9 +287,9 @@ const cleanDescription = (t) => {
             <div class="md:hidden space-y-2">
                 <div v-for="t in txs" :key="'m' + t.id" class="rounded-2xl bg-slate-900/60 border border-slate-700/70 px-4 py-3">
                     <div class="flex items-center justify-between gap-3">
-                        <span v-if="t.type === '后台调账' && t.amount > 0" class="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-[10px] font-bold">{{ t.type }}</span>
-                        <span v-else-if="t.amount > 0" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] font-bold">{{ t.type || '入账' }}</span>
-                        <span v-else class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">{{ t.type || '资金扣除' }}</span>
+                        <span v-if="String(t.type || '').includes('调账') && t.amount > 0" class="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-[10px] font-bold">{{ typeLabel(t) }}</span>
+                        <span v-else-if="t.amount > 0" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] font-bold">{{ typeLabel(t) || '入账' }}</span>
+                        <span v-else class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">{{ typeLabel(t) || '资金扣除' }}</span>
                         <span class="font-mono font-bold text-base" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ Number(t.amount) }}</span>
                     </div>
                     <div v-if="cleanDescription(t)" class="mt-1.5 text-xs text-slate-300 leading-relaxed break-all">{{ cleanDescription(t) }}</div>
@@ -306,7 +312,7 @@ const cleanDescription = (t) => {
                             <td class="px-6 py-4">
                                 <span v-if="t.type === '后台调账' && t.amount > 0" class="px-2 py-1 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-bold">系统赠送</span>
                                 <span v-else-if="t.type === '后台调账' && t.amount < 0" class="px-2 py-1 rounded bg-pink-500/20 text-pink-400 border border-pink-500/30 text-[10px] font-bold">系统扣除</span>
-                                <span v-else-if="t.amount > 0" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] font-bold">{{ t.type && t.type.includes('充值') ? t.type : '资金入账' }}</span>
+                                <span v-else-if="t.amount > 0" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] font-bold">{{ String(t.type || '').includes('充值') ? typeLabel(t) : '资金入账' }}</span>
                                 <span v-else class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">{{ t.type || '资金扣除' }}</span>
                             </td>
                             <td class="px-6 py-4 font-mono font-bold" :class="t.amount > 0 ? 'text-green-400' : 'text-red-400'">{{ t.amount > 0 ? '+' : '' }}{{ Number(t.amount) }}</td>

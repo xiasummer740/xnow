@@ -173,7 +173,7 @@
       <div class="mb-7 flex items-end justify-between">
         <div>
           <h2 class="text-2xl font-black tracking-tight">{{ appStore.lang === 'zh' ? '热门服务' : 'Popular Services' }}</h2>
-          <p class="mt-1 text-xs opacity-45">{{ appStore.lang === 'zh' ? (userStore.token ? '按平台实时价格下单，秒级交付' : '登录后可查看全部服务与实时价格') : (userStore.token ? 'Live prices, instant delivery' : 'Login to browse all services') }}</p>
+          <p class="mt-1 text-xs opacity-45">{{ appStore.lang === 'zh' ? (userStore.token ? '按实时价格下单，秒级交付' : '登录后可查看全部服务与实时价格') : (userStore.token ? 'Live prices, instant delivery' : 'Login to browse all services') }}</p>
         </div>
         <router-link to="/login" class="text-[11px] font-bold underline underline-offset-4 opacity-55">{{ appStore.lang === 'zh' ? '全部服务 →' : 'All services →' }}</router-link>
       </div>
@@ -182,7 +182,7 @@
 
     <section v-else-if="appStore.moduleEnabled('hot_services')" :style="{ order: appStore.moduleOrder('hot_services') }" data-module="hot_services" class="site-section relative z-20 max-w-5xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-2 tracking-wider">📊 {{ appStore.sectionTitle('hot_services') || (appStore.lang === 'zh' ? '热门服务预览' : 'Popular Services') }}</h2>
-      <p class="text-center text-slate-500 text-sm mb-8">{{ appStore.lang === 'zh' ? (userStore.token ? '按平台实时价格下单，秒级交付' : '登录后可查看全部服务与实时价格') : (userStore.token ? 'Live prices, instant delivery' : 'Login to browse all services') }}</p>
+      <p class="text-center text-slate-500 text-sm mb-8">{{ appStore.lang === 'zh' ? (userStore.token ? '按实时价格下单，秒级交付' : '登录后可查看全部服务与实时价格') : (userStore.token ? 'Live prices, instant delivery' : 'Login to browse all services') }}</p>
       <div v-if="previewLoading" class="flex justify-center py-8"><div class="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div></div>
       <div v-else class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div v-for="s in previewServices" :key="s.service"

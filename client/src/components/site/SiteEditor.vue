@@ -367,6 +367,12 @@ const BACKS = [
   { key: '#0b1220', name: '深蓝',   css: '#0b1220' },
   { key: '#12081a', name: '暗紫',   css: '#12081a' },
   { key: 'grad1',  name: '深空渐变', css: 'linear-gradient(160deg,#0b1220,#131a2e,#1b1030)' },
+  { key: 'grad4',  name: '紫蓝渐变', css: 'linear-gradient(135deg,#3b0764,#1e1b4b,#0c4a6e)' },
+  { key: 'grad5',  name: '青蓝渐变', css: 'linear-gradient(135deg,#042f2e,#083344,#0c2d6b)' },
+  { key: 'grad6',  name: '橙红渐变', css: 'linear-gradient(135deg,#451a03,#4c0519,#1c1917)' },
+  { key: 'grad7',  name: '绿青渐变', css: 'linear-gradient(135deg,#052e16,#064e3b,#083344)' },
+  { key: 'grad8',  name: '玫粉渐变', css: 'linear-gradient(135deg,#4a044e,#500724,#1c1917)' },
+  { key: 'grad9',  name: '金橙渐变', css: 'linear-gradient(135deg,#422006,#451a03,#1c1917)' },
   { key: 'grad2',  name: '深海渐变', css: 'linear-gradient(160deg,#04070f,#0d1b2a,#10243a)' },
   { key: 'grad3',  name: '紫夜渐变', css: 'linear-gradient(160deg,#120a1f,#1d1030,#2a1033)' }
 ];

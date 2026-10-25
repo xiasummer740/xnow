@@ -583,6 +583,9 @@ const effectiveDiscount = (site) => {
   return rate;
 };
 
+// site_service_prices.rate 是 DECIMAL(14,6)：整数部分只有 8 位
+const RATE_MAX = 99999999.999999;
+
 router.get('/:id/prices', authenticate, async (req, res) => {
   try {
     const site = await Site.findByPk(req.params.id);
@@ -761,6 +764,14 @@ router.put('/:id/prices', authenticate, async (req, res) => {
 
       const rate = parseFloat(raw);
       if (!isFinite(rate) || rate <= 0) return res.json({ status: 'error', message: `服务 ${sid} 的价格必须大于 0` });
+      // 🐛 110 期：目录里有几条「说明类」服务，单价被写成 9 亿 / 99 亿（占位数据）。
+      //    这种价格一存就超出数据库字段上限，报 500，站长看到的是「保存失败」但不知为什么。
+      if (rate > RATE_MAX) {
+        return res.json({
+          status: 'error',
+          message: `「${sv.name}」这条是说明类服务，目录里它的单价是天文数字（${rate}），没有实际意义，不能单独定价。`,
+        });
+      }
 
       // 🔒 成本保护：站长即使想亏本也亏不了 —— 实收（含折扣）不得低于进货价
       const baseRate = (sv.custom_rate !== null && sv.custom_rate !== undefined)
@@ -870,6 +881,7 @@ router.post('/:id/prices/bulk', authenticate, async (req, res) => {
     }
 
     const toUpsert = [];
+    const skipped = [];
     let floorHit = null;
     for (const sv of services) {
       const baseRate = (sv.custom_rate !== null && sv.custom_rate !== undefined)
@@ -877,6 +889,10 @@ router.post('/:id/prices/bulk', authenticate, async (req, res) => {
       const cost = baseRate * costMult;
       let rate = mode === 'margin' ? cost * (1 + marginPct / 100) : fixedRate;
       rate = Number(rate.toFixed(4));
+      // 🐛 110 期：说明类服务的占位价（9 亿 / 99 亿）存不进 DECIMAL(14,6)，
+      //    之前会让整批 500 回滚 —— 站长看到「改完没变化」。
+      //    现在改成跳过它们并把数量报回来，其余照改。
+      if (!isFinite(rate) || rate > RATE_MAX) { skipped.push(sv.name); continue; }
       const floor = Number((cost / discount).toFixed(6));
       if (rate < floor - 0.000001) { floorHit = { name: sv.name, rate, floor }; break; }
       toUpsert.push({ site_id: site.id, service_id: Number(sv.service_id), rate });
@@ -889,13 +905,26 @@ router.post('/:id/prices/bulk', authenticate, async (req, res) => {
       });
     }
 
-    if (toUpsert.length) {
-      await SiteServicePrice.bulkCreate(toUpsert, { updateOnDuplicate: ['rate', 'updated_at'] });
+    if (!toUpsert.length) {
+      return res.json({ status: 'error', message: '这个范围里没有可以定价的服务（都是说明类占位数据）' });
     }
+    let written = 0;
+    try {
+      await SiteServicePrice.bulkCreate(toUpsert, { updateOnDuplicate: ['rate', 'updated_at'] });
+      written = toUpsert.length;
+    } catch (e) {
+      return res.json({
+        status: 'error',
+        message: '写入价格失败（' + String(e.message || e).slice(0, 120) + '），没有改动任何一条',
+      });
+    }
+    const skipNote = skipped.length
+      ? `，跳过 ${skipped.length} 条说明类服务（目录单价是占位数据）`
+      : '';
     res.json({
       status: 'success',
-      message: `已改好 ${toUpsert.length} 条${mode === 'margin' ? `（进货价 +${marginPct}%）` : `（统一 ¥${fixedRate}）`}`,
-      data: { matched: ids.length, changed: toUpsert.length },
+      message: `已改好 ${written} 条${mode === 'margin' ? `（进货价 +${marginPct}%）` : `（统一 ¥${fixedRate}）`}${skipNote}`,
+      data: { matched: ids.length, changed: written, skipped: skipped.length },
     });
   } catch (e) {
     res.status(500).json({ status: 'error', message: '批量改价失败：' + (e.message || e) });
@@ -938,10 +967,12 @@ router.put('/:id', authenticate, async (req, res) => {
       if (hex && !/^#[0-9a-fA-F]{6}$/.test(hex)) return res.json({ status: 'error', message: '自定义主色需为 #RRGGBB 格式' });
       site.accent = hex || null;
     }
-    // 🎨 背景色：只接受 #RRGGBB 或三套内置渐变（grad1/grad2/grad3），其余一律拒绝
+    // 🎨 背景色：接受 #RRGGBB 或内置渐变 grad1~grad9，其余一律拒绝
+    //    ⚠️ 110 期踩过：新加了 grad4~grad9 的双色渐变，但这里白名单没跟着改，
+    //    站长一选渐变就弹「背景色格式不支持」。
   if (bg_color !== undefined) {
     const v = String(bg_color || '').trim();
-    const GRADS = ['grad1', 'grad2', 'grad3'];
+    const GRADS = ['grad1', 'grad2', 'grad3', 'grad4', 'grad5', 'grad6', 'grad7', 'grad8', 'grad9'];
     if (v && !/^#[0-9a-fA-F]{6}$/.test(v) && !GRADS.includes(v)) {
       return res.json({ status: 'error', message: '背景色格式不支持' });
     }
@@ -1658,7 +1689,7 @@ router.get('/:id/customers', authenticate, async (req, res) => {
 //    约束：
 //      · 只能操作**自己分站**的客户（User.site_id 必须等于本站）
 //      · 单笔金额有上限，不能填负数（扣款要显式扣）
-//      · 必须落一条流水（type=站长手动充值，site_id=本分站），站长和客户都能查到
+//      · 必须落一条流水（type=管理员手动充值，site_id=本分站），管理员和客户都能查到
 router.post('/:id/customers/:uid/balance', authenticate, async (req, res) => {
   try {
     const site = await ensureSiteOwner(req, res);
@@ -1690,7 +1721,7 @@ router.post('/:id/customers/:uid/balance', authenticate, async (req, res) => {
         phone: u.phone,
         amount: amount,
         balance: u.balance,
-        type: '站长手动充值',
+        type: '管理员手动充值',
         description: note ? `站长手动加余额（${note}）` : '站长手动加余额',
         site_id: Number(site.id),   // 🔴 必须记分站，否则平台营收会被算多
       }, { transaction: t });
@@ -1732,7 +1763,7 @@ router.post('/:id/customers/:uid/balance/deduct', authenticate, async (req, res)
         phone: u.phone,
         amount: -amount,
         balance: u.balance,
-        type: '站长手动扣款',
+        type: '管理员手动扣款',
         description: String(req.body?.note || '').trim().slice(0, 60) || '站长手动扣减余额',
         site_id: Number(site.id),
       }, { transaction: t });
