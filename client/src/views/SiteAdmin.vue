@@ -2,16 +2,34 @@
   <div class="p-4 md:p-6 max-w-5xl mx-auto text-slate-200">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-black">{{ isStaffRole ? '分站管理' : '我的分站' }}</h1>
-        <p class="text-xs text-slate-500 mt-1">
-          <template v-if="isStaffRole">全部站点的运营情况 —— 点下面任意一个进入它的管理后台</template>
-          <template v-else>改名字、换模板、填收款、绑域名、看收益 —— 都在这里</template>
-        </p>
+        <h1 class="text-2xl font-black">{{ heading }}</h1>
+        <p class="text-xs text-slate-500 mt-1">{{ subheading }}</p>
       </div>
       <button @click="load()" class="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">刷新</button>
     </div>
 
-    <!-- 🧭 92 期：原来 11 个区块堆在一页，手机上滑很久还找不到。拆页后导航就这一条 -->
+          <!-- 员工身份条：分清「分站管理」（全站列表）与「站长后台」（某个站）—— 110 期祥哥要求 -->
+    <div v-if="isStaffRole"
+         class="mb-4 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2"
+         :class="page === 'overview' ? 'border-sky-500/40 bg-sky-500/10' : 'border-amber-400/50 bg-amber-400/10'">
+      <span class="text-[10px] font-black px-1.5 py-0.5 rounded whitespace-nowrap"
+            :class="page === 'overview' ? 'bg-sky-500 text-white' : 'bg-amber-400 text-slate-900'">
+        {{ page === 'overview' ? '分站管理' : '站长后台' }}
+      </span>
+      <span class="text-[11px]" :class="page === 'overview' ? 'text-sky-200' : 'text-amber-200'">
+        <template v-if="page === 'overview'">
+          主站管理员视角：下面是全部 {{ sitesList.length }} 个站，点任意一个进入它的站长后台。
+        </template>
+        <template v-else>
+          你现在是 <b>#{{ site?.id }} {{ site?.name }}</b> 的站长 —— 这里的装修、定价、收款、邮件只影响这一个站。
+        </template>
+      </span>
+      <router-link to="/admin" class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">回管理密室</router-link>
+      <router-link v-if="page !== 'overview'" :to="'/my-site/overview'"
+                   class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">返回分站管理</router-link>
+    </div>
+
+<!-- 🧭 92 期：原来 11 个区块堆在一页，手机上滑很久还找不到。拆页后导航就这一条 -->
     <nav v-if="site" class="sticky top-0 z-20 -mx-4 md:mx-0 px-4 md:px-0 py-2 mb-4 bg-slate-950/95 backdrop-blur border-b border-slate-800 md:border-none md:bg-transparent">
       <div class="grid grid-cols-4 gap-1.5 md:flex md:flex-wrap md:overflow-visible">
         <button v-for="t in PAGE_TABS" :key="t.key" @click="go(t.key)"
@@ -153,7 +171,7 @@
         <p v-if="stopMsg" class="text-[11px] mt-2" :class="stopMsgOk ? 'text-emerald-400' : 'text-red-400'">{{ stopMsg }}</p>
       </section>
 
-      <!-- 🏬 我的分站（多站时用来切换；也在这里开新站）-->
+    <!-- 🏬 我的分站（多站时用来切换；也在这里开新站）-->
       <section v-if="page === 'overview'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2.5">
           <h2 class="font-bold text-sm text-white">{{ isStaffRole ? '全部分站' : '我的分站' }} <span class="text-slate-500 font-normal">（{{ sitesList.length }} 个）</span></h2>
@@ -589,6 +607,18 @@ const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 
 // 员工视角：这里列的是**全部**分站（GET /api/sites 对 staff 返回全量），
 // 所以标题与文案不能写「我的分站」
 const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.userInfo?.role))
+// 员工看到的这一页有**两种身份**，必须一眼分清：
+//   概览 tab    → 分站管理（全部站列表，主站管理员视角）
+//   其它 tab    → 站长后台（某个站自己的后台，视同站长本人）
+const heading = computed(() => {
+  if (!isStaffRole.value) return '我的分站'
+  return page.value === 'overview' ? '分站管理' : '站长后台'
+})
+const subheading = computed(() => {
+  if (!isStaffRole.value) return '改名字、换模板、填收款、绑域名、看收益 —— 都在这里'
+  if (page.value === 'overview') return '全部站点的运营情况 —— 点下面任意一个进入它的站长后台'
+  return `#${site.value?.id ?? ''} ${site.value?.name ?? ''} · 你正以这个站站长的身份操作`
+})
 const plan = ref({ site_monthly: 99, agent_monthly: 99, renew_days: 30 })
 const saving = ref(false)
 const creating = ref(false)

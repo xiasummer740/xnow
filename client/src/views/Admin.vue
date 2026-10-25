@@ -536,6 +536,17 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
     <div class="max-w-7xl mx-auto space-y-6 pb-20 relative z-10">
         <div v-if="loading" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex flex-col items-center pt-32 rounded-3xl"><div class="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(251,191,36,0.5)]"></div><div class="text-amber-400 font-black mt-6 text-lg tracking-widest animate-pulse">正在与上游进行绝对实时同步...</div><div class="text-slate-400 text-xs mt-2">拉取最新数据中，请稍候</div></div>
         
+        <!-- 主站管理员身份条：这一页是全站后台，不是某个站的站长后台（110 期，祥哥要求分清） -->
+        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-violet-500/40 bg-violet-500/10 px-3 py-2">
+          <span class="text-[10px] font-black px-1.5 py-0.5 rounded bg-violet-500 text-white whitespace-nowrap">主站管理员</span>
+          <span class="text-[11px] text-violet-200">
+            管理密室 —— 全站用户 / 订单 / 资金 / 配置。
+            <span class="text-violet-300/70">站长后台不在这里，在「分站管理」里点进某个站。</span>
+          </span>
+          <router-link to="/my-site"
+                       class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 whitespace-nowrap">去分站管理 →</router-link>
+        </div>
+
         <!-- Tab 导航 -->
         <div class="sticky top-0 z-40 -mx-4 md:-mx-6 px-4 md:px-6 bg-slate-900/95 backdrop-blur-xl border-b border-slate-700 flex flex-wrap gap-0.5 py-2 mb-6">
           <button v-for="t in tabs" :key="t.key" @click="activeTab = t.key"
