@@ -36,23 +36,57 @@
     <!-- 💰 110 期：没有代理也能开站，代理只是进货价更低。
          所以这里不再拦人，只在建站表单上方挂一句「开代理更划算」。 -->
 
-    <!-- 还没有分站 → 引导去宣传页（110 期：入口页要能说服人，不能只是一张表单） -->
-    <div v-else-if="!site" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6">
-      <h2 class="font-bold text-lg mb-1.5">你还没有分站</h2>
-      <p class="text-xs text-slate-400 leading-relaxed mb-4">
-        ¥{{ plan.site_monthly }}/月 开一个，10 分钟装修完就能卖：<br />
-        自己的站名和域名 · 客户充值的钱进你自己的收款账户 · 下单自动交付 · 不抽成。
-      </p>
-      <ul class="space-y-1.5 mb-4">
-        <li v-for="b in noSitePerks" :key="b" class="flex gap-2 text-[11px] text-slate-300">
-          <span class="text-emerald-400 shrink-0">✓</span><span>{{ b }}</span>
-        </li>
-      </ul>
-      <button @click="$router.push('/my-site/new')"
-        class="w-full py-3 rounded-xl font-black text-sm bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900">
-        看看能给客户卖什么、能赚多少 →
-      </button>
-      <p class="text-[10px] text-slate-500 mt-2 text-center">开通即扣 ¥{{ plan.site_monthly }}，有效期 {{ plan.renew_days }} 天</p>
+    <!-- 还没有分站 → 居中大卡片（祥哥：原来 10px 小灰字、左对齐，没字体没色彩） -->
+    <div v-else-if="!site" class="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/60 px-5 py-10 sm:py-12">
+      <!-- 背景光晕：给纯黑页面一点层次 -->
+      <div class="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-amber-500/15 blur-3xl"></div>
+      <div class="pointer-events-none absolute -bottom-24 right-0 w-64 h-64 rounded-full bg-emerald-500/10 blur-3xl"></div>
+
+      <div class="relative text-center max-w-xl sm:max-w-2xl mx-auto">
+        <!-- 徽章 -->
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-amber-300 tracking-wide">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>开分站
+        </span>
+
+        <!-- 主标题：渐变大字 -->
+        <h2 class="mt-4 text-[26px] sm:text-3xl font-black leading-tight tracking-tight">
+          <span class="bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent">把客户，变成长期收入</span>
+        </h2>
+        <p class="mt-3 text-sm text-slate-300 leading-relaxed">
+          你出客户和品牌，商品、下单、自动交付、对账系统全包。<br />
+          <span class="text-slate-400">10 分钟开张，当天就能卖。</span>
+        </p>
+
+        <!-- 三个数字 -->
+        <div class="mt-6 grid grid-cols-3 gap-2.5">
+          <div v-for="n in heroStats" :key="n.k" class="rounded-2xl border border-slate-800 bg-slate-950/60 px-2 py-3">
+            <div class="text-lg font-black" :class="n.c">{{ n.k }}</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">{{ n.d }}</div>
+          </div>
+        </div>
+
+        <!-- 四个卖点：彩色图标 + 居中 -->
+        <div class="mt-6 grid grid-cols-2 gap-2.5 text-left">
+          <div v-for="f in heroFeatures" :key="f.t" class="flex gap-2.5 rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+            <span class="shrink-0 w-8 h-8 rounded-xl grid place-items-center text-base" :class="f.bg">{{ f.i }}</span>
+            <div class="min-w-0">
+              <div class="text-[13px] font-bold text-slate-100">{{ f.t }}</div>
+              <div class="text-[11px] text-slate-500 leading-relaxed mt-0.5">{{ f.d }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CTA -->
+        <button @click="$router.push('/my-site/new')"
+          class="mt-7 w-full sm:w-auto sm:px-10 py-3.5 rounded-2xl font-black text-base text-slate-900
+                 bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500
+                 shadow-lg shadow-amber-500/25 hover:brightness-105 active:scale-[0.99] transition">
+          开通我的分站 · ¥{{ plan.site_monthly }}/月 →
+        </button>
+        <p class="mt-3 text-[11px] text-slate-500 px-10">
+          开通即扣 ¥{{ plan.site_monthly }}，有效期 {{ plan.renew_days }} 天 · 不抽成，卖多少都是你的
+        </p>
+      </div>
     </div>
 
     <!-- 已有分站 -->
@@ -1112,12 +1146,17 @@ const save = async (silent = false) => {
   } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
 }
 
-// 无站时宣传页上的卖点（文案与 /my-site/new 保持一致口径）
-const noSitePerks = [
-  '自己的站名 / 域名 / 模板 / 配色，客户看不出背后是谁',
-  '客户充值的钱进你自己的收款商户，不经过平台',
-  '客户下单自动交付，不用手工发货',
-  '不抽成 —— 卖多少都是你的',
+// 无站时的居中大卡片（文案与 /my-site/new 一致）
+const heroStats = [
+  { k: '¥99', d: '每月 / 每站', c: 'text-amber-300' },
+  { k: '10 分钟', d: '开完就能卖', c: 'text-emerald-400' },
+  { k: '不抽成', d: '全归你', c: 'text-slate-100' },
+]
+const heroFeatures = [
+  { i: '🎨', t: '你的品牌', d: '站名、域名、模板随便换', bg: 'bg-pink-500/15 text-pink-300' },
+  { i: '💳', t: '钱进你账户', d: '客户充值进你的收款商户', bg: 'bg-sky-500/15 text-sky-300' },
+  { i: '⚡', t: '自动交付', d: '下单即发，不用手工', bg: 'bg-amber-500/15 text-amber-300' },
+  { i: '📈', t: '价格你定', d: '整站加价，单服务也能改', bg: 'bg-violet-500/15 text-violet-300' },
 ]
 
 // 🚦 停站后的三种恢复动作
