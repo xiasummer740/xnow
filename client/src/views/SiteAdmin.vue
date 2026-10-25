@@ -723,7 +723,7 @@ const form = ref({
     icon_style: '', icon_shape: '',
   // 71期：背景色 / 背景图 / 字号 —— 之前只有首页悬浮编辑器能改，
   // 站长在后台面板里找不到，等于「设置里配不全」。
-  bg_color: '', bg_image: '', font_scale: '',
+  bg_color: '', bg_image: '', bg_mode: '', font_scale: '',
       // 🎨 各模块自己的背景 { 模块: { bg, img } }
       sectionStyles: {},
   bufpay_id: '', bufpay_key: '', cryptomus_id: '', cryptomus_key: '',
@@ -914,7 +914,7 @@ const load = async () => {
         announcement: s.announcement || '',
         template: s.template || 'classic', color: s.color || 'cyan', accent: s.accent || '',
         ui_radius: s.ui_radius || '', ui_density: s.ui_density || '',
-        bg_color: s.bg_color || '', bg_image: s.bg_image || '', font_scale: s.font_scale || '',
+        bg_color: s.bg_color || '', bg_image: s.bg_image || '', bg_mode: s.bg_mode || '', font_scale: s.font_scale || '',
       sectionStyles: (() => {
         try { return s.section_styles ? JSON.parse(s.section_styles) : {}; } catch { return {}; }
       })(),
@@ -1042,7 +1042,7 @@ const save = async (silent = false) => {
       announcement: form.value.announcement,
       template: form.value.template, color: form.value.color, accent: form.value.accent,
       ui_radius: form.value.ui_radius, ui_density: form.value.ui_density,
-      bg_color: form.value.bg_color || '', bg_image: form.value.bg_image || '', font_scale: form.value.font_scale || '',
+      bg_color: form.value.bg_color || '', bg_image: form.value.bg_image || '', bg_mode: form.value.bg_mode || '', font_scale: form.value.font_scale || '',
       section_styles: JSON.stringify(form.value.sectionStyles || {}),
       card_style: form.value.card_style, font_style: form.value.font_style,
       icon_style: form.value.icon_style, icon_shape: form.value.icon_shape,

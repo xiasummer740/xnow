@@ -88,6 +88,8 @@ router.get('/config', async (req, res) => {
       data.font_style = req.site.font_style || '';
     data.icon_style = req.site.icon_style || '';
     data.icon_shape = req.site.icon_shape || '';
+  // 🖼 背景图铺法（cover / contain / tile）
+  data.bg_mode = req.site.bg_mode || '';
   // 🎨 各模块自己的背景（颜色 / 渐变 / 图）
   if (req.site.section_styles) {
     try { data.section_styles = JSON.parse(req.site.section_styles); } catch { data.section_styles = null; }

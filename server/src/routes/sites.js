@@ -954,7 +954,7 @@ router.put('/:id', authenticate, async (req, res) => {
             hero_btn1_text, hero_btn1_url, hero_btn2_text, hero_btn2_url, hero_bg_url,
             bufpay_id, bufpay_key, cryptomus_id, cryptomus_key,
             discount_rate, discount_label, discount_until,
-    bg_color, bg_image, font_scale, section_styles } = req.body;
+    bg_color, bg_image, font_scale, section_styles, bg_mode } = req.body;
     if (name !== undefined) site.name = String(name).trim();
     if (logo !== undefined) site.logo = logo;
 
@@ -1017,6 +1017,15 @@ router.put('/:id', authenticate, async (req, res) => {
       clean[key] = { bg, img };
     }
     site.section_styles = Object.keys(clean).length ? JSON.stringify(clean) : null;
+  }
+  // 🖼 背景图的铺法：cover=铺满（放大裁切）/ contain=整张完整显示 / tile=原图平铺
+  if (bg_mode !== undefined) {
+    const MODES = ['cover', 'contain', 'tile'];
+    const v = String(bg_mode || '').trim();
+    if (v && !MODES.includes(v)) {
+      return res.json({ status: 'error', message: '背景图铺法只能是 铺满 / 完整 / 平铺' });
+    }
+    site.bg_mode = v || null;
   }
   // 🎨 背景图：只接受本站上传目录里的相对路径
   if (bg_image !== undefined) {

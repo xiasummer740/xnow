@@ -27,7 +27,10 @@ const Site = sequelize.define('Site', {
   icon_shape: { type: DataTypes.STRING(12), allowNull: true },
   // 🎨 110 期（祥哥：各模块和背景都可以自定义背景颜色和图片）
   //    JSON：{ audience: {bg:'grad4', img:'/uploads/x.png'}, faq: {bg:'#101820'} }
-  section_styles: { type: DataTypes.TEXT, allowNull: true },  // none | soft | circle
+  section_styles: { type: DataTypes.TEXT, allowNull: true },
+  // 🖼 110 期（祥哥：图片背景被放大了，能适应平铺屏幕吗）
+  //    cover=铺满(会放大裁切) / contain=完整显示(可能留边) / tile=原图平铺(不放大)
+  bg_mode: { type: DataTypes.STRING(16), allowNull: true },  // none | soft | circle
   btn_shape: { type: DataTypes.STRING(12), allowNull: true },   // pill | rounded | square
   hero_layout: { type: DataTypes.STRING(12), allowNull: true }, // center | split | banner
   // 🎨 四十一期：全方位 DIY —— 首屏版式 / 服务列表版式（结构级，不只是换色）

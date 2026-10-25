@@ -3170,3 +3170,46 @@ el.style.setProperty('--site-bg-image',
 - 图片：`POST /api/sites/:id/upload` → `sites.bg_image`，只接受 `/uploads/` 相对路径
 - 效果：`stores/app.ts` 的 `applyTheme()` → `--site-bg` / `--site-bg-image`
   → `site-theme.css` 的 `html[data-template] #app-root` 规则
+---
+## 六十、背景图的三种铺法（110 期，祥哥：图被放大了，能适应平铺屏幕吗）
+
+### 问题
+
+整站背景图原来写死 `background-size: cover` —— 小图 / 手机截图作背景会被**放大裁切**，
+只剩中间一小块，看着就是"糊成一片"。
+
+### 现在三档，站长自己选
+
+```
+这张图怎么铺
+[铺满]        放大铺满，可能裁掉边     ← 原来唯一的行为，照片类合适
+[完整]        整张显示，可能留边       ← 想看清整张图就选这个
+[平铺]        原图大小，重复铺         ← 纹理 / 图案 / 小图合适，不放大
+```
+
+存 `sites.bg_mode`（`cover` / `contain` / `tile`，空=铺满，向后兼容），
+前端落到 `--site-bg-size` / `--site-bg-repeat`，由 `site-theme.css` 那句 `!important` 规则消费。
+
+| 选项 | background-size | repeat |
+|---|---|---|
+| 铺满（默认） | `cover` | `no-repeat` |
+| 完整 | `contain` | `no-repeat` |
+| 平铺 | `auto`（原图尺寸） | `repeat` |
+
+### 实测
+
+```
+bg_mode=cover   → 分站更新成功
+bg_mode=contain → 分站更新成功
+bg_mode=tile    → 分站更新成功
+bg_mode=乱写的  → 背景图铺法只能是 铺满 / 完整 / 平铺   ✅
+客户站 contain  → background-size: contain, contain / repeat: no-repeat ✅
+客户站 tile     → background-size: auto, auto / repeat: repeat, repeat   ✅
+```
+
+### 地方
+
+- 字段：`sites.bg_mode`（Beta 已 ALTER，生产待上）
+- 白名单：`server/src/routes/sites.js`
+- 界面：`DesignStudio.vue` 的 `BG_MODES`
+- 生效：`stores/app.ts` 的 `applyTheme()` → `site-theme.css`

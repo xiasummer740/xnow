@@ -231,9 +231,24 @@
         <span v-if="form.bg_image" class="text-[10px] text-emerald-400">已用自定义背景图</span>
         <span v-else class="text-[10px] text-slate-500">只用底色</span>
       </div>
-      <p v-if="form.bg_image" class="text-[10px] text-slate-500 mt-1.5">
-        图上面自动压了一层淡暗色，不然亮图会把白字吃掉。
-      </p>
+      <!-- 🖼 铺法：祥哥说「图片背景被放大了，能适应平铺屏幕吗」-->
+      <div v-if="form.bg_image" class="mt-2.5">
+        <div class="text-[10px] text-slate-400 mb-1">这张图怎么铺</div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button v-for="m in BG_MODES" :key="m.key" type="button"
+            @click="form.bg_mode = m.key"
+            class="px-2 py-2 rounded-lg border text-[10px] leading-tight transition text-left"
+            :class="(form.bg_mode || 'cover') === m.key
+              ? 'bg-amber-500/20 border-amber-400 text-amber-200'
+              : 'bg-slate-950 border-slate-700 text-slate-400'">
+            <span class="block font-bold">{{ m.name }}</span>
+            <span class="block opacity-70">{{ m.hint }}</span>
+          </button>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-1.5">
+          图上面自动压了一层淡暗色，不然亮图会把白字吃掉。
+        </p>
+      </div>
     </section>
 
     <!-- ── 首页模块：拖动排序 + 开关 ───────────────────────────── -->
@@ -611,6 +626,12 @@ const moduleTitle = (k) => props.moduleLabel(k)
 // 🎨 110 期（祥哥：各模块和背景都可以自定义背景颜色和图片）
 //    每个模块可以单独设背景色/渐变/图，存在 form.sectionStyles[模块] = { bg, img }
 const modBgOpen = ref('')
+// 🖼 背景图的铺法（110 期：祥哥反馈图被放大了）
+const BG_MODES = [
+  { key: 'cover', name: '铺满', hint: '放大铺满，可能裁掉边' },
+  { key: 'contain', name: '完整', hint: '整张显示，可能留边' },
+  { key: 'tile', name: '平铺', hint: '原图大小，重复铺' }
+];
 const MOD_SWATCHES = [
   { key: '', name: '跟随整体' },
   { key: '#0b1220', name: '深蓝' },

@@ -487,9 +487,10 @@ html[data-template="magazine"] #app-root,
 html[data-template="glass"] #app-root {
   background: var(--site-bg, #04070f) !important;
   background-image: var(--site-bg-image, none) !important;
-  background-size: cover !important;
+  /* 铺法由站长的选择决定（铺满 / 完整 / 平铺），没选就是铺满 */
+  background-size: var(--site-bg-size, cover) !important;
   background-position: center !important;
-  background-repeat: no-repeat !important;
+  background-repeat: var(--site-bg-repeat, no-repeat) !important;
 }
 /* 字号档位：小 0.94 / 标准 1 / 大 1.08（用根字号缩放，rem 单位全套跟着变）*/
 html[data-template] { font-size: calc(16px * var(--site-font-scale, 1)) !important; }

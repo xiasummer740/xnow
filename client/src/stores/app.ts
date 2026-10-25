@@ -43,7 +43,7 @@ export const useAppStore = defineStore('app', {
     // 🎨 110 期：图标风格（品牌彩色/品牌单色/表情/纯文字）+ 图标形状（无底/圆角/圆形）
     iconStyle: '', iconShape: '',
     // 🎨 六十三期：可视化编辑器的外观三板斧（背景色 / 背景图 / 字号档位）
-    bgColor: '', bgImage: '', fontScale: '',
+    bgColor: '', bgImage: '', bgMode: '', fontScale: '',
     // 🎨 110 期：每个首页模块自己的背景 { 模块: { bg, img } }
     sectionStyles: {} as Record<string, { bg?: string; img?: string }>,
     // 🎨 四十一期：全方位 DIY
@@ -124,6 +124,7 @@ export const useAppStore = defineStore('app', {
     // 🎨 六十三期：背景色 / 背景图 / 字号档位
     this.bgColor = d.bg_color || '';
     this.bgImage = d.bg_image || '';
+    this.bgMode = d.bg_mode || '';
     this.fontScale = d.font_scale || '';
       // 🎨 四十一期：结构级 DIY + 自定义 CSS + 站点图标
       this.heroVariant = d.hero_variant || '';
@@ -176,6 +177,7 @@ export const useAppStore = defineStore('app', {
     this.heroLayout = map.heroLayout || '';
     this.bgColor = map.bgColor || '';
     this.bgImage = map.bgImage || '';
+    this.bgMode = map.bgMode || '';
     this.fontScale = map.fontScale || '';
     this.heroVariant = map.heroVariant || '';
     this.servicesVariant = map.servicesVariant || '';
@@ -295,6 +297,19 @@ export const useAppStore = defineStore('app', {
         );
       } else {
         el.style.setProperty('--site-bg-image', 'none');
+      }
+      // 🖼 铺法：cover 会把图放大裁切（照片常见），contain 保证整张看得见（可能留边），
+      //    tile 用原图平铺（不放大，适合纹理/图案）。默认 cover，和以前一致。
+      const mode = String(this.bgMode || 'cover');
+      if (mode === 'contain') {
+        el.style.setProperty('--site-bg-size', 'contain');
+        el.style.setProperty('--site-bg-repeat', 'no-repeat');
+      } else if (mode === 'tile') {
+        el.style.setProperty('--site-bg-size', 'auto');
+        el.style.setProperty('--site-bg-repeat', 'repeat');
+      } else {
+        el.style.setProperty('--site-bg-size', 'cover');
+        el.style.setProperty('--site-bg-repeat', 'no-repeat');
       }
       const scale = { sm: '0.94', md: '1', lg: '1.08' }[String(this.fontScale || '')];
       if (scale && scale !== '1') el.style.setProperty('--site-font-scale', scale);
