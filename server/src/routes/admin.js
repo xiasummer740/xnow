@@ -1146,8 +1146,9 @@ router.get('/site-customers', authenticate, async (req, res) => {
     const orderSql = SITE_CUSTOMER_SORTS[sort] || SITE_CUSTOMER_SORTS.new;
 
     const [items] = await sequelize.query(`
-      SELECT u.id, u.phone, u.email, u.balance, u.site_id, u.is_banned,
-             u.created_at, u.last_login_at, u.last_login_ip, u.inviter_id,
+      SELECT u.id, u.phone, u.email, u.balance, u.site_id, u.is_banned, u.role,
+             u.created_at, u.last_login_at, u.last_login_ip, u.register_ip,
+             u.inviter_id, u.admin_note, u.total_commission,
              s.name AS site_name,
              COALESCE(NULLIF(s.custom_domain, ''), s.domain) AS site_domain,
              s.status AS site_status, s.expire_at AS site_expire_at,
