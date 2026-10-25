@@ -2,7 +2,7 @@
 // 💰 站长自己的价格体系：单服务定价 + 活动折扣
 //    后端：GET/PUT /api/sites/:id/prices、PUT /api/sites/:id（折扣三字段）
 //    红线：任何价格乘上折扣都不得低于站长的进货价，后端会拦（这里只负责把话说清楚）。
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useUserStore } from '../../stores/user';
 
 const props = defineProps({
@@ -98,15 +98,6 @@ function quickPresets(it) {
   ];
 }
 
-// 整类一键：进货价 × (1 + 毛利%)
-function applyBatch() {
-  const m = Number(batchMargin.value);
-  if (!isFinite(m) || m < 0) return;
-  for (const it of items.value) {
-    draft.value[it.service_id] = String(Number((Number(it.cost_per_1k) * (1 + m / 100)).toFixed(4)));
-  }
-  flash(`已按「进货价 +${m}%」填好 ${items.value.length} 条，确认后点「保存定价」`, true);
-}
 function clearDrafts() {
   for (const it of items.value) {
     draft.value[it.service_id] = isOverride(it) ? String(it.override) : '';
@@ -139,42 +130,12 @@ function toggleGroup(groupItems) {
   }
 }
 function clearPicked() { picked.value = []; }
-
-const pickMargin = ref(30);
-const pickFixed = ref('');
-
-// 勾选的这一批：按「进货价 + N%」填进草稿（确认后照旧点保存定价）
-function fillPickedMargin() {
-  const m = Number(pickMargin.value);
-  if (!isFinite(m) || m < 0) return flash('加价率要填 0 或更大', false);
-  let n = 0;
-  for (const it of items.value) {
-    if (!isPicked(it)) continue;
-    draft.value[it.service_id] = String(Number((Number(it.cost_per_1k) * (1 + m / 100)).toFixed(4)));
-    n++;
-  }
-  flash(`已给勾选的 ${n} 条填好「进货价 +${m}%」，确认后点保存定价`, !!n);
-}
-function fillPickedFixed() {
-  const v = parseFloat(pickFixed.value);
-  if (!isFinite(v) || v <= 0) return flash('价格要大于 0', false);
-  let n = 0;
-  for (const it of items.value) {
-    if (!isPicked(it)) continue;
-    draft.value[it.service_id] = String(v);
-    n++;
-  }
-  flash(`已把勾选的 ${n} 条统一填成 ¥${v}`, !!n);
-}
-function fillPickedClear() {
-  let n = 0;
-  for (const it of items.value) {
-    if (!isPicked(it)) continue;
-    draft.value[it.service_id] = '';
-    n++;
-  }
-  flash(`已把勾选的 ${n} 条改成「跟随全站统一价」（需点保存定价）`, !!n);
-}
+// 📌 110 期（祥哥：定价太多了，乱七八糟的）
+//    勾了服务就把「改哪些」自动切到"勾选的 N 条"，省得他再选一次。
+watch(() => picked.value.length, (n, prev) => {
+  if (n > 0 && prev === 0) bulkScope.value = 'picked';
+  if (n === 0 && bulkScope.value === 'picked') bulkScope.value = 'platform';
+});
 
 // 整批改价：直接落库（服务端按条件扫全表，不怕 200 条上限）
 const bulkScope = ref('platform');   // platform | category | q | all
@@ -205,7 +166,9 @@ async function runBulk() {
   if (bulkScope.value === 'category' && !activeCategory.value) return flash('先在下面选一个分类，再整批改', false);
   if (bulkScope.value === 'platform' && !activePlatform.value) return flash('先选一个平台，再整批改', false);
   if (bulkScope.value === 'q' && !query.value.trim()) return flash('先在搜索框填关键词', false);
-  const scopeName = bulkScope.value === 'platform' ? `平台「${activePlatform.value}」`
+  if (bulkScope.value === 'picked' && !picked.value.length) return flash('先在下面勾选要改的服务', false);
+  const scopeName = bulkScope.value === 'picked' ? `勾选的 ${picked.value.length} 条`
+    : bulkScope.value === 'platform' ? `平台「${activePlatform.value}」`
     : bulkScope.value === 'category' ? `分类「${shortCat(activeCategory.value)}」`
     : bulkScope.value === 'q' ? `搜到「${query.value.trim()}」的服务`
     : '全部服务';
@@ -226,6 +189,7 @@ async function runBulk() {
         mode: bulkMode.value,
         margin_pct: Number(bulkMargin.value),
         rate: bulkFixed.value,
+        ids: picked.value.map(Number),
       }),
     });
     const d = await r.json();
@@ -384,51 +348,6 @@ onMounted(load);
 
 <template>
   <div class="space-y-5">
-    <!-- 🎫 折扣促销 -->
-    <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
-      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <h2 class="font-bold text-sm text-emerald-400">折扣促销（给你的客户打折）</h2>
-        <span class="text-[10px] text-slate-500">{{ discountText }}</span>
-      </div>
-
-      <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
-        打折只影响你的客户看到的价格，你的进货价不变。系统有底线：打完折也不许低于你的进货价，填太狠会直接拦下。
-      </p>
-
-      <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
-        <button v-for="opt in [{r:1,t:'不打折'},{r:0.95,t:'95 折'},{r:0.9,t:'9 折'},{r:0.85,t:'85 折'},{r:0.8,t:'8 折'},{r:0.75,t:'75 折'}]"
-                :key="opt.r"
-                @click="dRate = opt.r"
-                :class="['py-2 rounded-lg text-xs font-bold border transition',
-                         Number(dRate) === opt.r ? 'bg-emerald-500 text-slate-900 border-emerald-400' : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-emerald-500/60']">
-          {{ opt.t }}
-        </button>
-      </div>
-
-      <div class="grid md:grid-cols-3 gap-3">
-        <div>
-          <label class="block text-xs text-slate-400 mb-1">首页宣传语（可留空）</label>
-          <input v-model="dLabel" maxlength="40" placeholder="例：开业 9 折，仅限本周"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 mb-1">活动时长</label>
-          <select v-model.number="dDays" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm">
-            <option :value="0">长期有效</option>
-            <option :value="3">3 天后结束</option>
-            <option :value="7">7 天后结束</option>
-            <option :value="30">30 天后结束</option>
-          </select>
-        </div>
-        <div class="flex items-end">
-          <button @click="saveDiscount" :disabled="saving"
-                  class="w-full py-2 rounded-lg bg-emerald-500 text-slate-900 text-sm font-bold hover:bg-emerald-400 disabled:opacity-50">
-            {{ saving ? '保存中…' : '保存折扣' }}
-          </button>
-        </div>
-      </div>
-    </section>
-
     <!-- 💰 单服务定价 -->
     <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -440,79 +359,56 @@ onMounted(load);
         点任意一条服务就能改价，不用一个个敲小方框。留空 = 跟随全站统一价；价格单位是「每 1000 个」。
       </p>
 
-      <!-- ⚡ 批量：整类一键定价（97 期新增，省掉逐条改的麻烦） -->
-      <div class="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 mb-3">
+      <!-- ⚡ 批量调价（110 期合并：原来这里有「整类一键定价」「整批改价」「勾选填充」三套，
+           祥哥说"定价太多了，乱七八糟的" —— 现在只剩这一块，选范围 + 选改法 + 执行） -->
+      <div class="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 mb-3">
         <div class="flex items-center justify-between flex-wrap gap-1 mb-2">
-          <span class="text-[11px] font-bold text-amber-300">整类一键定价</span>
-          <span class="text-[10px] text-slate-500">按「进货价 + 毛利」一次算好，之后还能单条微调</span>
+          <span class="text-[11px] font-bold text-sky-300">批量调价</span>
+          <span class="text-[10px] text-slate-500">直接生效，不受"只显示 200 条"限制</span>
         </div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-[11px] text-slate-400">在进货价上加</span>
-          <input v-model.number="batchMargin" type="number" step="5" min="0" max="300" inputmode="numeric"
-                 class="w-16 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-1">改哪些</label>
+            <select v-model="bulkScope" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
+              <option value="picked" :disabled="!picked.length">勾选的 {{ picked.length }} 条</option>
+              <option value="category">当前分类{{ activeCategory ? '（' + shortCat(activeCategory) + '）' : '' }}</option>
+              <option value="platform">当前平台{{ activePlatform ? '（' + activePlatform + '）' : '' }}</option>
+              <option value="q">搜索关键词</option>
+              <option value="all">全部服务</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-1">怎么改</label>
+            <select v-model="bulkMode" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
+              <option value="margin">进货价 + N%</option>
+              <option value="rate">统一价（每 1000）</option>
+              <option value="clear">恢复跟随全站统一价</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="bulkMode === 'margin'" class="flex items-center gap-2 mt-2">
+          <span class="text-[11px] text-slate-400">加</span>
+          <input v-model.number="bulkMargin" type="number" step="5" min="0" max="300" inputmode="numeric"
+                 class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
           <span class="text-[11px] text-slate-400">%</span>
-          <button @click="applyBatch" :disabled="!items.length"
-                  class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-900 text-[11px] font-bold disabled:opacity-40">
-            应用到当前 {{ items.length }} 条
-          </button>
-          <button @click="clearDrafts" :disabled="!changed.length"
-                  class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[11px] disabled:opacity-40">
-            撤销未保存
-          </button>
+          <span class="text-[10px] text-slate-500">越高客户付得越多、你赚得越多</span>
         </div>
+        <div v-else-if="bulkMode === 'rate'" class="flex items-center gap-2 mt-2">
+          <span class="text-[11px] text-slate-400">统一卖</span>
+          <input v-model="bulkFixed" type="text" inputmode="decimal" placeholder="例如 45"
+                 class="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
+          <span class="text-[11px] text-slate-400">元 / 千</span>
+        </div>
+        <button @click="runBulk" :disabled="bulkBusy"
+                class="w-full mt-2 py-2 rounded-lg bg-sky-500 text-slate-900 text-[12px] font-bold disabled:opacity-40">
+          {{ bulkBusy ? '正在改…' : '执行批量调价' }}
+        </button>
+        <p class="text-[10px] text-slate-500 leading-relaxed mt-1">
+          低于你的进货价的方案会被整批拦下（一条都不会改动），不会让你亏本卖。
+        </p>
       </div>
-
-      <!-- ⚡ 110 期：整批改价（服务端扫全表，不受「只显示 200 条」限制） -->
-      <details class="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3 mb-3">
-        <summary class="text-[11px] font-bold text-sky-300 cursor-pointer select-none">
-          整批改价 —— 一个平台或一个分类，几千条也能一次改完
-          <span class="text-slate-500 font-normal">（直接生效，比一条条点快得多）</span>
-        </summary>
-        <div class="mt-3 space-y-2">
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-[10px] text-slate-400 mb-1">改哪些</label>
-              <select v-model="bulkScope" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
-                <option value="platform">当前平台{{ activePlatform ? '（' + activePlatform + '）' : '' }}</option>
-                <option value="category">当前分类{{ activeCategory ? '（' + shortCat(activeCategory) + '）' : '' }}</option>
-                <option value="q">搜索关键词</option>
-                <option value="all">全部服务</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-400 mb-1">怎么改</label>
-              <select v-model="bulkMode" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
-                <option value="margin">进货价 + N%</option>
-                <option value="rate">统一价（每 1000）</option>
-                <option value="clear">恢复跟随全站统一价</option>
-              </select>
-            </div>
-          </div>
-          <div v-if="bulkMode === 'margin'" class="flex items-center gap-2">
-            <span class="text-[11px] text-slate-400">在进货价上加</span>
-            <input v-model.number="bulkMargin" type="number" step="5" min="0" max="300" inputmode="numeric"
-                   class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
-            <span class="text-[11px] text-slate-400">%</span>
-            <span class="text-[10px] text-slate-500">越高客户付得越多、你赚得越多</span>
-          </div>
-          <div v-else-if="bulkMode === 'rate'" class="flex items-center gap-2">
-            <span class="text-[11px] text-slate-400">统一卖</span>
-            <input v-model="bulkFixed" type="text" inputmode="decimal" placeholder="例如 45"
-                   class="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-right" />
-            <span class="text-[11px] text-slate-400">元 / 千</span>
-          </div>
-          <button @click="runBulk" :disabled="bulkBusy"
-                  class="w-full py-2 rounded-lg bg-sky-500 text-slate-900 text-[12px] font-bold disabled:opacity-40">
-            {{ bulkBusy ? '正在改…' : '执行整批改价' }}
-          </button>
-          <p class="text-[10px] text-slate-500 leading-relaxed">
-            低于你的进货价的方案会被整批拦下（一条都不会改动），不会让你亏本卖。
-          </p>
-        </div>
-      </details>
-      <!-- ✅ 整批改价结果放折叠面板外面：执行完 load() 一刷新，details 会自动收回，
-           放在里面就等于看不见（110 期实测踩到） -->
-      <div v-if="bulkResult" class="rounded-xl px-3 py-2.5 text-[12px] font-bold leading-relaxed"
+      <!-- ✅ 结果放折叠外面，执行完一定看得见 -->
+      <div v-if="bulkResult" class="rounded-xl px-3 py-2.5 mb-3 text-[12px] font-bold leading-relaxed"
            :class="bulkResultOk ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/15 text-red-300 border border-red-500/40'">
         {{ bulkResultOk ? '✅ ' : '❌ ' }}{{ bulkResult }}
       </div>
@@ -568,18 +464,9 @@ onMounted(load);
             <button @click="clearPicked" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">取消</button>
           </div>
         </div>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <input v-model.number="pickMargin" type="number" step="5" min="0" inputmode="numeric"
-                 class="w-14 bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1 text-[12px] text-right" />
-          <span class="text-[10px] text-slate-400">%</span>
-          <button @click="fillPickedMargin" class="px-2 py-1 rounded-md bg-amber-500 text-slate-900 text-[10px] font-bold">按进货价加价</button>
-          <span class="text-slate-600">|</span>
-          <input v-model="pickFixed" type="text" inputmode="decimal" placeholder="¥"
-                 class="w-16 bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1 text-[12px] text-right" />
-          <button @click="fillPickedFixed" class="px-2 py-1 rounded-md bg-slate-700 text-[10px] text-slate-100">统一成这个价</button>
-          <button @click="fillPickedClear" class="px-2 py-1 rounded-md bg-slate-800 text-[10px] text-slate-300">恢复跟随全站价</button>
-        </div>
-        <p class="text-[10px] text-amber-400/80">填好之后，点最下面的「保存定价」才真正生效。</p>
+        <p class="text-[10px] text-amber-200/80 leading-relaxed">
+          用上面的「批量调价」（改哪些已自动切到这 {{ picked.length }} 条），或逐条点「改价」再点下方保存。
+        </p>
       </div>
 
       <!-- ⚠️ 这里不能写 v-else：勾选后列表还得继续显示（第一版写成 v-else，勾一条整张列表就消失了）-->
@@ -685,5 +572,50 @@ onMounted(load);
         <p class="text-[10px] text-slate-600 mt-2 text-center">改完点列表下方的「保存定价」，一次提交所有改动</p>
       </div>
     </div>
+    <!-- 🎫 折扣促销（110 期：从最上面挪到最下面并折叠 —— 不是每天都要动，不该占首屏） -->
+    <details class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
+      <summary class="cursor-pointer select-none text-sm font-bold text-emerald-400">
+        折扣促销（给你的客户打折）<span class="text-slate-500 font-normal text-[11px]">· {{ discountText }}</span>
+      </summary>
+
+      <div class="mt-3">
+        <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
+          打折只影响你的客户看到的价格，你的进货价不变。系统有底线：打完折也不许低于你的进货价，填太狠会直接拦下。
+        </p>
+
+        <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
+          <button v-for="opt in [{r:1,t:'不打折'},{r:0.95,t:'95 折'},{r:0.9,t:'9 折'},{r:0.85,t:'85 折'},{r:0.8,t:'8 折'},{r:0.75,t:'75 折'}]"
+                  :key="opt.r"
+                  @click="dRate = opt.r"
+                  :class="['py-2 rounded-lg text-xs font-bold border transition',
+                           Number(dRate) === opt.r ? 'bg-emerald-500 text-slate-900 border-emerald-400' : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-emerald-500/60']">
+            {{ opt.t }}
+          </button>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">首页宣传语（可留空）</label>
+            <input v-model="dLabel" maxlength="40" placeholder="例：开业 9 折，仅限本周"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">活动时长</label>
+            <select v-model.number="dDays" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+              <option :value="0">长期有效</option>
+              <option :value="3">3 天后结束</option>
+              <option :value="7">7 天后结束</option>
+              <option :value="30">30 天后结束</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button @click="saveDiscount" :disabled="saving"
+                    class="w-full py-2 rounded-lg bg-emerald-500 text-slate-900 text-sm font-bold hover:bg-emerald-400 disabled:opacity-50">
+              {{ saving ? '保存中…' : '保存折扣' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 </template>

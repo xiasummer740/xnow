@@ -819,8 +819,14 @@ router.post('/:id/prices/bulk', authenticate, async (req, res) => {
     const category = String(req.body.category || '').trim();
     const keyword = String(req.body.q || '').trim();
 
+    // ✅ 110 期：把「勾选的这几条」也并进同一个接口（原来前端另有一套草稿按钮，站长看不懂）
+    const pickedIds = Array.isArray(req.body.ids)
+      ? req.body.ids.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
+      : [];
+
     if (scope === 'category' && !category) return res.json({ status: 'error', message: '请先选一个分类' });
     if (scope === 'platform' && !platform) return res.json({ status: 'error', message: '请先选一个平台' });
+    if (scope === 'picked' && !pickedIds.length) return res.json({ status: 'error', message: '先勾选要改的服务' });
 
     const { Op } = (await import('sequelize')).default;
 
@@ -838,7 +844,8 @@ router.post('/:id/prices/bulk', authenticate, async (req, res) => {
     };
 
     const where = {};
-    if (scope === 'category') where.category = category;
+    if (scope === 'picked') where.service_id = { [Op.in]: pickedIds };
+    else if (scope === 'category') where.category = category;
     else if (scope === 'q' && keyword) {
       where[Op.or] = [
         { name: { [Op.like]: `%${keyword}%` } },

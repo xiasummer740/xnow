@@ -424,7 +424,8 @@
         <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的成本</p>
       </section>
 
-      <div v-if="page !== 'orders' && page !== 'customers'" class="flex gap-3">
+      <!-- ⚠️ 定价页有自己的「保存定价」，这里再出现「保存全部修改」= 两个保存按钮，站长会懵 -->
+      <div v-if="page !== 'orders' && page !== 'customers' && page !== 'pricing'" class="flex gap-3">
         <button @click="save()" :disabled="saving" class="flex-1 py-3 rounded-xl font-black bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-900 disabled:opacity-50">
           {{ saving ? '保存中…' : '保存全部修改' }}
         </button>
@@ -441,7 +442,7 @@
           {{ saving ? '保存中…' : '保存' }}
         </button>
       </div>
-      <p class="text-[10px] text-slate-600 text-center">修改保存后，你的分站访客刷新页面即可看到新外观</p>
+      <p v-if="page !== 'pricing'" class="text-[10px] text-slate-600 text-center">修改保存后，你的分站访客刷新页面即可看到新外观</p>
     </div>
   </div>
 </template>
