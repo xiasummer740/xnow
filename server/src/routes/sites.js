@@ -989,7 +989,8 @@ router.put('/:id', authenticate, async (req, res) => {
   //    结构 { 模块名: { bg: '' | '#RRGGBB' | 'grad1'..'grad9', img: '' | '/uploads/xxx.png' } }
   //    只认识的模块名才收，别的键直接丢掉，避免前端塞垃圾进来。
   if (section_styles !== undefined) {
-    const MODULE_KEYS = ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta', 'announce', 'stats'];
+    // 只收装修页里真的能设背景的 6 个模块（和 SiteAdmin 的 MODULES 一一对应）
+    const MODULE_KEYS = ['audience', 'steps', 'advantages', 'hot_services', 'faq', 'cta'];
     const GRAD_KEYS = ['grad1', 'grad2', 'grad3', 'grad4', 'grad5', 'grad6', 'grad7', 'grad8', 'grad9'];
     let parsed = {};
     try {
