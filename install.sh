@@ -446,6 +446,17 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
+    # ══ 上传文件（图片/收款码等）══════════════════════════════════════
+    # 没有这条会让 /uploads/xxx.png 落到 SPA 兜底：返回 index.html 且 HTTP 200，
+    # 前端表现为破图，且只看状态码的自检发现不了。文件不存在要老实 404。
+    location /uploads/ {
+        alias /var/www/xnow-uploads/;
+        try_files \$uri =404;
+        expires 7d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
     # 构建产物带内容哈希：内容一变文件名就变，可以放心长缓存
     location /assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";

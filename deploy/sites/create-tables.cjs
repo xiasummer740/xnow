@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const DRY = process.argv.includes('--dry');
+const DRY = process.argv.some((a) => a === '--dry' || a === '--dry-run');
 const envFile = process.env.ENV_FILE || path.join(ROOT, 'server', '.env');
 
 const loadEnv = () => {

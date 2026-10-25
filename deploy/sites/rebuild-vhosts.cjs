@@ -23,7 +23,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const DRY = process.argv.includes('--dry');
+const DRY = process.argv.some((a) => a === '--dry' || a === '--dry-run');
 
 // 让脚本能找到服务端代码（模型、utils、.env 都在 server/ 下）
 // 优先用当前工作目录里的 server/，否则用脚本位置推出来的 server/

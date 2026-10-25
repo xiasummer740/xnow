@@ -56,14 +56,21 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # 🖼️ 站长上传的图片（分站 Logo / 首页背景图）。
-    #    刻意放在 dist **之外**：重新部署会整包替换 dist，放在里面图片会被冲掉。
-    #    注意：这个目录不在 git 里，换机时要单独打包迁移（见 ROLLOUT.md）。
+    # ══ 上传文件（分站 Logo / 首页背景图 / 提现收款码）═══════════════════════
+    # 刻意放在 dist **之外**：重新部署会整包替换 dist，放在里面图片会被冲掉。
+    # 目录来源：server 端 SITE_UPLOAD_DIR，默认 /var/www/xnow-uploads（不在 git 里，
+    # 换机时要单独打包迁移，见 ROLLOUT.md / 备份脚本）。
+    #
+    # 这条规则 2026-10-25 之前线上一直**没有**：/uploads/xxx.png 全部落到下面的
+    # location / 兜底，返回 index.html 且 HTTP 200 —— 前端拿到「一张 HTML 图」，
+    # 表现为破图；而只看状态码的自检永远是绿的（收款码破图就是这么漏的）。
+    # 所以：文件不存在必须老实 404，绝不能回落 SPA。
     location /uploads/ {
         alias /var/www/xnow-uploads/;
+        try_files $uri =404;
         expires 7d;
         add_header Cache-Control "public";
-        try_files $uri =404;
+        access_log off;
     }
 
     # 构建产物带内容哈希：内容一变文件名就变，可以放心长缓存

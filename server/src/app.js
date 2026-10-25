@@ -71,6 +71,9 @@ const globalLimiter = rateLimit({
 const QR_DIR = process.env.SITE_QR_DIR || path.join(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', 'qr');
 app.use('/api/qr', express.static(QR_DIR, { index: false, dotfiles: 'deny', maxAge: '1h' }));
 
+// 🧹 收款码图片每天清一次（留 180 天；审核中的绝不删）
+import('./utils/qrCleanup.js').then((m) => m.startQrCleanup(QR_DIR)).catch(() => {});
+
 app.use('/api/', globalLimiter);
 
 const authLimiter = rateLimit({

@@ -4044,3 +4044,99 @@ acceptance-audit：24/24 通过（其中 4 项只读跳过）
 - 收款码图片只增不删，没有清理任务；量大了要加定时清理（例如只保留最近 6 个月）。
 - 生产主站 nginx 至今没有 `/uploads/` 规则（一直靠 SPA 兜底），主站上任何依赖
   `/uploads/` 的图片都是破的。本次收款码已绕开该问题，但这是老账，登记备查。
+---
+## 八十一、融合上线前的准备（祥哥三条决定 + 一次误跑复盘）
+
+祥哥：「1. 不开例外 2. 可以 3. 修，之后再次审查。确认没问题就要准备上线融合目前正在运营的主站了，不会影响现在主站的运营和用户及数据吧？」
+
+### 决定一：提现驳回后不为例外
+
+维持「一周一次」。驳回后即使只是收款码传错，也要等满 7 天。
+站长后台的驳回提示里会带上原因，避免他不知道为什么又被挡。
+
+### 决定二：收款码图片保留 6 个月，之后自动清理
+
+新增 `server/src/utils/qrCleanup.js`，每天跑一次（启动 3 分钟后先跑一次）：
+
+- 只删 **180 天前**、且文件名是我们自己规则 `qr-s<站号>-<随机>.<ext>` 的文件
+- **审核中（pending）的提现，图一律保留**（查库确认，绝不误删）
+- 数据库记录不动 —— 历史提现要留着对账，只是文件没了
+
+实测（Beta，构造 4 个文件）：旧图删 ✅、pending 旧图留 ✅、新图留 ✅、非本站命名不碰 ✅。
+
+### 决定三：生产主站补 `/uploads/`（这才是"破图"的根）
+
+**这条一直是坏的**：`/etc/nginx/sites-enabled/xnow-spa-https` 只有 `/api/` 和 `/assets/`，
+所有 `/uploads/xxx.png` 落进 `location /` 的 SPA 兜底 → 返回 `index.html` 且 **HTTP 200**。
+前端拿到"一张 HTML 图"= 破图，而只看状态码的自检永远是绿的。
+
+已改（diff 只有两处新增，其余逐字节不动）：
+1. `server_name xnow.taikon.top *.xnow.taikon.top;`
+2. 新增 `location /uploads/ { alias /var/www/xnow-uploads/; try_files $uri =404; ... }`
+
+```
+备份    /var/backups/xnow-nginx-20261025-153258/xnow-spa-https
+nginx -t  successful → reload
+首页 200（标题不变） / assets 200
+真图    /uploads/site-25-….png → 200 image/png，文件头 89504e470d0a1a0a ✅
+不存在   → 404（不再回落 SPA）
+未知子域 foo.xnow.taikon.top → 404（不显示主站首页）
+测试分站 demostore.taikon.top → 200 ✅
+```
+已同步回 `deploy/nginx/production/xnow-spa-https`（存档）与 `install.sh`（模板），
+**违反「手工改过必须回写模板」的坑已堵**。顺带发现存档里原本有**两块** `/uploads/`
+（110 期加的，从没同步到线上），若原样上线会让 `nginx -t` 报 duplicate location，已合并。
+
+### ⚠️ 一次误跑：`--dry` 不等于 `--dry-run`
+
+用 `migrate-columns.cjs --dry` 想看生产会补什么 —— 但脚本只认 `--dry-run`，
+`DRY=false`，**"只报告"变成了真改生产库**。
+
+实际改动（已核对，可逆、无数据风险）：
+```
+orders.idx_orders_site / sites.idx_sites_owner / sites.idx_sites_domain / users.idx_users_site
+—— 4 个索引，都是模型本来就要的；表数据 0 行/31 单/6 用户一行没动
+sites 列数 11、行数 0；users=6 balance=101002.581400 orders=31（与改前一致）
+```
+
+修法：三个脚本统一认 `--dry` 与 `--dry-run`，并加**参数白名单** —— 拼错的开关直接
+`exit 2`，不再"猜着当真跑"。
+
+> 教训：动生产的脚本，"干跑"开关必须是**白名单式**的（只认明确写法），
+> 不能靠"没认出来就当正式执行"。
+
+### 融合上线会不会影响现在的主站？（结论：不会，理由如下）
+
+| 维度 | 情况 |
+|---|---|
+| 数据库 | 只**加**列/加表，从不改不删：`sites` +56 列（现 **0 行**）、`users` +3 列（有默认值）、`orders` +1 列、`transactions` +1 列、新建 `site_collections` / `site_withdrawals`。现有 6 个用户、31 单、余额 ¥101002.5814 不受影响 |
+| 后端 | 分站逻辑全部挂在 `req.site` 上；主站域名下 `req.site` 为 null，走原来那条路。停站/域名/vhost 只作用于有 domain 的站点，生产现在 0 个 |
+| 收款 | 主站商户配置分毫未动；分站要「站长自己开开关」才会用平台商户代收，且每笔落台账 |
+| nginx | 只新增 `/uploads/` 与 `*.xnow.taikon.top`（免费子域名走各自独立 vhost，不占 `*.taikon.top` 泛解析，不影响同机其它项目） |
+| 前端 | 换 `dist` 静态包。**上线时不要 `rm -rf assets`**，保留旧 hash 包，正在使用的用户不会因为旧 HTML 指旧包而白屏 |
+| 停机 | `pm2 restart` 约 2~4 秒；数据库迁移 1~2 秒（加列，MySQL 8/10.3 online DDL） |
+
+### 上线步骤（建议按这个顺序，全程可回滚）
+
+```bash
+# 0. 备份（三件套，缺一不可）
+mysqldump xnow_db > /var/backups/xnow_db-$(date +%F-%H%M).sql
+tar czf /var/backups/xnow-dist-$(date +%F-%H%M).tgz -C /var/www/xnow/client dist
+tar czf /var/backups/xnow-uploads-$(date +%F-%H%M).tgz -C /var www/xnow-uploads  # 可选
+
+# 1. 代码（保留旧 dist 目录名，不删旧 assets）
+# 2. 建表 → 补列
+node deploy/sites/create-tables.cjs
+node deploy/sites/migrate-columns.cjs --dry     # 先看要补什么
+node deploy/sites/migrate-columns.cjs
+# 3. 重启
+pm2 restart xnow-backend --update-env
+# 4. 冒烟：首页/登录/下单页/余额/密室/新建一个测试分站→删掉
+```
+回滚：`pm2 stop` → 还原 dist 与 DB dump → `git checkout <旧提交>` → `pm2 start`。
+
+### 融合后还必须补的运维项
+
+1. 生产 `.env` 确认 `SITE_UPLOAD_DIR`（不填默认 `/var/www/xnow-uploads`，QR 会落在其下 `qr/`）
+2. 备份脚本要带上 `/var/www/xnow-uploads/qr/` 和 `nginx-sites/`
+3. 上线后跑一次只读 `node deploy/sites/acceptance-audit.cjs`（Beta 24/24，生产同理）

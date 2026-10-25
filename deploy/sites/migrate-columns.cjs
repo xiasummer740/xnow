@@ -22,7 +22,18 @@ const { pathToFileURL } = require("node:url");
 
 const ROOT = path.join(__dirname, "..", "..");
 const MODELS_DIR = path.join(ROOT, "server", "src", "models");
-const DRY = process.argv.includes("--dry-run");
+// 干跑开关统一：--dry / --dry-run 都认（历史上两个脚本一个用 --dry 一个用 --dry-run，
+// 结果按 `--dry` 调本脚本时 DRY=false，把"只报告"变成了真改生产库 —— 2026-10-25 踩过）
+const DRY = process.argv.some((a) => a === "--dry" || a === "--dry-run");
+
+// 参数白名单：拼错的开关不许猜，直接退出（否则又是一次"以为在干跑"）
+const KNOWN_ARGS = new Set(["--dry", "--dry-run", "--verbose", "--force"]);
+const unknown = process.argv.slice(2).filter((a) => a.startsWith("--") && !KNOWN_ARGS.has(a));
+if (unknown.length) {
+  console.error(`❌ 不认识的参数：${unknown.join(" ")}`);
+  console.error("   可用：--dry（只报告）/ --verbose");
+  process.exit(2);
+}
 
 // ── 读 server/.env（脏活，但比引入 dotenv 少一个依赖）──
 function loadEnv() {
