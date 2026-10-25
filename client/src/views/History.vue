@@ -16,7 +16,7 @@
         </div>
       </div>
 
-      <div class="overflow-x-auto custom-scrollbar relative z-10 rounded-xl border border-slate-700/50 bg-slate-900/50">
+      <div class="hidden md:block overflow-x-auto custom-scrollbar relative z-10 rounded-xl border border-slate-700/50 bg-slate-900/50">
         <table class="w-full text-left whitespace-nowrap">
           <thead class="bg-slate-800/80 text-xs uppercase text-slate-400 font-bold border-b border-slate-700">
             <tr>
@@ -71,7 +71,44 @@
         </table>
       </div>
 
-      <div class="flex justify-between items-center mt-6">
+      <!-- 📱 110 期：手机上看表格只能看到一半（状态、金额都在屏幕外），改成卡片 -->
+      <div class="md:hidden relative z-10 space-y-3">
+        <div v-for="order in paginatedOrders" :key="'m-' + order.id"
+             class="rounded-xl border border-slate-700/50 bg-slate-900/60 p-3.5 space-y-2">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-mono text-amber-400 font-bold text-[11px] truncate">{{ order.order_no }}</div>
+              <div class="text-[10px] text-slate-500 font-mono mt-0.5">{{ formatTime(order.createdAt || order.created_at) }}</div>
+            </div>
+            <span :class="['shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider border', statusClass(order.status)]">
+              {{ order.status }}
+            </span>
+          </div>
+          <div class="text-[12px] leading-snug text-slate-300">
+            <span class="text-amber-500 font-bold mr-1">[ID:{{ order.service_id }}]</span>{{ order.service_name }}
+          </div>
+          <a v-if="order.link && order.link !== 'audit-check'" :href="order.link" target="_blank"
+             class="block text-[11px] text-blue-400 truncate">{{ order.link }}</a>
+          <div class="flex items-center justify-between pt-1 border-t border-slate-800">
+            <div class="flex items-center gap-1.5 text-[11px] font-mono">
+              <span class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">{{ order.start_count }}</span>
+              <span class="text-slate-600">/</span>
+              <span class="font-bold text-white">{{ order.quantity }}</span>
+              <span class="text-slate-600">/</span>
+              <span class="bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">{{ order.remains }}</span>
+            </div>
+            <div class="font-mono font-bold text-emerald-400 text-sm">{{ appStore.formatMoney(order.charge) }}</div>
+          </div>
+          <div v-if="order.is_refunded" class="text-[10px] text-emerald-500">✅ 已执行智能退款</div>
+        </div>
+        <div v-if="filteredOrders.length === 0" class="text-center py-14 text-slate-500 rounded-xl border border-slate-700/50 bg-slate-900/40">
+          <div class="text-4xl mb-3 opacity-20">📭</div>
+          <p class="text-sm">空空如也，您还没有下过单哦</p>
+        </div>
+      </div>
+
+      <!-- 110 期：手机上一行塞不下，改成上下两段，避免「共找到 N 条」和翻页按钮重叠 -->
+      <div class="flex flex-col items-center gap-3 md:flex-row md:justify-between md:items-center mt-6">
         <span class="text-xs text-slate-500">共找到 {{ filteredOrders.length }} 条记录</span>
         <div class="flex space-x-2">
           <button @click="page > 1 && page--" :disabled="page === 1" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs disabled:opacity-50 transition border border-slate-700">上一页</button>

@@ -396,7 +396,9 @@ const props = defineProps({
 defineEmits(['apply-preset', 'reset-styles', 'pick-image'])
 
 const BG_PRESETS = computed(() => props.bgPresets)
-const openPreview = ref(true)
+// 📱 110 期：手机上一屏就是预览框，模板、色系、模块开关全被挤到下面去了（截图自查发现）。
+//    窄屏默认收起，站长先看到能点的东西；宽屏（电脑）仍默认展开。
+const openPreview = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
 
 // 🖼 真预览：设备档位 + 草稿 URL
 // 宽度用真实视口宽（手机 390 就是客户手机上的宽度），高度是预览框可视高度

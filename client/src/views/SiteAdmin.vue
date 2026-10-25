@@ -75,7 +75,8 @@
     </div>
 
     <!-- 已有分站 -->
-    <div v-else class="space-y-5">
+    <!-- pb-24：右下角那个 LIVE 客服球会盖住页面最后一行字（截图自查发现）-->
+    <div v-else class="space-y-5 pb-24">
       <!-- 🚦 开站清单：新手不知道"开完站还差什么"，这里直接告诉他 -->
       <section v-if="page === 'overview' && pendingSteps.length" class="bg-gradient-to-br from-amber-500/10 to-slate-900/70 border border-amber-500/30 rounded-2xl p-5">
         <div class="flex items-center justify-between mb-3">
@@ -97,7 +98,7 @@
             </component>
           </li>
         </ul>
-        <p class="text-[10px] text-slate-500 mt-3">清单只是提醒，不拦着你开卖。但「收款」没配，客户充不了值；「发信」没配，客户收到的邮件会从平台邮箱发出（个别情况下甚至发不出去）。</p>
+        <p class="text-[10px] text-slate-500 mt-3">清单只是提醒，不拦着你开卖。但「收款」没配，客户充不了值；「发信」没配，客户收到的邮件会从系统默认邮箱发出（个别情况下甚至发不出去）。</p>
       </section>
 
       <!-- 收益看板 -->
@@ -194,7 +195,7 @@
         <p class="text-[11px] text-sky-300 font-bold mb-1">这一页 = 个别客户价（只影响你指定的客户）</p>
         <p class="text-[11px] text-slate-400 leading-relaxed">
           分组折扣：把客户分到「VIP / 老客户」等组，整组按这个折扣买；单独定价：只给某一个客户。
-          <span class="block mt-1 text-slate-500">这里的价优先级高于「全站价」里的限时折扣。客户线下转账给你，也在这里手动加余额。</span>
+          <span class="block mt-1 text-slate-500">这里的价优先级高于「全站价」里的折扣促销。客户线下转账给你，也在这里手动加余额。</span>
         </p>
       </div>
 
@@ -216,7 +217,7 @@
         <h2 class="font-bold text-sm text-amber-400">收款商户（钱直接进你的账户）</h2>
         <p class="text-[11px] text-slate-500 leading-relaxed">
           填你自己的 BufPay / Cryptomus 商户，客户在你站上付款时直接进你的账号。
-          不填的话**客户点充值会看到「暂未开通」**，只能由你手动给他加余额（兜底方式，不推荐长期这样）。
+          不填的话，客户点充值会看到「暂未开通」，只能由你手动给他加余额（兜底方式，不推荐长期这样）。
         </p>
         <div class="grid md:grid-cols-2 gap-3">
           <div>
@@ -253,7 +254,7 @@
       <!-- 邮件 -->
       <section v-if="page === 'email'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">发信邮箱（客户收到的验证码用你的品牌）</h2>
-        <p class="text-[11px] text-slate-500">不填也能用：邮件标题、正文和署名仍然是你的品牌，但<b class="text-amber-400">发件地址会是平台的邮箱</b>，客户点开「显示详情」能看到平台域名。想让客户完全看不到平台，就用自己域名注册一个邮箱填进来（QQ 邮箱、企业邮箱都行，两分钟）。</p>
+        <p class="text-[11px] text-slate-500">不填也能用：邮件标题、正文和署名仍然是你的品牌，但<b class="text-amber-400">发件地址会是系统默认邮箱</b>，客户点开「显示详情」能看到一个陌生域名。想让客户完全看不出破绽，就用自己域名注册一个邮箱填进来（QQ 邮箱、企业邮箱都行，两分钟）。</p>
         <div class="grid md:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs text-slate-400 mb-1">SMTP 主机</label>
@@ -287,7 +288,7 @@
             </button>
           </div>
           <p v-if="smtpTestMsg" class="text-[11px]" :class="smtpTestOk ? 'text-emerald-400' : 'text-rose-400'">{{ smtpTestMsg }}</p>
-          <p class="text-[11px] text-amber-500/80">⚠️ 一定要先测通再开卖：配错了客户注册收不到验证码，生意做不成。测试信只走你自己的邮箱，不经过平台。</p>
+          <p class="text-[11px] text-amber-500/80">⚠️ 一定要先测通再开卖：配错了客户注册收不到验证码，生意做不成。测试信只走你自己的邮箱。</p>
         </div>
       </section>
 
@@ -308,10 +309,10 @@
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-400 space-y-1">
           <p class="text-slate-300 font-bold">想用自己的域名（比如 shop.你的品牌.com）？三步：</p>
           <p>① 去你买域名的地方（阿里云 / 腾讯云 / Cloudflare 都行），加一条 <b class="text-amber-300">A 记录</b>，
-             指向 <b class="text-amber-300">{{ site.dns_target_ip || '平台给你的服务器地址（问一下平台）' }}</b></p>
+             指向 <b class="text-amber-300">{{ site.dns_target_ip || '服务器 IP（问一下你的服务商）' }}</b></p>
           <p>② 等几分钟（DNS 生效），在下面填域名点「绑定并开通」</p>
           <p>③ 如果这里显示的是「临时证书」，过 10 分钟点一次下面的「修复域名」，就会换成正式证书</p>
-          <p class="text-slate-500">用平台送的免费子域名（现在这个地址）就不用管这些，已经能直接卖。</p>
+          <p class="text-slate-500">用系统送的免费子域名（现在这个地址）就不用管这些，已经能直接卖。</p>
         </div>
 
         <div class="flex flex-col sm:flex-row gap-2">
@@ -348,43 +349,75 @@
 
         <div v-if="tab === 'orders'">
           <div v-if="orders.length === 0" class="text-center py-6 text-xs text-slate-500">还没有订单</div>
-          <div v-else class="overflow-x-auto">
-            <table class="w-full text-xs">
-              <thead class="text-slate-500 border-b border-slate-800">
-                <tr><th class="text-left py-2">订单号</th><th class="text-left">服务</th><th class="text-right">数量</th><th class="text-right">客户付</th><th class="text-right">你赚</th><th class="text-right">状态</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="o in orders" :key="o.id" class="border-b border-slate-800/50">
-                  <td class="py-2 text-slate-400">{{ String(o.order_no).slice(-8) }}</td>
-                  <td class="text-slate-300 max-w-[180px] truncate" :title="o.service_name">{{ (o.service_name || ('#' + o.service_id)).slice(0, 26) }}</td>
-                  <td class="text-right text-slate-400">{{ o.quantity }}</td>
-                  <td class="text-right text-slate-200">¥{{ o.charge }}</td>
-                  <td class="text-right" :class="parseFloat(o.profit) > 0 ? 'text-emerald-400' : 'text-slate-500'">¥{{ o.profit }}</td>
-                  <td class="text-right text-slate-400">{{ o.status }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <!-- 📊 110 期：表格在手机上会把「你赚」「状态」挤出屏幕 —— 手机上改成卡片 -->
+            <div class="space-y-2 md:hidden">
+              <div v-for="o in orders" :key="'m' + o.id" class="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 space-y-1.5">
+                <div class="flex items-start justify-between gap-2">
+                  <span class="text-slate-500 text-[11px] font-mono">{{ String(o.order_no).slice(-8) }}</span>
+                  <span class="text-slate-400 text-[11px] shrink-0">{{ o.status }}</span>
+                </div>
+                <div class="text-slate-300 text-[12px] leading-snug truncate" :title="o.service_name">{{ (o.service_name || ('#' + o.service_id)).slice(0, 30) }}</div>
+                <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800">
+                  <span class="text-slate-500">数量 {{ o.quantity }}</span>
+                  <span class="text-slate-200">客户付 ¥{{ o.charge }}</span>
+                  <span :class="parseFloat(o.profit) > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'">你赚 ¥{{ o.profit }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="hidden md:block overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead class="text-slate-500 border-b border-slate-800">
+                  <tr><th class="text-left py-2">订单号</th><th class="text-left">服务</th><th class="text-right">数量</th><th class="text-right">客户付</th><th class="text-right">你赚</th><th class="text-right">状态</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="o in orders" :key="o.id" class="border-b border-slate-800/50">
+                    <td class="py-2 text-slate-400">{{ String(o.order_no).slice(-8) }}</td>
+                    <td class="text-slate-300 max-w-[180px] truncate" :title="o.service_name">{{ (o.service_name || ('#' + o.service_id)).slice(0, 26) }}</td>
+                    <td class="text-right text-slate-400">{{ o.quantity }}</td>
+                    <td class="text-right text-slate-200">¥{{ o.charge }}</td>
+                    <td class="text-right" :class="parseFloat(o.profit) > 0 ? 'text-emerald-400' : 'text-slate-500'">¥{{ o.profit }}</td>
+                    <td class="text-right text-slate-400">{{ o.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <button v-if="orders.length < orderTotal" @click="loadMoreOrders()" class="w-full mt-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">加载更多</button>
         </div>
 
         <div v-else>
           <div v-if="customers.length === 0" class="text-center py-6 text-xs text-slate-500">还没有客户</div>
-          <div v-else class="overflow-x-auto">
-            <table class="w-full text-xs">
-              <thead class="text-slate-500 border-b border-slate-800">
-                <tr><th class="text-left py-2">账号</th><th class="text-right">余额</th><th class="text-right">订单数</th><th class="text-right">累计消费</th><th class="text-right">注册时间</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="c in customers" :key="c.id" class="border-b border-slate-800/50">
-                  <td class="py-2 text-slate-300">{{ c.phone || c.email || ('#' + c.id) }}</td>
-                  <td class="text-right text-slate-200">¥{{ c.balance }}</td>
-                  <td class="text-right text-slate-400">{{ c.orders }}</td>
-                  <td class="text-right text-emerald-400">¥{{ c.spent }}</td>
-                  <td class="text-right text-slate-500">{{ String(c.joined || '').slice(0, 10) }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else>
+            <div class="space-y-2 md:hidden">
+              <div v-for="c in customers" :key="'m' + c.id" class="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 space-y-1.5">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-slate-300 text-[12px]">{{ c.phone || c.email || ('#' + c.id) }}</span>
+                  <span class="text-emerald-400 text-[12px] font-bold">消费 ¥{{ c.spent }}</span>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>余额 ¥{{ c.balance }}</span>
+                  <span>{{ c.orders }} 单</span>
+                  <span class="text-slate-500">{{ String(c.joined || '').slice(0, 10) }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="hidden md:block overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead class="text-slate-500 border-b border-slate-800">
+                  <tr><th class="text-left py-2">账号</th><th class="text-right">余额</th><th class="text-right">订单数</th><th class="text-right">累计消费</th><th class="text-right">注册时间</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="c in customers" :key="c.id" class="border-b border-slate-800/50">
+                    <td class="py-2 text-slate-300">{{ c.phone || c.email || ('#' + c.id) }}</td>
+                    <td class="text-right text-slate-200">¥{{ c.balance }}</td>
+                    <td class="text-right text-slate-400">{{ c.orders }}</td>
+                    <td class="text-right text-emerald-400">¥{{ c.spent }}</td>
+                    <td class="text-right text-slate-500">{{ String(c.joined || '').slice(0, 10) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <button v-if="customers.length < customerTotal" @click="loadMoreCustomers()" class="w-full mt-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">加载更多</button>
         </div>
@@ -1026,7 +1059,7 @@ const createSite = async () => {
 const unbinding = ref(false)
 const unbindDomain = async () => {
   if (!site.value) return
-  if (!confirm(`确定解除绑定 ${site.value.custom_domain}？\n解绑后这个域名不再指向你的站点，平台送的子域名不受影响。`)) return
+  if (!confirm(`确定解除绑定 ${site.value.custom_domain}？\n解绑后这个域名不再指向你的站点，系统送的子域名不受影响。`)) return
   unbinding.value = true
   try {
     const res = await fetch(`/api/sites/${site.value.id}/domain`, {
