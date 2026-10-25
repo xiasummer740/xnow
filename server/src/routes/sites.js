@@ -51,6 +51,19 @@ const siteCostMultiplier = (agentDiscount, globalMult) => {
   return Math.max(1, Number((g * d).toFixed(2)));
 };
 
+// 💰 110 期（祥哥定调）：开站不再要求代理资格 —— 任何登录用户都能开，
+//    代理资格只体现为「进货价更低」（代理 8 折 = 原价，非代理 = 原价）。
+//    所以每个站落库时把「站主的进货折扣」定下来：代理且未到期 = 0.8，其他 = 1。
+const DEFAULT_AGENT_DISCOUNT_FALLBACK = 0.8;
+const NONAGENT_DISCOUNT = 1;
+const agentDiscountForOwner = (ownerRow) => {
+  if (!ownerRow) return NONAGENT_DISCOUNT;
+  const isAgent = ownerRow.role === 'agent';
+  const exp = Number(ownerRow.agent_expire_at || 0);
+  const expired = exp > 0 && Date.now() >= exp;
+  return (isAgent && !expired) ? DEFAULT_AGENT_DISCOUNT_FALLBACK : NONAGENT_DISCOUNT;
+};
+
 const pricingError = (multiplier, agentDiscount, globalMult) => {
   const m = parseFloat(multiplier);
   // 🔒 103 期：下面这几句可能被站长看到（老页面/手工调接口传 multiplier 时会走到这里），
@@ -283,11 +296,14 @@ router.get('/orders', authenticate, async (req, res) => {
 
 router.get('/', authenticate, async (req, res) => {
   try {
-    // 🔒 分站只属于「至尊代理」这一个角色。普通客户连入口都不该拿到，
-    //    否则他会从 200 响应里推断出"这套系统支持开分站"，进而去问站长。
+    // 💰 110 期（祥哥定调）：开站不要求代理资格 —— 主站上任何登录用户都能开、都能管自己的站。
+    //    代理资格只影响进货价（代理 8 折、非代理原价），不影响"能不能用这个功能"。
+    //
+    //    仍然要挡住的一类人：**分站客户**（users.site_id > 0）。他们连主站都登录不进来
+    //    （login 会以「该账号属于其他分站」拒掉），这里再兜一层，防止将来加别的登录方式时漏掉。
     const isStaff = ['admin', 'super_admin'].includes(req.user.role);
-    if (!isStaff && req.user.role !== 'agent') {
-      return res.status(403).json({ status: 'error', message: '仅至尊代理可使用分站功能' });
+    if (!isStaff && Number(req.user.site_id || 0) > 0) {
+      return res.status(403).json({ status: 'error', message: '该账号属于分站客户，不能使用分站管理功能' });
     }
     let sites;
     if (isStaff) {
@@ -344,12 +360,8 @@ router.get('/current', async (req, res) => {
 
 // 创建分站
 router.post('/', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) {
-    // 代理也可以创建，但需要是 agent 角色
-    if (req.user.role !== 'agent') {
-      return res.status(403).json({ status: 'error', message: '仅至尊代理可创建分站，请先升级为至尊代理' });
-    }
-  }
+  // 💰 110 期：不再要求代理资格 —— 任何登录用户都能开站。
+  //    代理资格只影响进货价（代理 8 折，非代理原价），在建站时定下来。
 
   const { name, logo, multiplier } = req.body;
   if (!name) {
@@ -393,7 +405,12 @@ router.post('/', authenticate, async (req, res) => {
 
   // 💰 97 期：前端只说「在进货价上加价 %」。倍率由后端换算，不对外暴露。
   const gMultCreate = await getGlobalMultiplier();
-  const costMultCreate = siteCostMultiplier(null, gMultCreate);
+  // 站主的进货折扣先定下来（下面校验加价率、落库都用它）
+  const ownerRowForDiscount = await User.findByPk(
+    ['admin', 'super_admin'].includes(req.user.role) && req.body.owner_id ? parseInt(req.body.owner_id) : req.user.id
+  );
+  const adCreate = agentDiscountForOwner(ownerRowForDiscount);
+  const costMultCreate = siteCostMultiplier(adCreate, gMultCreate);
   let multiplierValue;
   if (req.body.markup_pct !== undefined && req.body.markup_pct !== '' && req.body.markup_pct !== null) {
     const mkErr = markupPricingError(req.body.markup_pct, null, gMultCreate);
@@ -436,16 +453,7 @@ router.post('/', authenticate, async (req, res) => {
       // ⚠️ 以数据库为准：token 里的 role 是签发那一刻的，代理降级后旧 token 仍是 agent
       const ownerRow = await User.findByPk(ownerId);
       if (!ownerRow) return res.json({ status: 'error', message: '用户不存在' });
-      if (ownerRow.role !== 'agent') {
-        return res.json({ status: 'error', message: '仅至尊代理可创建分站，请先开通代理（¥' + billing.agentMonthly + '/月）' });
-      }
-      const agentExp = Number(ownerRow.agent_expire_at || 0);
-      if (agentExp && Date.now() >= agentExp) {
-        return res.json({
-          status: 'error',
-          message: `你的至尊代理已到期，请先续费代理（¥${billing.agentMonthly}/月）再开分站`
-        });
-      }
+      // 💰 110 期：代理到期不再拦建站（照常按非代理价拿货），只是不再享受 8 折
 
       let maxSites = 0; // 0 = 不限：每个站都要付费，本身就是闸门
       try {
@@ -492,6 +500,7 @@ router.post('/', authenticate, async (req, res) => {
         domain: cleanDomain,
         name: String(name).trim(),
         logo: logo || null,
+        agent_discount: adCreate,   // 💰 代理 0.8 / 非代理 1，订单按这个扣成本
         multiplier: multiplierValue,
         announcement: null,
         status: 'active',

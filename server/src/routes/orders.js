@@ -206,7 +206,11 @@ router.post('/add', authenticate, async (req, res) => {
     let siteOwner = null;
     let chargeFinal = parseFloat(charge);
     if (req.site) {
-      const platformMult = parseFloat(conf.global_multiplier || 2.0) * parseFloat(conf.agent_discount || 0.8);
+      // 💰 110 期：成本按**这个站**的进货折扣算 —— 代理站 0.8，非代理站 1（原价）。
+      //    以前这里写死全局 0.8，等于非代理站也能拿代理价，代理资格就白买了。
+      const siteAd = parseFloat(req.site.agent_discount);
+      const useAd = (isFinite(siteAd) && siteAd > 0) ? siteAd : parseFloat(conf.agent_discount || 0.8);
+      const platformMult = parseFloat(conf.global_multiplier || 2.0) * useAd;
       siteCost = parseFloat(((qty / 1000) * parseFloat(baseRate) * platformMult * billUnits).toFixed(6));
       if (!isFinite(siteCost) || siteCost < 0) {
         await t.rollback(); return res.json({ status: 'error', message: '价格异常，请联系站长' });

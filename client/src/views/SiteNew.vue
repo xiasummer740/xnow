@@ -10,19 +10,18 @@
     <div v-if="loading" class="text-center py-16 text-slate-500 text-sm">读取中…</div>
 
     <template v-else>
-      <!-- 🔒 不是代理 -->
-      <section v-if="!isAgent" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 text-center">
-        <div class="text-3xl mb-2">🔒</div>
-        <h2 class="font-bold mb-2 text-white">还不能开分站</h2>
-        <p class="text-xs text-slate-400 leading-relaxed">
-          开分站需要先有至尊代理资格（¥{{ plan.agent_monthly }}/月）。<br />
-          <span v-if="agentExpired" class="text-amber-400">你的代理已到期，续费后就能开站。</span>
+      <!-- 💡 没有代理也能开（110 期）：只提示进货价差别，不拦人 -->
+      <section v-if="!isAgent" class="bg-emerald-950/20 border border-emerald-900/40 rounded-2xl p-4">
+        <h2 class="font-bold text-sm text-emerald-300 mb-1.5">你现在没有至尊代理资格，也能开站</h2>
+        <p class="text-[11px] text-slate-300 leading-relaxed">
+          区别只在<b>进货价</b>：现在按原价拿货；开通至尊代理（¥{{ plan.agent_monthly }}/月）后进货价打 8 折，
+          同样的售价每单多赚 20%。<span v-if="agentExpired" class="text-amber-400">你的代理已到期，续费即恢复 8 折。</span>
         </p>
         <button @click="$router.push('/my-site/overview')"
-                class="mt-4 px-4 py-2 rounded-xl bg-amber-500 text-slate-900 text-sm font-bold">去开通代理</button>
+                class="mt-2.5 px-3 py-1.5 rounded-lg bg-slate-800 text-amber-300 text-[11px] font-bold">了解至尊代理 →</button>
       </section>
 
-      <template v-else>
+      <template v-if="true">
         <!-- 💳 价格 -->
         <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
           <h2 class="font-bold text-sm text-white mb-3">价格</h2>
@@ -37,6 +36,7 @@
             </div>
             <div class="px-3 py-2.5 text-[11px] text-slate-400 leading-relaxed">
               想开几个开几个，每个站单独计费，互不影响。<br />
+              <span class="text-slate-300">开站不需要代理资格</span>；有代理资格只是<b class="text-emerald-400">进货价 8 折</b>。<br />
               <span class="text-emerald-400">名下第 1 个站送 {{ plan.trial_hours }} 小时试用</span>；
               第 2 个起立即扣 ¥{{ plan.site_monthly }}，有效期 {{ plan.renew_days }} 天。<br />
               到期未续费 → 停站，<b class="text-slate-300">数据保留</b>，续费立即恢复。

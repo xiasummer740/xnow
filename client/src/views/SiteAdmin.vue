@@ -27,15 +27,8 @@
 
     <div v-if="loading" class="text-center py-20 text-slate-500">加载中…</div>
 
-    <!-- 还不是代理 → 先开通代理（上面那张卡就是入口，这里只做解释） -->
-    <div v-else-if="!site && !billingState.isAgent" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 text-center">
-      <div class="text-3xl mb-2">🔒</div>
-      <h2 class="font-bold mb-2">还没有至尊代理资格</h2>
-      <p class="text-xs text-slate-400 leading-relaxed">
-        开分站需要先开通至尊代理（¥{{ plan.agent_monthly }}/月）。<br />
-        开通后即可创建分站：首个分站 {{ plan.trial_hours }} 小时免费试用，之后 ¥{{ plan.site_monthly }}/月 / 站。
-      </p>
-    </div>
+    <!-- 💰 110 期：没有代理也能开站，代理只是进货价更低。
+         所以这里不再拦人，只在建站表单上方挂一句「开代理更划算」。 -->
 
     <!-- 还没有分站 → 创建 -->
     <div v-else-if="!site" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-6">
@@ -44,6 +37,10 @@
         <p class="text-[11px] text-amber-500/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 leading-relaxed">
           💳 首个分站 <b>{{ plan.trial_hours }} 小时免费试用</b>，之后 <b>¥{{ plan.site_monthly }}/月</b>；
           每个分站单独计费，到期未续费会停站（数据保留，续费即恢复）。
+        </p>
+        <p v-if="!billingState.isAgent" class="text-[11px] text-emerald-300 bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 leading-relaxed">
+          💡 你现在没有至尊代理资格，也能正常开站卖货，只是<b>进货价是原价</b>。
+          开通至尊代理（¥{{ plan.agent_monthly }}/月）后进货价打 8 折，同样的售价每单多赚 20%。
         </p>
         <div>
           <label class="block text-xs text-slate-400 mb-1">
