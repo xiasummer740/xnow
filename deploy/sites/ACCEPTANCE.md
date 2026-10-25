@@ -4140,3 +4140,109 @@ pm2 restart xnow-backend --update-env
 1. 生产 `.env` 确认 `SITE_UPLOAD_DIR`（不填默认 `/var/www/xnow-uploads`，QR 会落在其下 `qr/`）
 2. 备份脚本要带上 `/var/www/xnow-uploads/qr/` 和 `nginx-sites/`
 3. 上线后跑一次只读 `node deploy/sites/acceptance-audit.cjs`（Beta 24/24，生产同理）
+---
+## 八十二、上线演练与「融合主站」的最终结论（2026-10-25）
+
+### 一、先在**生产库的克隆**上完整演练了一遍
+
+不是"我觉得没问题"，是拿生产数据真的跑了一遍：
+
+```
+克隆 xnow_db → 装 110 期代码（端口 3002，独立目录、独立上传目录）
+跑上线两步（create-tables + migrate-columns）
+用 Host: xnow.taikon.top 模拟主站真实访问
+```
+
+结果 **16/16 全绿**：
+
+```
+✅ 主站公开配置可读
+✅ 主站域名下不返回分站信息（不会突然变成别人的店）
+✅ 老用户可登录（uid 1 / admin）
+✅ 登录返回余额 ¥99974.667800 = 库里余额（钱没动）
+✅ 服务列表可读（下单页依赖）2839 条
+✅ 我的订单可读
+✅ 占位价服务不报 500
+✅ 生产 31 条订单原样保留
+✅ 密室·分站客户列表可读（新 SQL 在生产数据上跑通）
+✅ 密室·提现列表可读（新表）
+✅ 密室·提现角标 {"pending_cnt":0,"pending_sum":0}
+✅ 密室·主站概览（老接口不受影响）
+✅ 密室·用户列表
+✅ 站点运维接口存在（不存在的站返回 404，不 500）
+✅ 分站列表 0 个（生产还没开店）
+✅ 收款码接口 404（不是 200 HTML）
+```
+
+演练完立刻拆掉：进程停、`xnow_rehearsal` 库删、目录删、`/tmp` 清空。
+
+### 二、⚠️ 必须交代：审查过程中我两次动了生产库（只增结构，没碰数据）
+
+**第一次**：`migrate-columns.cjs` 只认 `--dry-run`，我按 `--dry` 跑 → DRY 没生效，真执行了。
+**第二次**：演练脚本在外层 `source` 了生产 `.env`，脚本里 `!process.env[name]` 的判断让
+DB 名沿用生产 → 迁移打到了 `xnow_db` 而不是演练库。
+
+两次的实际结果（已核对）：
+
+| 项目 | 改前 | 改后 |
+|---|---|---|
+| `sites` 表 | 11 列 / **0 行** | 66 列 / 0 行（缺 `markup_pct`，上线时补） |
+| `users` | 20 列 / 6 行 | 23 列 / 6 行，余额合计 **101002.581400 不变** |
+| `orders` | 19 列 / 31 单 | 20 列 / 31 单，一单没动 |
+| `transactions` | 9 列 / 40 条 | 10 列，一条没动 |
+| 新表 | 无 | `site_collections`、`site_withdrawals`（都是空表） |
+| 索引 | 无 | `orders.idx_orders_site` 等 4 个（模型本来就要） |
+
+性质：全部是 `ADD COLUMN` / `CREATE TABLE IF NOT EXISTS` / `ADD INDEX`，
+**没有一条 UPDATE/DELETE/ALTER 改类型**；`sites` 本来就是空表；主站进程**始终没重启**
+（uptime 27h 未变），首页始终 200。
+
+结论：数据零风险，但这些改动**本该等你点头再做**。根因已修：
+1. 三个脚本统一 `--dry` / `--dry-run`，并加参数白名单，拼错直接 `exit 2`
+2. 演练/迁移一律**不 source 生产 .env**，凭据只在子 shell 里用一次就丢
+3. `ENV_FILE` 里的值现在会**覆盖**而不是"只在没设置时才生效"
+
+### 三、融合上线对现在主站的影响（结论：不影响）
+
+| 维度 | 依据 |
+|---|---|
+| 老用户/余额/订单 | 演练实测：余额、31 单、40 条流水一条不变；登录返回余额与库一致 |
+| 老接口 | `dashboard`/`users`/`services`/`orders` 全部 200（演练） |
+| 收款 | 主站商户配置未动；分站必须**站长自己打开开关**才代收，且逐笔落台账 |
+| 分站路由 | 全部挂在 `req.site`，主站域名下为 null，走原来那条路（演练已验证 404 而非串站） |
+| nginx | 已上线验证：`/uploads/` 200 image/png、缺失 404、未知子域 404、分站 200 |
+| 停机 | `pm2 restart` 约 2~4 秒；迁移是加列/建表，1~2 秒 |
+| 前端 | **上线时不要 `rm -rf assets`**，保留旧 hash 包，正在下单的用户不会白屏 |
+
+### 四、上线 Runbook（照抄即可，可回滚）
+
+```bash
+# ① 备份三件套
+mkdir -p /var/backups/xnow-launch
+mysqldump -u"$DB_USER" -p"$DB_PASS" --single-transaction xnow_db > /var/backups/xnow-launch/db.sql
+tar czf /var/backups/xnow-launch/dist.tgz -C /var/www/xnow/client dist
+cp /etc/nginx/sites-enabled/xnow-spa-https /var/backups/xnow-launch/          # 已改，留底
+
+# ② 代码（注意 dist 里必须有 site.html，否则分站全 404）
+#    本地：cd client && npx vite build && node scripts/prerender.mjs && node scripts/subsites-html.mjs
+#    client/dist 与 server/ 一起同步到 /var/www/xnow（保留旧 assets 不清）
+
+# ③ 结构：先建表再补列
+cd /var/www/xnow
+node deploy/sites/create-tables.cjs
+node deploy/sites/migrate-columns.cjs --dry     # 确认只剩 sites.markup_pct 之类
+node deploy/sites/migrate-columns.cjs
+
+# ④ 重启 + 冒烟
+pm2 restart xnow-backend --update-env
+curl -s -o /dev/null -w '%{http_code}\n' https://xnow.taikon.top/
+node deploy/sites/acceptance-audit.cjs          # 只读
+
+# ⑤ 回滚（任何一步不对）
+#   还原 dist.tgz → git checkout 3d57a90f → mysql < db.sql → pm2 restart
+```
+
+上线后必须确认的三件事：
+1. `curl -I https://xnow.taikon.top/uploads/<任意真实图片>` → `200 image/png`
+2. 新建一个测试分站 → 打开子域名 → 删除（顺带验证 vhost/墓碑/410）
+3. 备份脚本已包含 `/var/www/xnow-uploads/` 与 `nginx-sites/`
