@@ -36,56 +36,99 @@
     <!-- 💰 110 期：没有代理也能开站，代理只是进货价更低。
          所以这里不再拦人，只在建站表单上方挂一句「开代理更划算」。 -->
 
-    <!-- 还没有分站 → 居中大卡片（祥哥：原来 10px 小灰字、左对齐，没字体没色彩） -->
-    <div v-else-if="!site" class="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/60 px-5 py-10 sm:py-12">
-      <!-- 背景光晕：给纯黑页面一点层次 -->
-      <div class="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-amber-500/15 blur-3xl"></div>
-      <div class="pointer-events-none absolute -bottom-24 right-0 w-64 h-64 rounded-full bg-emerald-500/10 blur-3xl"></div>
+    <!-- 还没有分站 → 视觉化 hero（祥哥：视觉效果不够）
+         桌面双栏：左边说人话 + 立即开通，右边直接给"开出来长什么样"，一屏能看到按钮。 -->
+    <div v-else-if="!site" class="hero-wrap relative overflow-hidden rounded-3xl border border-amber-500/20 px-5 py-8 sm:px-8 sm:py-10">
+      <div class="pointer-events-none absolute inset-0 hero-glow"></div>
+      <div class="pointer-events-none absolute inset-0 hero-dots opacity-30"></div>
+      <div class="pointer-events-none absolute -top-28 -left-16 w-80 h-80 rounded-full bg-amber-400/20 blur-3xl hero-float"></div>
+      <div class="pointer-events-none absolute -bottom-32 -right-16 w-80 h-80 rounded-full bg-emerald-400/15 blur-3xl hero-float-slow"></div>
 
-      <div class="relative text-center max-w-xl sm:max-w-2xl mx-auto">
-        <!-- 徽章 -->
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-amber-300 tracking-wide">
-          <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>开分站
-        </span>
+      <div class="relative grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10">
+        <!-- 左：文案 + 数字 + CTA -->
+        <div class="text-center lg:text-left">
+          <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[11px] font-bold text-amber-200 tracking-wide backdrop-blur">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 hero-pulse"></span>
+            开分站 · 10 分钟上线
+          </span>
 
-        <!-- 主标题：渐变大字 -->
-        <h2 class="mt-4 text-[26px] sm:text-3xl font-black leading-tight tracking-tight">
-          <span class="bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent">把客户，变成长期收入</span>
-        </h2>
-        <p class="mt-3 text-sm text-slate-300 leading-relaxed">
-          你出客户和品牌，商品、下单、自动交付、对账系统全包。<br />
-          <span class="text-slate-400">10 分钟开张，当天就能卖。</span>
-        </p>
+          <h2 class="mt-4 text-[30px] sm:text-[38px] font-black leading-[1.12] tracking-tight">
+            <span class="hero-title bg-gradient-to-br from-amber-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent">把客户，<br />变成长期收入</span>
+          </h2>
+          <p class="mt-3 text-sm sm:text-[15px] text-slate-300 leading-relaxed">
+            你出客户和品牌，商品、下单、自动交付、对账全包。<br />
+            <span class="text-slate-400">不用囤货、不用手工发货、不抽成。</span>
+          </p>
 
-        <!-- 三个数字 -->
-        <div class="mt-6 grid grid-cols-3 gap-2.5">
-          <div v-for="n in heroStats" :key="n.k" class="rounded-2xl border border-slate-800 bg-slate-950/60 px-2 py-3">
-            <div class="text-lg font-black" :class="n.c">{{ n.k }}</div>
-            <div class="text-[11px] text-slate-500 mt-0.5">{{ n.d }}</div>
-          </div>
-        </div>
-
-        <!-- 四个卖点：彩色图标 + 居中 -->
-        <div class="mt-6 grid grid-cols-2 gap-2.5 text-left">
-          <div v-for="f in heroFeatures" :key="f.t" class="flex gap-2.5 rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
-            <span class="shrink-0 w-8 h-8 rounded-xl grid place-items-center text-base" :class="f.bg">{{ f.i }}</span>
-            <div class="min-w-0">
-              <div class="text-[13px] font-bold text-slate-100">{{ f.t }}</div>
-              <div class="text-[11px] text-slate-500 leading-relaxed mt-0.5">{{ f.d }}</div>
+          <!-- 三个数字：一体式胶囊 -->
+          <div class="mt-5 flex items-stretch rounded-2xl border border-slate-800 bg-slate-950/70 overflow-hidden">
+            <div v-for="(n, i) in heroStats" :key="n.k"
+                 class="flex-1 px-2 py-2.5" :class="i ? 'border-l border-slate-800' : ''">
+              <div class="text-base sm:text-lg font-black leading-none" :class="n.c">{{ n.k }}</div>
+              <div class="text-[10px] text-slate-500 mt-1">{{ n.d }}</div>
             </div>
           </div>
+
+          <button @click="$router.push('/my-site/new')"
+            class="hero-cta relative overflow-hidden mt-5 w-full sm:w-auto sm:px-10 py-3.5 rounded-2xl font-black text-[15px] text-slate-900
+                   bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500
+                   shadow-[0_10px_40px_-8px_rgba(245,158,11,0.65)] ring-1 ring-amber-200/50
+                   hover:brightness-105 active:scale-[0.99] transition">
+            <span class="relative z-10">开通我的分站 · ¥{{ plan.site_monthly }}/月 →</span>
+          </button>
+          <p class="mt-2.5 text-[11px] text-slate-500">
+            开通即扣 ¥{{ plan.site_monthly }}，有效期 {{ plan.renew_days }} 天 · 卖多少都是你的
+          </p>
         </div>
 
-        <!-- CTA -->
-        <button @click="$router.push('/my-site/new')"
-          class="mt-7 w-full sm:w-auto sm:px-10 py-3.5 rounded-2xl font-black text-base text-slate-900
-                 bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500
-                 shadow-lg shadow-amber-500/25 hover:brightness-105 active:scale-[0.99] transition">
-          开通我的分站 · ¥{{ plan.site_monthly }}/月 →
-        </button>
-        <p class="mt-3 text-[11px] text-slate-500 px-10">
-          开通即扣 ¥{{ plan.site_monthly }}，有效期 {{ plan.renew_days }} 天 · 不抽成，卖多少都是你的
-        </p>
+        <!-- 右：产品预览（纯 CSS 画的迷你站，客户看到的就是这样） -->
+        <div class="mx-auto w-full max-w-[330px] lg:max-w-none">
+          <div class="rounded-2xl border border-slate-700/70 bg-slate-950/85 overflow-hidden shadow-2xl shadow-black/60 hero-tilt">
+            <div class="flex items-center gap-1.5 px-3 py-2 bg-slate-900/90 border-b border-slate-800">
+              <span class="w-2 h-2 rounded-full bg-rose-500/70"></span>
+              <span class="w-2 h-2 rounded-full bg-amber-500/70"></span>
+              <span class="w-2 h-2 rounded-full bg-emerald-500/70"></span>
+              <span class="ml-2 flex-1 truncate text-[9px] text-slate-500">your-brand.com</span>
+            </div>
+            <div class="px-3 py-3">
+              <div class="flex items-center gap-1.5">
+                <span class="w-4 h-4 rounded-md bg-gradient-to-br from-amber-400 to-orange-500"></span>
+                <span class="text-[10px] font-bold text-slate-200">你的站名</span>
+                <span class="ml-auto text-[8px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">营业中</span>
+              </div>
+              <div class="mt-2.5 space-y-1.5">
+                <div v-for="row in previewRows" :key="row.n"
+                     class="flex items-center justify-between rounded-lg bg-slate-900/80 border border-slate-800 px-2 py-2">
+                  <span class="flex items-center gap-1.5 min-w-0">
+                    <span class="w-1.5 h-1.5 rounded-full" :class="row.dot"></span>
+                    <span class="text-[9px] text-slate-300 truncate">{{ row.n }}</span>
+                  </span>
+                  <span class="text-[10px] font-bold text-amber-300 shrink-0">¥{{ row.p }}</span>
+                </div>
+              </div>
+              <div class="mt-2.5 flex items-center justify-between rounded-lg bg-gradient-to-r from-amber-400 to-yellow-500 px-2 py-2">
+                <span class="text-[9px] font-black text-slate-900">立即下单</span>
+                <span class="text-[8px] font-bold text-slate-900/70">自动交付</span>
+              </div>
+              <div class="mt-2 flex items-center justify-between text-[8px] text-slate-500">
+                <span>今天的订单 3 笔</span><span class="text-emerald-400">已到账 ¥293</span>
+              </div>
+            </div>
+          </div>
+          <p class="mt-2.5 text-center text-[10px] text-slate-500">客户看到的就是这样：你的站名、你定的价</p>
+        </div>
+      </div>
+
+      <!-- 四个卖点：整行铺开 -->
+      <div class="relative mt-7 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <div v-for="f in heroFeatures" :key="f.t"
+             class="flex gap-2.5 rounded-2xl border border-slate-800 bg-slate-950/60 p-3 hover:border-slate-700 transition">
+          <span class="shrink-0 w-8 h-8 rounded-xl grid place-items-center text-base ring-1 ring-inset ring-white/5" :class="f.bg">{{ f.i }}</span>
+          <div class="min-w-0">
+            <div class="text-[13px] font-bold text-slate-100">{{ f.t }}</div>
+            <div class="text-[11px] text-slate-500 leading-relaxed mt-0.5">{{ f.d }}</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1146,6 +1189,13 @@ const save = async (silent = false) => {
   } catch (e) { if (!silent) alert('保存失败'); return false } finally { saving.value = false }
 }
 
+// 预览卡里的三行服务（展示"你的站、你定的价"）
+const previewRows = [
+  { n: 'TikTok 千粉', p: '45', dot: 'bg-pink-400' },
+  { n: 'IG 万粉', p: '180', dot: 'bg-violet-400' },
+  { n: 'YouTube 播放', p: '68', dot: 'bg-sky-400' },
+]
+
 // 无站时的居中大卡片（文案与 /my-site/new 一致）
 const heroStats = [
   { k: '¥99', d: '每月 / 每站', c: 'text-amber-300' },
@@ -1302,3 +1352,58 @@ onMounted(async () => {
   if (site.value) { loadOrders(); loadHotPrice() }
 })
 </script>
+
+<style scoped>
+/* 🎨 无站 hero 的视觉层（祥哥：视觉效果不够）
+   全部纯 CSS，不加图片、不加依赖：光晕呼吸、点阵网格、卡片微微倾斜、按钮扫光。 */
+.hero-wrap {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(245, 158, 11, 0.11) 0%, rgba(15, 23, 42, 0) 55%),
+    radial-gradient(80% 60% at 50% 100%, rgba(16, 185, 129, 0.10) 0%, rgba(15, 23, 42, 0) 60%),
+    #0b1220;
+}
+.hero-glow {
+  background: radial-gradient(60% 40% at 50% 12%, rgba(251, 191, 36, 0.15), transparent 70%);
+  animation: heroBreathe 7s ease-in-out infinite;
+}
+.hero-dots {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.35) 1px, transparent 1px);
+  background-size: 16px 16px;
+  mask-image: radial-gradient(70% 60% at 50% 40%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 40%, #000 30%, transparent 75%);
+}
+.hero-title { filter: drop-shadow(0 0 26px rgba(245, 158, 11, 0.35)); }
+.hero-float { animation: heroFloat 9s ease-in-out infinite; }
+.hero-float-slow { animation: heroFloat 13s ease-in-out infinite reverse; }
+.hero-tilt {
+  transform: perspective(900px) rotateX(4deg);
+  transition: transform 0.5s ease;
+}
+.hero-tilt:hover { transform: perspective(900px) rotateX(0deg) translateY(-2px); }
+.hero-pulse { animation: heroPulse 2s ease-in-out infinite; }
+/* 按钮扫光：一道斜向高光从左扫到右 */
+.hero-cta::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; width: 40%;
+  left: -60%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-18deg);
+  animation: heroShine 3.6s ease-in-out infinite;
+}
+@keyframes heroBreathe { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+@keyframes heroFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -18px, 0) scale(1.06); }
+}
+@keyframes heroPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.85); } }
+@keyframes heroShine {
+  0% { left: -60%; }
+  55% { left: 130%; }
+  100% { left: 130%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-glow, .hero-float, .hero-float-slow, .hero-pulse, .hero-cta::after { animation: none !important; }
+  .hero-tilt { transform: none; }
+}
+</style>
