@@ -1,6 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
-import { Config, Transaction, sequelize, User, Site } from '../models/index.js';
+import { Config, Transaction, sequelize, User, Site, SiteCollection } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import axios from 'axios';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -53,11 +53,20 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
         // 🏬 分站自有商户优先：钱进站长账户，平台不碰
         const siteCreds = req.site ? await sitePayCreds(Number(req.site.id), 'bufpay') : null;
-        // 🔒 分站没配商户时**绝不回退平台商户**：
-        //    否则客户的付款会进平台账户，与「方案②：钱直接进站长账户」的约定相悖，
-        //    平台还要替站长代收代付。改为让客户联系客服手动加余额（方案①兜底）。
+        // 💰 110 期祥哥定：站长没配自己的商户时，**可以**用主站商户代收 ——
+        //    但钱进的是平台账户，所以每一笔都要落「代收台账」（site_collections），
+        //    站长申请提现、主站管理员扫码转账确认后清账。不落账就等于平台吞钱。
+        //    开关在站长后台「收款」页，站长自己开/关，无需审批。
         if (req.site && !siteCreds) {
-          return res.json({ status: 'error', message: '本站在线充值暂未开通，请联系客服充值', code: 'NO_SITE_MERCHANT' });
+            if (Number(req.site.use_platform_merchant || 0) !== 1) {
+                return res.json({
+                    status: 'error',
+                    message: '本站在线充值暂未开通，请联系客服充值（站长可开启「使用主站收款」）',
+                    code: 'NO_SITE_MERCHANT',
+                });
+            }
+            // 用平台商户，标记这一笔是代收
+            req.__platformCollected = true;
         }
         if (siteCreds) { conf.bufpay_id = siteCreds.id; conf.bufpay_key = siteCreds.key; conf.site_name = siteCreds.name; }
         const cleanBufId = (val) => { if (!val) return ''; const match = val.match(/\/(\d+)$/); if (match) return match[1]; return val.replace(/[^0-9]/g, ''); };
@@ -139,9 +148,11 @@ router.post('/usd', authenticate, async (req, res) => {
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
         // 🏬 分站自有 Cryptomus 优先
         const siteCredsUsd = req.site ? await sitePayCreds(Number(req.site.id), 'cryptomus') : null;
-        // 同上：分站没配 USDT 商户时不许回退平台商户
+        // 同一规则：没配 USDT 商户时，看站长有没有开「使用主站收款」
         if (req.site && !siteCredsUsd) {
-          return res.json({ status: 'error', message: '本站 USDT 充值暂未开通，请联系客服', code: 'NO_SITE_MERCHANT' });
+            if (Number(req.site.use_platform_merchant || 0) !== 1) {
+                return res.json({ status: 'error', message: '本站 USDT 充值暂未开通，请联系客服', code: 'NO_SITE_MERCHANT' });
+            }
         }
         if (siteCredsUsd) { conf.cryptomus_id = siteCredsUsd.id; conf.cryptomus_key = siteCredsUsd.key; }
         if (!conf.cryptomus_id || !conf.cryptomus_key) return res.json({ status: 'error', message: 'USDT商户参数未配置' });
@@ -335,6 +346,25 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
             type: prefix, description: `${prefix} - ${sourceDesc} [单号:${orderId}]`,
             site_id: paySiteId
           }, { transaction: t });
+
+            // 💰 平台代收台账：分站客户的钱进了平台商户时，必须记一行"平台欠站长"，
+            //    否则站长申请提现时无从核销（不落账 = 平台吞钱）。
+            if (paySiteId > 0) {
+              try {
+                const paySite = await Site.findByPk(paySiteId, { transaction: t });
+                const isUsdt = orderId.startsWith('USDT');
+                const ownCreds = isUsdt
+                  ? !!(paySite?.cryptomus_id && paySite?.cryptomus_key)
+                  : !!(paySite?.bufpay_id && paySite?.bufpay_key);
+                if (paySite && Number(paySite.use_platform_merchant || 0) === 1 && !ownCreds) {
+                  await SiteCollection.findOrCreate({
+                    where: { order_id: orderId },
+                    defaults: { site_id: paySiteId, user_id: user.id, order_id: orderId, amount: realAddAmount },
+                    transaction: t,
+                  });
+                }
+              } catch (e) { console.error('[代收台账写入失败]', orderId, e.message); }
+            }
 
             const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
             sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(user.balance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);

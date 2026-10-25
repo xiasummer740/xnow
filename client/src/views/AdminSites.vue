@@ -11,6 +11,7 @@
                    class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300">
         客户
       </router-link>
+      <router-link to="/admin/site-withdrawals" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300">提现</router-link>
       <router-link to="/admin" class="ml-auto text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400">返回密室</router-link>
     </div>
 

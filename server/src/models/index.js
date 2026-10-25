@@ -13,5 +13,7 @@ import Coupon from './Coupon.js';
 import SiteServicePrice from './SiteServicePrice.js';
 import SiteCustomerGroup from './SiteCustomerGroup.js';
 import PageView from './PageView.js';
+import SiteCollection from './SiteCollection.js';
+import SiteWithdrawal from './SiteWithdrawal.js';
 
-export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon, PageView, SiteServicePrice, SiteCustomerGroup };
+export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon, PageView, SiteCollection, SiteWithdrawal, SiteServicePrice, SiteCustomerGroup };

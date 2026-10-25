@@ -561,6 +561,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             class="px-4 py-2 rounded-lg text-sm font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-600/40 hover:bg-emerald-500/20 transition">
             🏬 分站客户 →
           </router-link>
+          <router-link to="/admin/site-withdrawals"
+            class="px-4 py-2 rounded-lg text-sm font-bold text-amber-300 bg-amber-500/10 border border-amber-600/40 hover:bg-amber-500/20 transition">
+            💸 提现 →
+          </router-link>
         </div>
 
         <div v-if="activeTab === 'overview'" class="space-y-6">

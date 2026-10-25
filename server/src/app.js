@@ -1,3 +1,4 @@
+import path from 'path';
 import { autoBackupTask } from './utils/backupEngine.js';
 import { wafMiddleware } from './middleware/waf.js';
 import { siteMiddleware } from './middleware/site.js';
@@ -24,6 +25,7 @@ import servicesRoutes from './routes/services.js';
 import ordersRoutes from './routes/orders.js';
 import transactionsRoutes from './routes/transactions.js';
 import sitesRoutes from './routes/sites.js';
+import siteSettlementRoutes from './routes/siteSettlement.js';
 import vpnRoutes from './routes/vpn.js';
 import analyticsRoutes from './routes/analytics.js';
 import { reconcilePayments } from './routes/pay.js';
@@ -62,6 +64,11 @@ const globalLimiter = rateLimit({
   max: 2000,
   message: { status: 'error', message: '系统触发防 CC 保护，请求过于频繁，请稍后再试' }
 });
+
+// 💰 站长收款码图片：只按文件名直读，目录不对外列目录
+const QR_DIR = process.env.SITE_QR_DIR || path.resolve(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', '..', 'xnow-qr');
+app.use('/qr', express.static(QR_DIR, { index: false, dotfiles: 'deny', maxAge: '1h' }));
+
 app.use('/api/', globalLimiter);
 
 const authLimiter = rateLimit({
@@ -94,6 +101,7 @@ app.use('/api/pay', payRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/sites', sitesRoutes);
+app.use('/api', siteSettlementRoutes);   // 💰 平台代收台账 / 站长提现（110 期）
 app.use('/api/vpn', vpnRoutes);
 app.use('/api/track', analyticsRoutes);
 

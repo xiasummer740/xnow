@@ -395,6 +395,80 @@
       <CopyStudio v-if="page === 'copy'" :form="form" :pv="pv" :section-keys="SECTION_KEYS"
         :uploading="uploading" @pick-image="pickImage" @fill-demo="fillHeroDemo" />
 
+      <!-- 💰 平台代收 & 提现（没配商户时的兜底：钱先进主站账户，记你名下待结算） -->
+      <section v-if="page === 'payment'" class="bg-slate-900/70 border border-emerald-800/50 rounded-2xl p-5 space-y-3">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="font-bold text-sm text-emerald-300">💰 没配商户？可以让主站代收</h2>
+            <p class="text-[11px] text-slate-500 leading-relaxed mt-1">
+              开启后客户能直接在你这充值，钱先进主站账户，记在<b class="text-slate-300">你名下待结算</b>；
+              每周可申请提现一次，上传你的收款码，主站管理员扫码转账后确认，台账清账。
+              配了自己的商户后随时可以关掉这里，钱就直接进你账户。
+            </p>
+          </div>
+          <button type="button" @click="togglePlatformMerchant"
+                  class="px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap"
+                  :class="settlement.use_platform_merchant ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-slate-300'">
+            {{ settlement.use_platform_merchant ? '已开启 · 点此关闭' : '开启主站代收' }}
+          </button>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2">
+            <div class="text-[10px] text-slate-500">待结算</div>
+            <div class="text-base font-black text-emerald-300">¥{{ money(settlement.available) }}</div>
+          </div>
+          <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2">
+            <div class="text-[10px] text-slate-500">已提现</div>
+            <div class="text-base font-black text-slate-200">¥{{ money(settlement.withdrawn) }}</div>
+          </div>
+          <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2">
+            <div class="text-[10px] text-slate-500">审核中</div>
+            <div class="text-base font-black text-amber-300">¥{{ money(settlement.pending_withdraw) }}</div>
+          </div>
+        </div>
+
+        <div v-if="settlement.available > 0" class="rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+          <template v-if="settlement.can_request">
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-[11px] text-slate-400">提现金额</label>
+              <input v-model.number="withdraw.amount" type="number" min="10" :max="settlement.available"
+                     class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm" />
+              <span class="text-[10px] text-slate-600">可提 ¥{{ money(settlement.available) }} · 最低 ¥{{ settlement.min_withdraw }}</span>
+              <button type="button" @click="withdrawAll" class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300">全部</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-[11px] text-slate-400">收款码</label>
+              <input type="file" accept="image/png,image/jpeg,image/webp" @change="pickQr"
+                     class="text-[11px] text-slate-400 file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-slate-800 file:text-slate-300" />
+              <input v-model="withdraw.note" placeholder="备注（可不填，比如微信号）"
+                     class="flex-1 min-w-[140px] bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px]" />
+              <button type="button" @click="submitWithdraw" :disabled="withdrawing"
+                      class="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-900 text-[11px] font-black disabled:opacity-50">
+                {{ withdrawing ? '提交中…' : '申请提现' }}
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-600">一周只能申请一次，主站扫码转账后点确认才算完成。</p>
+          </template>
+          <p v-else class="text-[11px] text-amber-300">
+            下次可申请：{{ whenText(settlement.can_request_at) }}（一周一次）
+          </p>
+        </div>
+
+        <div v-if="settlement.withdrawals && settlement.withdrawals.length" class="space-y-1">
+          <div class="text-[10px] text-slate-500">提现记录</div>
+          <div v-for="w in settlement.withdrawals" :key="w.id"
+               class="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg bg-slate-950/40 border border-slate-800">
+            <span class="font-bold text-slate-200">¥{{ money(w.amount) }}</span>
+            <span :class="w.status === 'paid' ? 'text-emerald-400' : w.status === 'rejected' ? 'text-red-400' : 'text-amber-300'">
+              {{ w.status === 'paid' ? '已转账' : w.status === 'rejected' ? '已驳回' : '审核中' }}
+            </span>
+            <span class="text-slate-600">{{ whenText(w.created_at) }}</span>
+            <span v-if="w.admin_note" class="text-slate-500 truncate">· {{ w.admin_note }}</span>
+          </div>
+        </div>
+      </section>
+
       <!-- 收款 -->
       <section v-if="page === 'payment'" class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3">
         <h2 class="font-bold text-sm text-amber-400">收款商户（钱直接进你的账户）</h2>
@@ -671,6 +745,53 @@ const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 
 // 员工视角：这里列的是**全部**分站（GET /api/sites 对 staff 返回全量），
 // 所以标题与文案不能写「我的分站」
 const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.userInfo?.role))
+// 💰 平台代收 / 提现
+const settlement = ref({ available: 0, withdrawn: 0, pending_withdraw: 0, use_platform_merchant: 0, min_withdraw: 10, can_request: true, withdrawals: [] })
+const withdraw = ref({ amount: 0, note: '' })
+const withdrawFile = ref(null)
+const withdrawing = ref(false)
+const money = (v) => Number(v || 0).toFixed(2)
+const whenText = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+const loadSettlement = async () => {
+  if (!site.value) return
+  const r = await fetch(`/api/sites/${site.value.id}/settlement`, { headers: headers() }).then(x => x.json()).catch(() => null)
+  if (r?.status === 'success') settlement.value = r.data
+}
+const togglePlatformMerchant = async () => {
+  if (!site.value) return
+  const enable = !settlement.value.use_platform_merchant
+  const r = await fetch(`/api/sites/${site.value.id}/platform-merchant`, {
+    method: 'POST', headers: headers(), body: JSON.stringify({ enabled: enable }),
+  }).then(x => x.json())
+  alert(r.message || (r.status === 'success' ? '已保存' : '失败'))
+  await loadSettlement()
+}
+const pickQr = (e) => { withdrawFile.value = e.target.files?.[0] || null }
+const withdrawAll = () => { withdraw.value.amount = Number(settlement.value.available || 0) }
+const submitWithdraw = async () => {
+  if (!site.value) return
+  if (!withdrawFile.value) return alert('请先选择你的收款码图片')
+  if (!(Number(withdraw.value.amount) >= Number(settlement.value.min_withdraw || 10))) {
+    return alert(`最低提现 ¥${settlement.value.min_withdraw || 10}`)
+  }
+  withdrawing.value = true
+  try {
+    const fd = new FormData()
+    fd.append('amount', String(withdraw.value.amount))
+    fd.append('note', withdraw.value.note || '')
+    fd.append('qr', withdrawFile.value)
+    const r = await fetch(`/api/sites/${site.value.id}/withdraw`, { method: 'POST', headers: headers(), body: fd }).then(x => x.json())
+    alert(r.message || (r.status === 'success' ? '已提交' : '提交失败'))
+    if (r.status === 'success') { withdraw.value = { amount: 0, note: '' }; withdrawFile.value = null }
+    await loadSettlement()
+  } finally { withdrawing.value = false }
+}
+
 const supportHours = ref(6)
 const requestSupport = async () => {
   if (!site.value) return
@@ -1156,6 +1277,8 @@ const load = async () => {
     }
     // 站长后台只属于站长。主站管理员想看/改某个站，必须由站长在后台「申请协助」开一段限时窗口；
     // 没窗口就送回密室的「分站管理」。（110 期祥哥定调）
+    // 收款页要用到代收/提现数据，进站就顺手拉一次
+    loadSettlement()
     if (isStaffRole.value) {
       const until = Number(site.value?.admin_access_until || 0)
       if (!site.value || until <= Date.now()) { router.replace('/admin/sites'); return }

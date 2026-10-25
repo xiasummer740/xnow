@@ -16,6 +16,9 @@ const Site = sequelize.define('Site', {
   // 🤝 110 期：站长授权主站管理员临时代管到这个时刻（毫秒时间戳，0 = 没授权）。
   //    主站管理员没有代改站点的常态权限 —— 只有站长在后台点了「申请协助」才开一扇限时的门。
   admin_access_until: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  // 💰 110 期：站长没配自己的商户时，允许用主站商户代收（钱进平台，记台账，站长申请提现）
+  //    站长自己开/关，无需审批（祥哥 2026-10-25 定）。
+  use_platform_merchant: { type: DataTypes.TINYINT, allowNull: false, defaultValue: 0 },
   announcement: { type: DataTypes.TEXT, allowNull: true },
   // 🎨 三期主题系统
   template: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'classic' },
