@@ -100,10 +100,8 @@
               <!-- 📌 390px 手机上表格会横向滚，操作列必须固定住，否则"减天数/停站/删"都在屏幕外 -->
               <td class="px-2 py-2 sticky right-0 z-10 bg-slate-900 shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.9)]">
                 <div class="flex items-center gap-1">
-                  <button @click="act(s, 'extend', 30)" :disabled="busy === s.id"
-                          class="text-[10px] px-1.5 py-1 rounded bg-slate-800 text-slate-300 disabled:opacity-40">+30天</button>
-                  <button @click="act(s, 'extend', -30)" :disabled="busy === s.id"
-                          class="text-[10px] px-1.5 py-1 rounded bg-slate-800 text-amber-300/90 disabled:opacity-40">−30天</button>
+                  <button @click="editDays(s)" :disabled="busy === s.id"
+                          class="text-[10px] px-2 py-1 rounded bg-slate-800 text-cyan-300 disabled:opacity-40">调时长</button>
                   <button v-if="s.status === 'active'" @click="act(s, 'stop')" :disabled="busy === s.id"
                           class="text-[10px] px-1.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-600/40 disabled:opacity-40">停站</button>
                   <button v-else @click="act(s, 'resume')" :disabled="busy === s.id"
@@ -187,15 +185,43 @@ const enterSite = (s) => {
   localStorage.setItem('xnow_site_current', String(s.id))
   window.location.href = '/my-site/overview'
 }
+const fmtCur = (s) => (s.expire_at ? new Date(Number(s.expire_at)).toLocaleDateString('zh-CN') : '不计费')
+
+// ⏱ 调时长：一次弹窗里填天数，正数延长、负数缩短。
+//    为什么不再用固定的 ±30：补偿 7 天、多收 15 天、扣回 90 天这些真实场景天天有，
+//    固定步长逼着管理员连点好几次，点错一次还得多点一次改回来。
+const editDays = async (s) => {
+  const cur = fmtCur(s)
+  const input = await uiStore.prompt(
+    `给「${s.name}」增减多少天？\n· 正数 = 延长（赠送，不收钱）\n· 负数 = 缩短（撤销误加的时间）\n· 一次最多 ±365 天\n当前到期：${cur}`,
+    { title: '调整到期时间', placeholder: '例如 30 或 -15', defaultValue: '30', confirmText: '确定调整' }
+  )
+  if (input === null) return
+  const raw = String(input).trim().replace(/[+＋]/g, '').replace(/[－—–]/g, '-')
+  const days = parseInt(raw, 10)
+  if (!Number.isFinite(days) || days === 0) return uiStore.notify('请输入非 0 的整数天数（例如 30 或 -15）')
+  if (Math.abs(days) > 365) return uiStore.notify('一次最多增减 365 天')
+  const label = days > 0 ? `增加 ${days} 天（赠送，不扣钱）` : `扣减 ${-days} 天（撤销误加的时间）`
+  if (!await uiStore.confirm(`确定给「${s.name}」${label}？\n当前到期：${cur}`)) return
+  await runAct(s, 'extend', days)
+}
+
+const runAct = async (s, action, days = 30) => {
+  busy.value = s.id
+  try {
+    const r = await fetch(`/api/admin/sites/${s.id}/action`, {
+      method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, days, confirm: action === 'delete' ? s.name : undefined }),
+    }).then(x => x.json())
+    if (r.status === 'success') { uiStore.notify(r.message || '完成'); await load() }
+    else uiStore.notify(r.message || '操作失败')
+  } catch (e) { uiStore.notify('网络异常：' + e.message) }
+  finally { busy.value = 0 }
+}
+
 const act = async (s, action, days = 30) => {
-  // 🔒 每个会改到期时间/状态的动作都要先确认 —— 这些按钮就在表格里，误触一次
-  //    就是"凭空多送 30 天"或者"站突然下线"，没有二次确认太危险。
-  const cur = s.expire_at ? new Date(Number(s.expire_at)).toLocaleDateString('zh-CN') : '不计费'
-  if (action === 'extend') {
-    const label = days > 0 ? `增加 ${days} 天` : `扣减 ${-days} 天`
-    const tip = days > 0 ? '（赠送，不收钱）' : '（用于撤销误加的时间）'
-    if (!await uiStore.confirm(`确定给「${s.name}」${label}${tip}？\n当前到期：${cur}`)) return
-  }
+  // 🔒 会改状态的动作都要先确认 —— 按钮就在表格里，误触一次就是"站突然下线"。
+  const cur = fmtCur(s)
   if (action === 'delete') {
     const typed = await uiStore.prompt(`删除站点会连同它的域名配置一起删掉，且不可恢复。\n要删除「${s.name}」，请输入站点名确认：`)
     if (typed === null) return
