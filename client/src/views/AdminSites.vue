@@ -109,11 +109,7 @@
                           class="text-[10px] px-1.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-600/40 disabled:opacity-40">停站</button>
                   <button v-else @click="act(s, 'resume')" :disabled="busy === s.id"
                           class="text-[10px] px-1.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-600/40 disabled:opacity-40">恢复</button>
-                  <button v-if="supportLeft(s) > 0" @click="enterSite(s)"
-                          class="text-[10px] px-1.5 py-1 rounded bg-amber-400/20 text-amber-200 border border-amber-400/50">
-                    代管中 {{ supportLeft(s) }}h
-                  </button>
-                  <span v-else class="text-[10px] text-slate-600">未授权代管</span>
+
                   <button @click="act(s, 'delete')" :disabled="busy === s.id"
                           class="text-[10px] px-1.5 py-1 rounded bg-slate-800 text-slate-500 disabled:opacity-40">删</button>
                 </div>
@@ -187,11 +183,6 @@ const cards = computed(() => {
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('xnow_token') || ''}` })
 
 const busy = ref(0)
-const supportLeft = (s) => {
-  const until = Number(s.admin_access_until || 0)
-  if (!until || until <= Date.now()) return 0
-  return Math.round((until - Date.now()) / 3600000 * 10) / 10
-}
 // 代管入口：只有站长开过协助窗口才有（窗口到期自动消失）
 const enterSite = (s) => {
   localStorage.setItem('xnow_site_current', String(s.id))
