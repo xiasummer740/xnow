@@ -133,10 +133,12 @@
       </details>
     </section>
 
-    <!-- ── 底部 CTA ── -->
-    <div class="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-800 bg-slate-950/95 backdrop-blur px-4 py-3">
-      <div class="max-w-2xl mx-auto pr-14">
-        <div class="flex items-center justify-between text-[10px] mb-1.5">
+    <!-- ── 底部 CTA ──
+         用 sticky 而不是 fixed：fixed 会横跨整个屏幕，和居中的内容栏错开（祥哥当场指出）。
+         sticky 贴在内容栏底部，宽度天然和内容一致。 -->
+    <div class="sticky bottom-0 z-30 -mx-4 sm:-mx-0 px-4 py-3 mt-4 rounded-t-2xl border-t border-slate-800 bg-slate-950/95 backdrop-blur">
+      <div>
+        <div class="flex items-center justify-between text-[10px] mb-1.5 pr-24">
           <span class="text-slate-500">余额 ¥{{ balance.toFixed(2) }}</span>
           <span :class="enough ? 'text-slate-400' : 'text-red-400'">
             {{ enough ? '开通后剩 ¥' + (balance - plan.site_monthly).toFixed(2) : '余额不够，还差 ¥' + (plan.site_monthly - balance).toFixed(2) }}
