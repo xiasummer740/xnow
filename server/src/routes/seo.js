@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Service, SiteServicePrice, Config } from '../models/index.js';
 import { platformOf, slugOf, labelOfSlug, PLATFORM_CN, typeOf, per1000, PLATFORM_LABELS } from '../utils/platform.js';
+import { copyOf } from '../utils/platformCopy.js';
 
 const router = express.Router();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -264,6 +265,9 @@ const styleBlock = `<style>
 .seo-wrap p{margin:8px 0;color:#cbd5e1}
 .seo-wrap ul{margin:8px 0 8px 20px;color:#cbd5e1}
 .seo-wrap li{margin:4px 0}
+.seo-wrap dl{margin:10px 0}
+.seo-wrap dt{font-weight:700;color:#e2e8f0;margin-top:12px}
+.seo-wrap dd{margin:2px 0 0;color:#cbd5e1}
 .seo-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
 .seo-table th,.seo-table td{border-bottom:1px solid #334155;padding:8px 6px;text-align:left}
 .seo-table th{color:#94a3b8;font-weight:600;font-size:13px}
@@ -381,14 +385,26 @@ router.get('/c/:slug', async (req, res) => {
         const canonical = `https://${brand.host}/c/${plat.slug}`;
         const title = `${platCn} 增长服务 ${cheapest} 元起 · ${brand.name}`;
         const desc = `${brand.name} 提供 ${plat.count} 个 ${platCn} 增长服务：粉丝、点赞、播放、评论等，${cheapest} 元起 / 1000 个，自动交付，登录即可下单。`;
-        const faq = faqOf(brand, platCn, plat);
+        const extra = copyOf(plat.label);
+        const faq = faqOf(brand, platCn, plat).concat(extra ? extra.faq : []);
+
+        // 平台专属内容：同一套模板下每个平台的正文都不一样（否则 15 个页面内容雷同）
+        const deep = extra ? `<h2>这些指标分别是什么意思</h2>
+<dl>${extra.metrics.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+<h2>什么情况下用得上</h2>
+<ul>${extra.scenes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+<h2>最容易踩的坑</h2>
+<ul>${extra.pitfalls.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+<h2>${esc(platCn)} 服务怎么选</h2>
+<p>${esc(extra.choose)}</p>` : `<h2>${esc(platCn)} 服务怎么选</h2>
+<p>按“数量 + 质量档位”选：量大、要求快的选高单价档；先小量测试再放量更稳。下单页会按你填的数量实时算出总价，不用自己换算。</p>`;
 
         const body = `<div class="seo-wrap">${styleBlock}
 <h1>${esc(platCn)} 增长服务 · ${esc(brand.name)}</h1>
+${extra ? `<p>${esc(extra.intro)}</p>` : ''}
 <p>${esc(brand.name)} 现有 <b>${plat.count}</b> 个 ${esc(platCn)} 相关服务，价格按每 1000 个计算，最低 <b>${cheapest} 元</b> 起，提交订单后系统自动开始处理。</p>
 ${typeTable(platCn, plat.types)}
-<h2>${esc(platCn)} 服务怎么选</h2>
-<p>按“数量 + 质量档位”选：量大、要求快的选高单价档；先小量测试再放量更稳。下单页会按你填的数量实时算出总价，不用自己换算。</p>
+${deep}
 <h2>常见问题</h2>
 ${faqHtml(faq)}
 <h2>其他平台</h2>
