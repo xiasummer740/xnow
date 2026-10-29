@@ -86,3 +86,15 @@ Cloudflare 后台 → 域名 `taikon.top` → **Security → Settings**
    条数 17 → 16（首页 + 15 个真平台）。`/c/other` 仍可访问。
 3. nginx 侧的 robots/sitemap 转发已合并成一条正则：
    `location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$`（分站模板 / install.sh / 生产主站 vhost 三处一致）。
+
+## 八、IndexNow 主动提交 + og 分享图（2026-10-29 深夜，已上线）
+
+- **IndexNow**：`seo.js` 的 `INDEXNOW_KEY` + `GET /<key>.txt` 密钥文件；提交脚本
+  `scripts/indexnow-submit.mjs`；清单 `.indexnow-hosts`（rebuild-vhosts 自动维护）；
+  cron `20 3 * * *` 每日提交。实测主站 200、分站 202 均已接受。
+  **Bing/Yandex 已闭环；Google 只认 Search Console，需要祥哥的账号（1 分钟活，已写在
+  ACCEPTANCE 八十五·九 第 4 条）**
+- **og.png**：`client/public/og.png`（1200×630）+ head 里的 og:image/twitter:image。
+  **图里故意不写站名** —— 分站客户不能看到主站品牌，主站分站共用这张中性图。
+- ⚠️ nginx 正则里有 `{32}` 必须加双引号，否则 `pcre_compile() failed: missing )`；
+  JS 模板字符串里要多写一层反斜杠（`\\.`）才会生成 `\.`。

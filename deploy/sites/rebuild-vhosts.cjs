@@ -36,6 +36,7 @@ const pickServerDir = () => {
 };
 
 const SERVER_DIR = pickServerDir();
+const ROOT_DIR = SERVER_DIR ? path.resolve(SERVER_DIR, '..') : process.cwd();
 if (!SERVER_DIR) {
   console.error('[rebuild-vhosts] 找不到 server 目录，请在项目根目录或 server 目录下运行');
   process.exit(1);
@@ -74,6 +75,24 @@ const main = async () => {
     } catch (e) {
       console.log(`  ❌ 失败 ${label} → ${e.message}`);
       fail++;
+    }
+  }
+  // IndexNow 提交清单：cron 每天照着这个文件逐行提交，分站增减只要重建 vhost 就自动同步
+  if (!DRY) {
+    try {
+      const hosts = ['xnow.taikon.top'];
+      for (const s of rows) {
+        if (s.status === 'expired') continue;
+        const d = s.custom_domain || s.domain;
+        if (d && !hosts.includes(d)) hosts.push(d);
+      }
+      fs.writeFileSync(
+        path.join(ROOT_DIR, '.indexnow-hosts'),
+        hosts.map((h) => `https://${h}`).join('\n') + '\n'
+      );
+      console.log(`[rebuild-vhosts] 已更新 .indexnow-hosts（${hosts.length} 个站点）`);
+    } catch (e) {
+      console.log(`[rebuild-vhosts] ⚠️ .indexnow-hosts 写入失败：${e.message}`);
     }
   }
   console.log(`[rebuild-vhosts] 完成：成功 ${ok}，跳过 ${skip}，失败 ${fail}`);

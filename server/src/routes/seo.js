@@ -148,6 +148,10 @@ const loadCatalog = async (site) => {
 
 // 首页/描述里平台的展示顺序：按客户认知的主次排，而不是"谁的服务数最多"。
 // （第一版按数量排，结果 meta description 开头是「网站流量、TikTok…」，很怪）
+// IndexNow 密钥（Bing / Yandex / Seznam 通用，Google 不支持 —— 它只认 Search Console）
+// 作用：页面增删改时主动通知搜索引擎来抓，不用等它自己爬。零账号成本。
+const INDEXNOW_KEY = process.env.INDEXNOW_KEY || '9750e61ef15e5367ff27f64bf3767673';
+
 const PREFERRED = ['TikTok', 'Instagram', 'YouTube', 'Telegram', 'Facebook', 'Twitter',
     'Shopee', 'WhatsApp', 'Line', 'Traffic', 'Spotify', 'Discord', 'Twitch', 'Apple Music', 'SoundCloud', 'Other'];
 const prefIndex = (label) => { const i = PREFERRED.indexOf(label); return i < 0 ? 99 : i; };
@@ -255,7 +259,13 @@ const headOf = ({ brand, title, desc, canonical, ld }) => `<title>${esc(title)}<
 <meta property="og:description" content="${esc(desc)}" />
 <meta property="og:url" content="${esc(canonical)}" />
 <meta property="og:site_name" content="${esc(brand.name)}" />
+<meta property="og:image" content="https://${esc(brand.host)}/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="${esc(brand.name)} · 社媒增长服务" />
+<meta property="og:locale" content="zh_CN" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://${esc(brand.host)}/og.png" />
 ${ld}`;
 
 const styleBlock = `<style>
@@ -298,6 +308,11 @@ const typeTable = (platCn, types) => {
 };
 
 const faqHtml = (faq) => `<dl class="seo-faq">${faq.map((f) => `<dt>${esc(f.q)}</dt><dd>${esc(f.a)}</dd>`).join('')}</dl>`;
+
+// ── GET /<key>.txt（IndexNow 密钥校验文件）─────────────────────────────────
+router.get(`/${INDEXNOW_KEY}.txt`, (req, res) => {
+    res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=86400').send(INDEXNOW_KEY);
+});
 
 // ── GET /robots.txt ──────────────────────────────────────────────────────
 router.get('/robots.txt', async (req, res) => {

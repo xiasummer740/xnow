@@ -318,7 +318,7 @@ server {
     #    （HTML 1676 字节 / 可见中文 6 个字）—— 搜索引擎抓不到内容，AI 无从引用。
     #    现在这四条转发给后端 server/src/routes/seo.js 服务端渲染。
     #    ⚠️ 后端挂了也不能让首页白屏：下面用 error_page 回落到静态 site.html。
-    location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$ {
+    location ~ "^/(robots\\.txt|sitemap\\.xml|sitemap\\.xsl|[0-9a-f]{32}\\.txt)$" {
         proxy_pass http://127.0.0.1:${backendPort};
         proxy_http_version 1.1;
         proxy_set_header Host $host;

@@ -4684,3 +4684,58 @@ GPTBot 等）读的是原文，能正常解析 16 个地址。
 顺带做的一个质量修正：**「其他」这个兜底分类不再进 sitemap**。
 上游的脏分区名全归到「其他」，它不是真平台、没有搜索词、内容也杂 ——
 地址条数 17 → 16（首页 + 15 个真实平台）。`/c/other` 页面本身保留可访问，只是不主动推给爬虫。
+
+### 九、不等它来抓：IndexNow 主动提交 + 分享预览图（2026-10-29 深夜）
+
+祥哥说「我不太懂，你作为专家帮我做好」—— 那就把「只能等」的部分也变成「主动推」。
+
+#### 1. IndexNow 主动提交（已上线，零账号）
+
+Bing / Yandex / Seznam / Naver 共用一个叫 IndexNow 的协议：站点主动告诉它「这几页变了」，
+通常几小时就收录；而自然抓取要几天到几周。**ChatGPT 检索与 Copilot 用的就是 Bing 索引**，
+所以这条对「AI 搜得到我们」是实打实有效，而且不需要任何账号。
+
+- 密钥：`9750e61ef15e5367ff27f64bf3767673`（`server/src/routes/seo.js` 里的 `INDEXNOW_KEY`，
+  可用同名环境变量覆盖）
+- 密钥文件：`GET /<key>.txt` 返回密钥本身（IndexNow 用它校验站点归属）
+- 提交脚本：`scripts/indexnow-submit.mjs`（读 sitemap → POST 到 `api.indexnow.org`）
+- 站点清单：`/var/www/xnow/.indexnow-hosts`，由 `rebuild-vhosts.cjs` 自动维护
+  （主站 + 每个带域名的分站一行）
+- 定时：`20 3 * * *` 每天跑一次 `deploy/sites/indexnow-daily.sh`，日志 `/var/log/xnow-indexnow.log`
+
+实测（2026-10-30 00:05）：
+
+| 站点 | 返回 |
+|---|---|
+| `xnow.taikon.top`（16 个地址） | **HTTP 200 已接受** |
+| `7h2d5u.taikon.top`（16 个地址） | **HTTP 202 已接受**（密钥校验中，正常） |
+
+#### 2. 分享预览图 og.png（已上线）
+
+以前链接发到 Telegram / WhatsApp / X 上只有一行字，没有图 —— 而这类站点的传播几乎全靠分享。
+新增 `client/public/og.png`（1200×630，113KB）+ head 里的 `og:image` / `twitter:image`。
+
+⚠️ **这张图里故意不写任何站名**：分站客户绝不能看到主站品牌，所以全站共用同一张中性图
+（「全平台社媒增长 / 涨粉·涨量·一键下单」），主站与所有分站都安全。
+
+#### 3. 一个 nginx 的坑（记下来，别再踩）
+
+把 robots/sitemap 转发合成一条正则时写了 `[0-9a-f]{32}\.txt`，
+**nginx 会把裸 `{` `}` 当成块定界符**，直接报
+`pcre_compile() failed: missing )`，`nginx -t` 失败。正确写法要加双引号：
+
+```nginx
+location ~ "^/(robots\.txt|sitemap\.xml|sitemap\.xsl|[0-9a-f]{32}\.txt)$" { ... }
+```
+
+另外 JS 模板字符串里要写 `\\.`（双反斜杠），否则生成出来的 vhost 里 `\.` 会变成 `.`。
+
+#### 4. 只剩一件需要祥哥的事（1 分钟）
+
+**Google 不认 IndexNow**，只认 Search Console。要提交 sitemap 到 Google 必须有他的 Google 账号：
+1. 打开 https://search.google.com/search-console
+2. 添加资源 → 网址前缀 → `https://xnow.taikon.top`
+3. 验证方式选「DNS 记录」（Cloudflare 里加一条 TXT）或「HTML 标记」
+4. 左侧「站点地图」→ 填 `sitemap.xml` → 提交
+
+不提交也会被抓、被收录，只是慢 1~2 周。Bing 那边已经不用他管了（IndexNow 已通）。

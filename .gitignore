@@ -121,3 +121,4 @@ server/src/.mcp.json
 ISSUES.md
 
 .tmpbuild/
+.indexnow-hosts
