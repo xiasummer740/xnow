@@ -318,14 +318,8 @@ server {
     #    （HTML 1676 字节 / 可见中文 6 个字）—— 搜索引擎抓不到内容，AI 无从引用。
     #    现在这四条转发给后端 server/src/routes/seo.js 服务端渲染。
     #    ⚠️ 后端挂了也不能让首页白屏：下面用 error_page 回落到静态 site.html。
-    location = /robots.txt {
-        proxy_pass http://127.0.0.1:${backendPort}/robots.txt;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-    }
-
-    location = /sitemap.xml {
-        proxy_pass http://127.0.0.1:${backendPort}/sitemap.xml;
+    location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$ {
+        proxy_pass http://127.0.0.1:${backendPort};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
@@ -360,7 +354,7 @@ server {
     }
 
     # 📄 站点声明 / 清单这类平台文件对分站无意义，别让它们回落成网页
-    #    （sitemap.xml 已在上面的 location = /sitemap.xml 交给后端生成，这里不再拦它）
+    #    （robots.txt / sitemap.xml / sitemap.xsl 已在上面统一交给后端生成，这里不拦它们）
     location ~* ^/(manifest\.json|site\.webmanifest|ads\.txt|security\.txt)$ {
         return 404;
     }

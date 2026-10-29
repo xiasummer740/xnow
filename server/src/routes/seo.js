@@ -355,8 +355,16 @@ router.get('/sitemap.xml', async (req, res) => {
         const ordered = [...catalog.platforms].sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
         for (const p of ordered) {
             if (!p.count) continue;
+            // 「其他」是兜底分类（上游脏分类全归到这里），不是真平台：
+            // 拿它做落地页既没有搜索词，内容也杂，不放进 sitemap。
+            if (p.label === 'Other') continue;
             urls.push({ loc: `${base}/c/${p.slug}`, pri: p === ordered[0] ? '0.9' : '0.8' });
         }
+        // ⚠️ 这里**故意不加** <?xml-stylesheet?>：
+        //    加了之后浏览器会把 XML 渲染成漂亮表格，但 Chrome 从 2026 起对 XSLT 弹红色警告
+        //    （"此网站使用了 XSLT，该功能很快就会从此浏览器中移除"），比原始 XML 树更让人以为坏了。
+        //    搜索引擎读的是 XML 原文，加不加样式对收录没有任何影响。
+        //    （/sitemap.xsl 路由保留着，将来需要时把上面那行 PI 加回来即可。）
         const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map((u) => `  <url><loc>${u.loc}</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>${u.pri}</priority></url>`).join('\n')}
@@ -366,6 +374,53 @@ ${urls.map((u) => `  <url><loc>${u.loc}</loc><lastmod>${now}</lastmod><changefre
         console.error('[seo] sitemap 生成失败', e.message);
         res.status(500).type('text/plain').send('sitemap error');
     }
+});
+
+// ── GET /sitemap.xsl（把 sitemap 渲染成人能看的表格）──────────────────────
+router.get('/sitemap.xsl', (req, res) => {
+    const xsl = `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:sm="http://www.sitemaps.org/schemas/sitemap/0.9" exclude-result-prefixes="sm">
+<xsl:output method="html" encoding="UTF-8" indent="yes" />
+<xsl:template match="/">
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<title>站点地图 · ${esc(hostOf(req))}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+body{margin:0;padding:28px 18px 60px;background:#0b1220;color:#e2e8f0;
+font:15px/1.7 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:820px;margin:0 auto}
+h1{font-size:20px;margin:0 0 6px}
+p.sub{color:#94a3b8;margin:0 0 22px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border-bottom:1px solid #22304a;padding:10px 8px;text-align:left}
+th{color:#94a3b8;font-weight:600;font-size:12px;letter-spacing:.04em}
+a{color:#22d3ee;text-decoration:none;word-break:break-all}
+a:hover{text-decoration:underline}
+td.n{color:#94a3b8;white-space:nowrap}
+.foot{margin-top:24px;color:#64748b;font-size:12px}
+</style></head>
+<body><div class="wrap">
+<h1>站点地图</h1>
+<p class="sub">共 <xsl:value-of select="count(sm:urlset/sm:url)" /> 个页面 · 本文件给人和搜索引擎共用，搜索引擎读取的是 XML 原文</p>
+<table>
+<thead><tr><th>页面地址</th><th>优先级</th><th>更新频率</th><th>最后更新</th></tr></thead>
+<tbody>
+<xsl:for-each select="sm:urlset/sm:url">
+<xsl:sort select="sm:priority" order="descending" />
+<tr>
+<td><a href="{sm:loc}"><xsl:value-of select="sm:loc" /></a></td>
+<td class="n"><xsl:value-of select="sm:priority" /></td>
+<td class="n"><xsl:value-of select="sm:changefreq" /></td>
+<td class="n"><xsl:value-of select="sm:lastmod" /></td>
+</tr>
+</xsl:for-each>
+</tbody></table>
+<div class="foot">本页由服务端按当前在售服务实时生成 · 价格与平台会随店铺配置变化</div>
+</div></body></html>
+</xsl:template>
+</xsl:stylesheet>`;
+    res.type('text/xsl; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(xsl);
 });
 
 // ── GET /c/:slug（平台落地页）────────────────────────────────────────────

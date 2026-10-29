@@ -461,16 +461,10 @@ server {
     #    robots.txt / sitemap.xml 按域名生成；/c/<平台> 是带 JSON-LD 的落地页；
     #    首页拿服务端渲染壳（title/description/canonical + 可抓内容块）。
     #    端上 Vue 仍挂在 #app 上覆盖内容，人看到的是正常 SPA。
-    location = /robots.txt {
-        proxy_pass http://127.0.0.1:3000/robots.txt;
+    location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$ {
+        proxy_pass http://127.0.0.1:${backendPort};
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-    }
-
-    location = /sitemap.xml {
-        proxy_pass http://127.0.0.1:3000/sitemap.xml;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
+        proxy_set_header Host $host;
     }
 
     location ^~ /c/ {

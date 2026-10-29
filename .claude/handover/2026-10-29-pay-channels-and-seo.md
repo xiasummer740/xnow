@@ -77,3 +77,12 @@ Cloudflare 后台 → 域名 `taikon.top` → **Security → Settings**
 
 **以后加平台**：在 `platformCopy.js` 里加一项即可，缺内容时落地页自动退回简短版
 （不会报错、不会空白）。
+
+## 七、sitemap 的两个小结论（2026-10-29 深夜）
+
+1. **浏览器打开 `sitemap.xml` 显示 XML 源码是正常的** —— 别为它加 XSLT：
+   Chrome 从 2026 起对 XSLT 弹红条警告，比源码更吓人。`/sitemap.xsl` 路由留着备用。
+2. **「其他」分类不进 sitemap** —— 上游脏分区名全归到它，不是真平台，没有搜索词。
+   条数 17 → 16（首页 + 15 个真平台）。`/c/other` 仍可访问。
+3. nginx 侧的 robots/sitemap 转发已合并成一条正则：
+   `location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$`（分站模板 / install.sh / 生产主站 vhost 三处一致）。

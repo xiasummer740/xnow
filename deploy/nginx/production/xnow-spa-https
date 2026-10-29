@@ -74,14 +74,8 @@ server {
     }
 
     # SEO / AI 公开页（2026-10-29）：后端 server/src/routes/seo.js 服务端渲染
-    location = /robots.txt {
-        proxy_pass http://127.0.0.1:3000/robots.txt;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-    }
-
-    location = /sitemap.xml {
-        proxy_pass http://127.0.0.1:3000/sitemap.xml;
+    location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$ {
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }

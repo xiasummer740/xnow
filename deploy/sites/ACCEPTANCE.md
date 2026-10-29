@@ -4668,3 +4668,19 @@ curl -s https://xnow.taikon.top/robots.txt | wc -l
 2. 客户可见文案不出现「上游 / 供应商 / 渠道商 / 进货 / 站长」
 3. 每个平台的语言习惯不同（Telegram 讲群运营、Shopee 讲转化率、WhatsApp 讲封号风险），
    不是把同一段话换个名字
+
+### 八、`sitemap.xml` 在浏览器里显示成源码 —— 这是正常的（2026-10-29 23:45）
+
+祥哥把自己打开 `https://xnow.taikon.top/sitemap.xml` 的截图发过来问「这是啥情况」：
+浏览器顶上写着 *"This XML file does not appear to have any style information associated with it"*。
+
+**这不是故障**：sitemap 是给爬虫读的 XML，本来就没有排版样式。搜索引擎（Googlebot / Bingbot /
+GPTBot 等）读的是原文，能正常解析 16 个地址。
+
+中间试过给 XML 挂 XSLT 样式表把它渲染成表格，结果 **Chrome 弹红条**
+（「此网站使用了 XSLT；该功能很快就会从此浏览器中移除」）—— 比原始 XML 树更吓人，已撤掉。
+`/sitemap.xsl` 这条路由保留着，将来浏览器不弃用 XSLT 了再把 `<?xml-stylesheet?>` 加回去。
+
+顺带做的一个质量修正：**「其他」这个兜底分类不再进 sitemap**。
+上游的脏分区名全归到「其他」，它不是真平台、没有搜索词、内容也杂 ——
+地址条数 17 → 16（首页 + 15 个真实平台）。`/c/other` 页面本身保留可访问，只是不主动推给爬虫。
