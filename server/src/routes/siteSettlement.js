@@ -94,7 +94,7 @@ const summaryOf = async (siteId) => {
 // 给前台看的通道状态（客户永远看不到这些词，只有站长自己看）
 const channelView = (chan, ownReady) => {
   const label = chan.channel === 'own' ? '你自己的商户（钱直接进你账户）'
-    : chan.channel === 'platform' ? '主站代收（钱进主站账户，记你名下待结算）'
+    : chan.channel === 'platform' ? '平台代收（钱进平台账户，记你名下待结算）'
     : '未开通';
   return {
     channel: chan.channel,          // own / platform / off
@@ -121,7 +121,7 @@ router.post('/sites/:id/platform-merchant', authenticate, async (req, res) => {
     res.json({
       status: 'success',
       message: enabled
-        ? '已开启：客户可以在线充值，钱先进主站账户，记你名下待结算'
+        ? '已开启：客户可以在线充值，钱先进平台账户，记你名下待结算'
         : '已关闭：客户只能由你手动加余额',
       data: { use_platform_merchant: enabled ? 1 : 0 },
     });
@@ -129,9 +129,9 @@ router.post('/sites/:id/platform-merchant', authenticate, async (req, res) => {
 });
 
 // ── 站长：设置收款方式（auto / own / platform）──
-//    auto     ：配了自有商户就用自己的，否则用主站代收
+//    auto     ：配了自有商户就用自己的，否则用平台代收
 //    own      ：只用自己的商户
-//    platform ：只用主站代收
+//    platform ：只用平台代收
 //    2026-10-29 祥哥定：免审批，站长自己切。
 router.post('/sites/:id/pay-mode', authenticate, async (req, res) => {
   try {
@@ -153,7 +153,7 @@ router.post('/sites/:id/pay-mode', authenticate, async (req, res) => {
       const { clearSiteCache } = await import('../middleware/site.js');
       clearSiteCache();
     } catch (e) {}
-    const names = { auto: '自动选择', own: '只用自己的商户', platform: '只用主站代收' };
+    const names = { auto: '自动选择', own: '只用自己的商户', platform: '只用平台代收' };
     res.json({
       status: 'success',
       message: `收款方式已改为「${names[mode]}」`,

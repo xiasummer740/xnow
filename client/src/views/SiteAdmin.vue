@@ -343,14 +343,14 @@
       <CopyStudio v-if="page === 'copy'" :form="form" :pv="pv" :section-keys="SECTION_KEYS"
         :uploading="uploading" @pick-image="pickImage" @fill-demo="fillHeroDemo" />
 
-      <!-- 💰 平台代收 & 提现（没配商户时的兜底：钱先进主站账户，记你名下待结算） -->
+      <!-- 💰 平台代收 & 提现（没配商户时的兜底：钱先进平台账户，记你名下待结算） -->
       <section v-if="page === 'payment'" class="bg-slate-900/70 border border-emerald-800/50 rounded-2xl p-5 space-y-3">
         <div class="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h2 class="font-bold text-sm text-emerald-300">💰 收款方式</h2>
             <p class="text-[11px] text-slate-500 leading-relaxed mt-1">
               两条通道都给你备着，随时自己切：<b class="text-slate-300">平台代收</b>（不用配商户，客户马上能充值，
-              钱先进主站账户、记你名下待结算，每周提现一次）或 <b class="text-slate-300">自己的商户</b>
+              钱先进平台账户、记你名下待结算，每周提现一次）或 <b class="text-slate-300">自己的商户</b>
               （钱直接进你账号，平台不碰）。切换即时生效，不用等人审批。
             </p>
           </div>
@@ -389,7 +389,7 @@
           <button type="button" @click="togglePlatformMerchant"
                   class="px-3 py-1.5 rounded-lg text-[11px] font-black whitespace-nowrap"
                   :class="settlement.use_platform_merchant ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-slate-300'">
-            {{ settlement.use_platform_merchant ? '已开启 · 点此关闭' : '开启主站代收' }}
+            {{ settlement.use_platform_merchant ? '已开启 · 点此关闭' : '开启平台代收' }}
           </button>
           <span class="text-[10px] text-slate-600">
             关闭后只有你自己的商户能收款；两条都没开，客户就充不了值。
@@ -418,7 +418,7 @@
         </div>
         <div v-if="settlement.available <= 0 && Number(settlement.pending_withdraw) <= 0 && settlement.available <= 0"
              class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-500">
-          还没有可提现的余额 —— 客户用在线支付充值的钱才会记到这里（主站代收）。
+          还没有可提现的余额 —— 客户用在线支付充值的钱才会记到这里（平台代收）。
         </div>
 
         <div v-if="settlement.available > 0" class="rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-2">
@@ -781,7 +781,7 @@ const settlement = ref({ available: 0, withdrawn: 0, pending_withdraw: 0, use_pl
 const PAY_MODES = [
   { value: 'auto', label: '自动选择', hint: '配了自己的商户就用自己的，没配就用平台代收' },
   { value: 'own', label: '只用自己的商户', hint: '钱直接进你的账号，平台一分不碰' },
-  { value: 'platform', label: '只用平台代收', hint: '不用配商户，钱进主站账户、记你名下待结算' },
+  { value: 'platform', label: '只用平台代收', hint: '不用配商户，钱进平台账户、记你名下待结算' },
 ]
 const activeChannel = computed(() => (settlement.value.channels || {}).rmb || { channel: 'off', hint: '', reason: '' })
 const setPayMode = async (mode) => {
