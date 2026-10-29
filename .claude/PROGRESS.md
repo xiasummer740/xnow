@@ -1596,3 +1596,73 @@ Instagram/Twitter 旧版小鸟/Line/Shopee/WhatsApp），**内联进 bundle**，
 
 **待祥哥操作**：Cloudflare 后台关掉「Enable Bot Preference Sync」，
 否则 CF 注入的 `GPTBot Disallow: /` 会压过我们自己的放行规则（GEO 仍然无效）。
+
+## [2026-10-30] SEO/GEO 全链路闭合：CF 开关 + 平台页内容 + IndexNow + GSC
+
+### 背景
+上一轮把服务端渲染的 SEO 骨架搭好了，但整条链断在三处：① Cloudflare 默认拦 AI 爬虫
+（`GPTBot` 403、robots.txt 被 CF 注入 167 行）② 15 个 `/c/<平台>` 页面除了名字和价格
+几乎一模一样（模板薄页面，收录了也排不上）③ 没人主动通知搜索引擎。
+
+祥哥的一句「我不太懂，你作为专家帮我做好」把决策权交过来，于是三处一次做完。
+
+### 完成
+
+**1. Cloudflare 的 AI 爬虫开关（他开了后台让我直接点）**
+- 「配置 AI 自动程序策略」：`训练` 禁止 → **允许（不阻止）**（GPTBot 就死在这一档）
+- `启用自动程序偏好同步` 开 → **关**（它就是往我们 robots.txt 前面塞 `Disallow: /` 的元凶）
+- 缓存按 URL 清了 5 条 robots/sitemap（边缘缓存了 430 秒，不刷看到的还是旧的 167 行）
+- 实测：GPTBot / ClaudeBot **403 → 200**；robots.txt **167 → 37 行**；分站与落地页同样放行
+- ⚠️ CF 2026-09-15 起对新域名默认禁止「训练类」抓取 → 以后绑新域名要重复这一步
+
+**2. 15 个平台落地页改成「内容页」（`utils/platformCopy.js`）**
+- 每个平台一份专属内容：一句话结论 + 4 项指标口径 + 4 条适用场景 + 3 条最容易踩的坑
+  + 选购建议 + 2 条专属问答（FAQPage 从 4 问变 6 问）
+- 实测正文 766 → **1106~1554 字**，其中 1300 字以上是别页没有的
+- 写作自律：不承诺「保证不掉/必上热门」；客户可见文案不出现上游/供应商/渠道商/进货/站长
+- 平台增删只改一个文件，缺内容自动退回简短版（不白屏不报错）
+
+**3. IndexNow 主动提交（Bing / Yandex / Seznam / Naver 通用，零账号）**
+- `seo.js` 加 `INDEXNOW_KEY` + `GET /<key>.txt` 密钥校验；`scripts/indexnow-submit.mjs` 读 sitemap 后 POST
+- `.indexnow-hosts` 由 `rebuild-vhosts.cjs` 自动维护（主站 + 每个带域名的分站）
+- cron `20 3 * * *` 每日提交，日志 `/var/log/xnow-indexnow.log`
+- 实测：主站 HTTP 200、分站 HTTP 202，均已接受
+- **为什么值钱**：ChatGPT 检索与 Copilot 用的就是 Bing 索引 —— 这条直接决定「AI 能不能搜到我们」
+
+**4. 分享预览图 `client/public/og.png`（1200×630）**
+- 以前链接发到 Telegram/WhatsApp/X 只有一行字没图，而这类站点传播全靠分享
+- ⚠️ **图里故意不写任何站名** —— 分站客户绝不能看到主站品牌，主站分站共用这张中性图
+
+**5. Google Search Console（在他浏览器里操作）**
+- 发现：`/sitemap.xml` 2026-09-09 就提交过，但当时那版只有 3 条地址 → GSC 一直显示「已发现网页 3」
+- 重新提交 → **Google 即时重读，已发现网页 3 → 16**
+- 用「网址检查 → 请求编入索引」把 tiktok / instagram / youtube / telegram / facebook 推进优先抓取队列
+- 顺带确认：**首页本来就已被 Google 收录**（只是以前没内容，所以既没排名也没点击）
+
+**6. `sitemap.xml` 的两个决定**
+- **不挂 XSLT 美化**：试过能渲染成漂亮表格，但 Chrome 2026 起对 XSLT 弹红色警告
+  （「该功能很快就会从此浏览器中移除」），比原始 XML 树更吓人 → 撤掉，`/sitemap.xsl` 留作备用
+- **「其他」分类不进 sitemap**：它是上游脏分区的兜底桶、不是真平台、没有搜索词 → 17 条变 16 条
+  （`/c/other` 仍可访问）
+
+### 踩到并修掉的坑
+
+1. **nginx 正则里 `{32}` 必须加双引号** —— 裸 `{}` 被当块定界符，`nginx -t` 报
+   `pcre_compile() failed: missing )`，一旦重启 nginx 全站挂掉。另外 JS 模板字符串要写
+   `\\.` 的双反斜杠版本才会生成 `\.`（`siteDomain.js` / `install.sh` / 主站 vhost 三处已一致）
+2. **`.sh` 在 Windows checkout 变 CRLF** → Linux 上报 `$'\r': command not found`，
+   换机恢复时几个部署脚本会全崩。已加 `.gitattributes`（`*.sh text eol=lf`），
+   生产 `git config core.autocrlf input`
+3. **GSC / Cloudflare 只认真人点击** —— 合成 `element.click()` 无效，要用 CDP 的
+   `Input.dispatchMouseEvent` / `Input.insertText`；Chrome 136+ 禁止对默认 profile 开
+   远程调试端口 → 复制 profile 副本（`Local State` + `Default/Network/Cookies` 够带登录态），
+   **干完必须删副本**（含登录态），再用原 profile 无端口重开浏览器
+
+### 只剩客观等待
+收录是唯一无法当场验证的环节：GSC 已发现 16 个网页、5 个重点页进了优先队列，
+正常 3~7 天出第一批、2~4 周看到长尾词排名。下次开工第一件事就是查收录数。
+
+### 三方同步状态
+- 本地: `513f50a2` ✅
+- GitHub: `513f50a2` ✅
+- 生产: `513f50a2` ✅（`git status` 0 改动；主站/分站/Beta 全 200）

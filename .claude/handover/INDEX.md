@@ -4,7 +4,7 @@
 
 | 日期 | 文件 | 一句话 |
 |------|------|--------|
-| 2026-10-29 | [pay-channels-and-seo.md](2026-10-29-pay-channels-and-seo.md) | **A/B 双收款通道 + 分站 SEO/GEO**：`payChannel.js` 统一判定（auto/own/platform，自有商户的钱绝不落平台台账）；`seo.js` 服务端渲染 robots/sitemap/`/c/<平台>`/首页壳（分站可见文字 6→2089 字）；⚠️ 待祥哥关掉 CF 的 Bot Preference Sync，AI 爬虫才真放行 |
+| 2026-10-29 | [pay-channels-and-seo.md](2026-10-29-pay-channels-and-seo.md) | **A/B 双收款通道 + 分站 SEO/GEO 全链路闭合**：`payChannel.js` 统一判定（auto/own/platform，自有商户的钱绝不落平台台账）；`seo.js` 服务端渲染 robots/sitemap/`/c/<平台>`/首页壳；**CF 的 AI 爬虫开关已改完**（GPTBot 403→200）、**15 个平台页各自写了专属内容**（766→1100~1550 字）、接了 **IndexNow**（Bing/Yandex 每日自动提交）、补了 **og 分享图**、**GSC 已提交且 sitemap 已发现 16 个网页**（原 3 个）|
 | 2026-10-26 | [sites-feedback-round1.md](2026-10-26-sites-feedback-round1.md) | **分站上线后第一轮反馈修完的接力起点**：6 个提交（分配分站 / 证书顺序 / 减天数 / 填天数 / 按钮冒泡 / 账面拆分）；祥哥明确「不建测试号、不标测试单、不补历史原因」；三个坑（dist/index.html 被 checkout 回退、先立 vhost 再签证书、行内按钮必须 .stop）|
 | 2026-10-14 | [machine-drill-result.md](2026-10-14-machine-drill-result.md) | 🔴 **整机演练已实做（结果）**：老 token 免登**成立**（admin/普通用户都 200、伪造签名 401、经 nginx 也 200；12 张表逐表一致）。**但按原样 `install.sh` 一次都恢复不起来** —— 4 处必然致命（Node 18 导致 `ERR_REQUIRE_ESM` 后端起不来 / MariaDB 密码静默没设上 / pm2 软链少一级 / nginx heredoc 里 `$remote_addr` 触发 `set -u`）+ 1 处条件致命 + 1 处假告警。§10 还挖出**换机就丢**的东西：`try_files` 漏 `$uri.html`（`/finance` `/vpn` `/en` 会塌成首页）、3 个页面只在服务器 `dist/` 里、生产 nginx 配置不在仓库；**并发现这台机器上跑着两个项目，而 xnow 的上游 `tk7188.com` 就在同一台机器上、不在本项目备份范围内**（2026-10-15 祥哥定调：上游的备份与恢复责任不归我们，**别再问、别再提**）。补丁均已提交推送 |
 | 2026-10-14 | [machine-drill-runbook.md](2026-10-14-machine-drill-runbook.md) | **整机演练 Runbook（照着做即可）**：在另一台新机器上用备份包副本跑一遍恢复，证明「数据不少 + 老用户不用重登」。含 5 条红线、验收表、预期偏差、收尾销毁。配套 `tools/drill-prepare.sh`（**已用合成包实测**，三道闸门会拦住"把真实用户数据写进公开仓库"这类事故）|
