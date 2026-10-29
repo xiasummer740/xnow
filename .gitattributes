@@ -1,0 +1,8 @@
+# 只固定「必须是 LF 否则会坏」的类型。
+#
+# 为什么只写 *.sh：Windows 上 core.autocrlf=true，checkout 时会把文本文件改成 CRLF，
+# 而 shell 脚本带 \r 传到 Linux 会直接报 `$'\r': command not found`。
+# 这一条保证 .sh 无论在哪个平台 checkout 都是 LF（仓库里本来就是 LF，不会产生大改动）。
+#
+# 不写 `* text=auto`：那会在下次提交时重排整个仓库的行尾，产生几万行无意义 diff。
+*.sh text eol=lf
