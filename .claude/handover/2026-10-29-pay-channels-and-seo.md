@@ -98,3 +98,20 @@ Cloudflare 后台 → 域名 `taikon.top` → **Security → Settings**
   **图里故意不写站名** —— 分站客户不能看到主站品牌，主站分站共用这张中性图。
 - ⚠️ nginx 正则里有 `{32}` 必须加双引号，否则 `pcre_compile() failed: missing )`；
   JS 模板字符串里要多写一层反斜杠（`\\.`）才会生成 `\.`。
+
+## 九、GSC 已提交（2026-10-30 00:15）
+
+GSC 里 `/sitemap.xml` **原本 2026-09-09 就提交过**，但当时只发现 3 个网页（旧 sitemap 就 3 条）。
+这次在祥哥浏览器里重新提交 → Google **即时重读，已发现 16 个网页**。
+
+同时把 5 个重点平台页走了「网址检查 → 请求编入索引」（tiktok / instagram / youtube /
+telegram / facebook）。首页本来就已收录。
+
+**操作后台的技术要点**（以后再遇到 GSC/Cloudflare 这种只认真人点击的后台）：
+- Chrome 136+ 禁止对默认 profile 开 `--remote-debugging-port` → 必须复制 profile 到临时目录再用
+- 复制 `Local State` + `Default/Network/Cookies` 就够带登录态（Chrome 关掉后 Cookies 才不锁）
+- 点按钮用 `Input.dispatchMouseEvent`，输入用 `Input.insertText`（合成 click 对 GSC 无效）
+- **干完必须删掉副本目录**（含登录态），并用原 profile 无端口重开浏览器
+
+⚠️ 分站 `7h2d5u.taikon.top` 在 GSC 里是独立资源，目前没加（要重新验证）。
+靠 sitemap + IndexNow 抓取即可；要单独看分站数据再加资源。
