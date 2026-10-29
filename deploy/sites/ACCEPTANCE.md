@@ -4562,18 +4562,39 @@ nginx 里还没有这个域名的 server 块，请求落到默认站点（主站
 落地页实测数据（生产真价）：TikTok 共 396 个服务，最低 ¥0.05/1000；
 分型后 播放 123 档 / 直播 44 / 点赞 24 / 粉丝 14 / 评论 11。
 
-### 五、⚠️ 还差祥哥在 Cloudflare 点一下
+### 五、⚠️ 还差祥哥在 Cloudflare 点两下（否则 GEO 一步都走不了）
 
-生产 `robots.txt` 现在是 **167 行**，因为 Cloudflare 在前面注入了一段「Managed content」：
-里面明确 `User-agent: GPTBot → Disallow: /`（还有 ClaudeBot / Google-Extended / Bytespider）。
-我们自己的那份（37 行）在后面，同一个 UA 出现两次、规则冲突，
-**AI 爬虫很可能仍按 CF 那段的禁止执行** —— 那样 GEO 一步都走不了。
+这一节是实测出来的，不是猜的。用不同 UA 直接抓线上：
 
-祥哥要做的（Cloudflare 后台，30 秒）：
-`域名 taikon.top` → **Security → Settings** → 筛 **Bot traffic** → **Configure AI bot policies**
-→ 把 **Enable Bot Preference Sync** 关掉 → Save。
-关掉后 `robots.txt` 只剩我们自己那 37 行，AI 检索爬虫就真的放行了。
-（若他想保留 CF 那段，就把 Training 设成 Allow，但那样连训练爬虫也放开了。）
+| 抓取方 | 结果 |
+|---|---|
+| 普通浏览器 UA | 200，5740 字节 |
+| `curl/8.0` | 200，5740 字节 |
+| PerplexityBot | 200（CF 没拦） |
+| **GPTBot（OpenAI）** | **403 `Your request was blocked.`（25 字节）** |
+| **ClaudeBot（Anthropic）** | **403 同左** |
+
+也就是说：我们把 robots.txt 写成「欢迎 AI 来读」，Cloudflare 在它前面把门关了 ——
+**GPTBot / ClaudeBot 连一个字节都拿不到**，ChatGPT、Claude 永远不会引用我们。
+
+两处要改（Cloudflare 后台 → 域名 `taikon.top` → **Security → Settings**，
+直达 <https://dash.cloudflare.com/?to=/:account/:zone/security/settings>）：
+
+1. **Configure AI bot policies**（AI 爬虫策略）
+   - `Search`（检索/索引）→ **Allow**
+   - `Agent`（ChatGPT-User 这类替你现查现答的）→ **Allow**
+   - `Training`（拿内容去训练的，GPTBot 属于这档）→ **Allow**
+     （他若只想被「引用」不想被「训练」，可设 `Block on pages with ads`，但那样 GPTBot 仍读不到正文）
+2. **Enable Bot Preference Sync**（托管 robots.txt）→ **关掉**
+   关掉后 `robots.txt` 从 167 行变回我们自己的 37 行，规则不再自相矛盾。
+
+改完自检（我这边一条命令就能验）：
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -A "Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)" https://xnow.taikon.top/
+# 期望 200（现在是 403）
+curl -s https://xnow.taikon.top/robots.txt | wc -l
+# 期望 37（现在是 167）
+```
 
 ### 六、顺带确认的事
 

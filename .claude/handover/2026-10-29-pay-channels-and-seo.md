@@ -23,13 +23,19 @@
 nginx 侧：`server/src/utils/siteDomain.js`（分站模板）、`install.sh`（主站模板）、
 `deploy/nginx/production/xnow-spa-https`（生产存档，改完线上要 scp 回来）。
 
-## 三、⚠️ 下一步卡在祥哥手上
+## 三、⚠️ 下一步卡在祥哥手上（两处 CF 开关）
 
-Cloudflare → 域名 `taikon.top` → **Security → Settings** → 筛 **Bot traffic** →
-**Configure AI bot policies** → 关掉 **Enable Bot Preference Sync** → Save。
+**实测证据**（不是推测）：`curl -A "GPTBot/1.0" https://xnow.taikon.top/` → **403**（25 字节
+`Your request was blocked.`），ClaudeBot 同样 403；PerplexityBot、普通浏览器、curl 都是 200。
+即：robots.txt 写着欢迎，Cloudflare 在门口拦掉了 OpenAI 与 Anthropic 的抓取。
 
-原因：CF 会在我们 robots.txt 前面注入一段托管内容，里面有 `User-agent: GPTBot / Disallow: /`。
-同一个 UA 两段冲突规则，AI 爬虫宁可当成禁止 —— 关掉后只剩我们自己那份（放行检索型 AI）。
+Cloudflare 后台 → 域名 `taikon.top` → **Security → Settings**
+（<https://dash.cloudflare.com/?to=/:account/:zone/security/settings>）：
+
+1. **Configure AI bot policies**：`Search` / `Agent` / `Training` 全设 **Allow**
+2. **Enable Bot Preference Sync** → **关掉**（关掉后 robots.txt 从 167 行变回我们自己的 37 行）
+
+改完自检：GPTBot UA 抓首页应 200，`robots.txt` 应 37 行。
 
 ## 四、已知取舍（别再重复讨论）
 
