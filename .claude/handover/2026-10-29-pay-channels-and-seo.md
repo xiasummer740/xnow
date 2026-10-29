@@ -23,7 +23,20 @@
 nginx 侧：`server/src/utils/siteDomain.js`（分站模板）、`install.sh`（主站模板）、
 `deploy/nginx/production/xnow-spa-https`（生产存档，改完线上要 scp 回来）。
 
-## 三、⚠️ 下一步卡在祥哥手上（两处 CF 开关）
+## 三、✅ Cloudflare 已改完（2026-10-29 23:35）
+
+在祥哥浏览器里直接点的（他自己开了 Cloudflare 后台让我操作）：
+**安全性 → 设置 → 搜「AI」→ 配置 AI 自动程序策略**：`训练` 由「禁止」改「允许」、
+`启用自动程序偏好同步` 关掉 → 保存；再用 **缓存 → 自定义清除（按 URL）** 清掉 5 条
+robots/sitemap（边缘缓存了 430 秒）。
+
+实测：GPTBot / ClaudeBot / PerplexityBot / Bytespider 抓主站与分站全部 200，
+`robots.txt` 37 行、`sitemap.xml` 19 行。
+
+⚠️ **注意**：Cloudflare 2026-09-15 起对新域名默认「训练类禁止」，
+以后新绑域名要记得同样处理（`Security → Settings → Configure AI bot policies`）。
+
+下面这份是当时的诊断记录，留作对照。
 
 **实测证据**（不是推测）：`curl -A "GPTBot/1.0" https://xnow.taikon.top/` → **403**（25 字节
 `Your request was blocked.`），ClaudeBot 同样 403；PerplexityBot、普通浏览器、curl 都是 200。

@@ -4562,7 +4562,38 @@ nginx 里还没有这个域名的 server 块，请求落到默认站点（主站
 落地页实测数据（生产真价）：TikTok 共 396 个服务，最低 ¥0.05/1000；
 分型后 播放 123 档 / 直播 44 / 点赞 24 / 粉丝 14 / 评论 11。
 
-### 五、⚠️ 还差祥哥在 Cloudflare 点两下（否则 GEO 一步都走不了）
+### 五、✅ Cloudflare 两处开关已改完（2026-10-29 23:35，我直接在祥哥浏览器里点的）
+
+> 下节保留原因与实测证据，结论先写在前面：**现在 GPTBot / ClaudeBot / PerplexityBot /
+> Bytespider 抓主站与分站都是 200，robots.txt 从 167 行回到我们自己的 37 行。**
+
+在 Cloudflare 后台（域名 `taikon.top`）实际做的三件事：
+
+1. **安全性 → 设置 → 搜索「AI」→ 配置 AI 自动程序策略**
+   - `搜索` = 允许（本来已是）
+   - `代理` = 允许（本来已是）
+   - `训练` = **禁止 → 允许（不阻止）** ← GPTBot 属于这一档，原来就是它把 OpenAI 挡在外面
+   - **启用自动程序偏好同步 = 开 → 关** ← 关掉后 CF 不再往我们 robots.txt 前面塞托管内容
+   - 保存
+2. **缓存 → 配置 → 自定义清除（按 URL）**：清了 5 条
+   `xnow.taikon.top/robots.txt`、`/sitemap.xml`、`7h2d5u.taikon.top/robots.txt`、
+   `/sitemap.xml`、`beta.taikon.top/robots.txt`
+   （robots.txt 被边缘缓存了 430 秒，改完不刷缓存看到的还是旧的 167 行）
+3. 复查：`Cache-Control` 源站给的是 `public, max-age=600`（10 分钟），
+   以后改 robots/sitemap 最多 10 分钟自己生效，不用再手动刷。
+
+改完实测（公网，2026-10-29 23:36）：
+
+| 抓取方 | 主站 | 分站 |
+|---|---|---|
+| GPTBot | **200**（5740 字节） | **200** |
+| ClaudeBot | **200** | **200** |
+| PerplexityBot | 200 | 200 |
+| Bytespider（字节） | 200 | 200 |
+
+`robots.txt` 37 行、`sitemap.xml` 19 行，GPTBot 段只剩我们自己的 `Allow: /`。
+
+### 五-附：原来的诊断（保留，以后 CF 又默认开回来时可对照）
 
 这一节是实测出来的，不是猜的。用不同 UA 直接抓线上：
 
