@@ -11,6 +11,9 @@ const routes = [
   { path: '/en', component: Home }, // 英文镜像：复用 Home，按路径强制英文
   { path: '/login', component: Login },
   { path: '/showcase', component: () => import('../views/Showcase.vue') }, // 🎨 分站风格陈列（公开，不需要登录）
+  // 🤖 平台落地页（/c/tiktok 这类）：服务端渲染同名页面给搜索引擎/AI，
+  //    人点进来由这条 SPA 路由接管，内容与价格口径和服务端一致。
+  { path: '/c/:slug', component: () => import('../views/Landing.vue') },
   { path: '/', component: DashboardLayout, children: [
       { path: 'order', component: Order },
       { path: 'mass-order', component: () => import('../views/MassOrder.vue') },

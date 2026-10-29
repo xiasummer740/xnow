@@ -512,6 +512,11 @@ router.post('/', authenticate, async (req, res) => {
         plan,
         expire_at: expireAt,
         remind_keys: '',
+        // 💳 新站零配置就能收款：默认开「平台代收」，站长想收进自己账户时
+        //    在后台填自有商户（pay_mode=auto 会自动切到自有）。
+        //    2026-10-29 祥哥定：A/B 两条都要具备、站长自助、免审批。
+        use_platform_merchant: 1,
+        pay_mode: 'auto',
       }, { transaction: t });
 
       await t.commit();

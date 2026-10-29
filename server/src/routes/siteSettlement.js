@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { Site, User, SiteCollection, SiteWithdrawal, sequelize } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
+import { resolveChannel, reasonText, hasOwnMerchant } from '../utils/payChannel.js';
 
 const router = express.Router();
 
@@ -90,6 +91,21 @@ const summaryOf = async (siteId) => {
   };
 };
 
+// 给前台看的通道状态（客户永远看不到这些词，只有站长自己看）
+const channelView = (chan, ownReady) => {
+  const label = chan.channel === 'own' ? '你自己的商户（钱直接进你账户）'
+    : chan.channel === 'platform' ? '主站代收（钱进主站账户，记你名下待结算）'
+    : '未开通';
+  return {
+    channel: chan.channel,          // own / platform / off
+    label,
+    platform_collected: !!chan.platformCollected,
+    own_ready: !!ownReady,
+    reason: chan.reason || '',
+    hint: chan.reason ? reasonText(chan.reason) : '',
+  };
+};
+
 // ── 站长：开关「用主站收款」 ──
 router.post('/sites/:id/platform-merchant', authenticate, async (req, res) => {
   try {
@@ -112,6 +128,40 @@ router.post('/sites/:id/platform-merchant', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── 站长：设置收款方式（auto / own / platform）──
+//    auto     ：配了自有商户就用自己的，否则用主站代收
+//    own      ：只用自己的商户
+//    platform ：只用主站代收
+//    2026-10-29 祥哥定：免审批，站长自己切。
+router.post('/sites/:id/pay-mode', authenticate, async (req, res) => {
+  try {
+    const { site, error } = await ownerSite(req);
+    if (error) return res.status(error[0]).json({ status: 'error', message: error[1] });
+    const mode = String(req.body?.mode || '').trim();
+    if (!['auto', 'own', 'platform'].includes(mode)) {
+      return res.json({ status: 'error', message: '收款方式只能是 auto / own / platform' });
+    }
+    // 选「只用自己的商户」但没配全 → 当场拦住，别让客户到付款页才发现没开通
+    if (mode === 'own' && !hasOwnMerchant(site, 'bufpay') && !hasOwnMerchant(site, 'cryptomus')) {
+      return res.json({ status: 'error', message: '还没填自己的商户号/密钥，先填好再选「只用自己的商户」' });
+    }
+    site.pay_mode = mode;
+    // 选 platform 时顺手把代收开关打开（否则等于没开通）
+    if (mode === 'platform' && Number(site.use_platform_merchant || 0) !== 1) site.use_platform_merchant = 1;
+    await site.save();
+    try {
+      const { clearSiteCache } = await import('../middleware/site.js');
+      clearSiteCache();
+    } catch (e) {}
+    const names = { auto: '自动选择', own: '只用自己的商户', platform: '只用主站代收' };
+    res.json({
+      status: 'success',
+      message: `收款方式已改为「${names[mode]}」`,
+      data: { pay_mode: site.pay_mode, use_platform_merchant: Number(site.use_platform_merchant || 0) },
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── 站长：结算概览 + 提现记录 ──
 router.get('/sites/:id/settlement', authenticate, async (req, res) => {
   try {
@@ -129,6 +179,12 @@ router.get('/sites/:id/settlement', authenticate, async (req, res) => {
         ...sum,
         use_platform_merchant: Number(site.use_platform_merchant || 0),
         has_own_merchant: !!(site.bufpay_id && site.bufpay_key) || !!(site.cryptomus_id && site.cryptomus_key),
+        // 💳 收款方式（2026-10-29 祥哥定：A/B 两条都要具备、免审批自助切换）
+        pay_mode: String(site.pay_mode || 'auto'),
+        channels: {
+          rmb: channelView(resolveChannel(site, 'bufpay'), hasOwnMerchant(site, 'bufpay')),
+          usd: channelView(resolveChannel(site, 'cryptomus'), hasOwnMerchant(site, 'cryptomus')),
+        },
         min_withdraw: MIN_WITHDRAW,
         week_ms: WEEK,
         can_request_at: canRequestAt,

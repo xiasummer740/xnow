@@ -313,14 +313,55 @@ server {
         return 404;
     }
 
-    # 🤖 分站自己的 robots.txt：中性内容，允许收录（站长要靠它被搜到）
+    # 🤖 SEO / AI 公开页（2026-10-29 起改为**后端按域名生成**）
+    #    以前 robots.txt 是写死的一句、sitemap.xml 直接 404、首页是纯 SPA 空壳
+    #    （HTML 1676 字节 / 可见中文 6 个字）—— 搜索引擎抓不到内容，AI 无从引用。
+    #    现在这四条转发给后端 server/src/routes/seo.js 服务端渲染。
+    #    ⚠️ 后端挂了也不能让首页白屏：下面用 error_page 回落到静态 site.html。
     location = /robots.txt {
-        default_type text/plain;
-        return 200 "User-agent: *\nAllow: /\n";
+        proxy_pass http://127.0.0.1:${backendPort}/robots.txt;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    location = /sitemap.xml {
+        proxy_pass http://127.0.0.1:${backendPort}/sitemap.xml;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    # 平台落地页（/c/tiktok 这类）：服务端渲染，带 JSON-LD / FAQ / 价格区间
+    location ^~ /c/ {
+        proxy_pass http://127.0.0.1:${backendPort};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
+    # 首页：服务端渲染 HTML 壳（title/description/canonical/JSON-LD + 可抓内容块）
+    location = / {
+        proxy_pass http://127.0.0.1:${backendPort}/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+        proxy_intercept_errors on;
+        error_page 502 504 @spa_site_home;
+    }
+
+    location @spa_site_home {
+        root ${distRoot};
+        try_files /site.html =503;
     }
 
     # 📄 站点声明 / 清单这类平台文件对分站无意义，别让它们回落成网页
-    location ~* ^/(sitemap\.xml|manifest\.json|site\.webmanifest|ads\.txt|security\.txt)$ {
+    #    （sitemap.xml 已在上面的 location = /sitemap.xml 交给后端生成，这里不再拦它）
+    location ~* ^/(manifest\.json|site\.webmanifest|ads\.txt|security\.txt)$ {
         return 404;
     }
 

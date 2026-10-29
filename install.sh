@@ -457,6 +457,50 @@ server {
         access_log off;
     }
 
+    # 🤖 SEO / AI 公开页（2026-10-29）：由后端 server/src/routes/seo.js 服务端渲染
+    #    robots.txt / sitemap.xml 按域名生成；/c/<平台> 是带 JSON-LD 的落地页；
+    #    首页拿服务端渲染壳（title/description/canonical + 可抓内容块）。
+    #    端上 Vue 仍挂在 #app 上覆盖内容，人看到的是正常 SPA。
+    location = /robots.txt {
+        proxy_pass http://127.0.0.1:3000/robots.txt;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    location = /sitemap.xml {
+        proxy_pass http://127.0.0.1:3000/sitemap.xml;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+
+    location ^~ /c/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+    }
+
+    location = / {
+        proxy_pass http://127.0.0.1:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+        proxy_intercept_errors on;
+        error_page 502 504 @spa_home;
+    }
+
+    # 后端挂了也不能首页白屏：回落到静态 index.html（内容和以前一样，只是没有 SSR 元信息）
+    location @spa_home {
+        root /var/www/xnow/client/dist;
+        try_files /index.html =503;
+    }
+
     # 构建产物带内容哈希：内容一变文件名就变，可以放心长缓存
     location /assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";

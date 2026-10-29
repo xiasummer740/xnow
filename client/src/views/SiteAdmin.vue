@@ -347,18 +347,53 @@
       <section v-if="page === 'payment'" class="bg-slate-900/70 border border-emerald-800/50 rounded-2xl p-5 space-y-3">
         <div class="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h2 class="font-bold text-sm text-emerald-300">💰 没配商户？可以让主站代收</h2>
+            <h2 class="font-bold text-sm text-emerald-300">💰 收款方式</h2>
             <p class="text-[11px] text-slate-500 leading-relaxed mt-1">
-              开启后客户能直接在你这充值，钱先进主站账户，记在<b class="text-slate-300">你名下待结算</b>；
-              每周可申请提现一次，上传你的收款码，主站管理员扫码转账后确认，台账清账。
-              配了自己的商户后随时可以关掉这里，钱就直接进你账户。
+              两条通道都给你备着，随时自己切：<b class="text-slate-300">平台代收</b>（不用配商户，客户马上能充值，
+              钱先进主站账户、记你名下待结算，每周提现一次）或 <b class="text-slate-300">自己的商户</b>
+              （钱直接进你账号，平台不碰）。切换即时生效，不用等人审批。
             </p>
           </div>
+          <div class="text-right shrink-0">
+            <div class="text-[10px] text-slate-500 mb-1">当前生效</div>
+            <div class="px-2.5 py-1.5 rounded-lg text-[11px] font-black whitespace-nowrap"
+                 :class="activeChannel.channel === 'own' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-600/40'
+                       : activeChannel.channel === 'platform' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-600/40'
+                       : 'bg-red-500/20 text-red-300 border border-red-600/40'">
+              {{ activeChannel.channel === 'own' ? '自有商户' : activeChannel.channel === 'platform' ? '平台代收' : '未开通' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 三选一：自动 / 只用自己的 / 只用平台代收 -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button v-for="m in PAY_MODES" :key="m.value" type="button" @click="setPayMode(m.value)"
+                  class="text-left rounded-xl border px-3 py-2 transition"
+                  :class="settlement.pay_mode === m.value
+                    ? 'border-emerald-500/60 bg-emerald-500/10'
+                    : 'border-slate-800 bg-slate-950/50 hover:border-slate-600'">
+            <div class="text-[11px] font-black" :class="settlement.pay_mode === m.value ? 'text-emerald-300' : 'text-slate-300'">
+              {{ settlement.pay_mode === m.value ? '✅ ' : '' }}{{ m.label }}
+            </div>
+            <div class="text-[10px] text-slate-500 leading-snug mt-0.5">{{ m.hint }}</div>
+          </button>
+        </div>
+
+        <div v-if="activeChannel.reason"
+             class="rounded-xl border border-amber-700/40 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
+          ⚠️ 客户现在付款会看到「暂未开通」：{{ activeChannel.hint }}
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap pt-1">
+          <span class="text-[10px] text-slate-500">平台代收开关</span>
           <button type="button" @click="togglePlatformMerchant"
-                  class="px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap"
+                  class="px-3 py-1.5 rounded-lg text-[11px] font-black whitespace-nowrap"
                   :class="settlement.use_platform_merchant ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-slate-300'">
             {{ settlement.use_platform_merchant ? '已开启 · 点此关闭' : '开启主站代收' }}
           </button>
+          <span class="text-[10px] text-slate-600">
+            关闭后只有你自己的商户能收款；两条都没开，客户就充不了值。
+          </span>
         </div>
 
         <div class="grid grid-cols-3 gap-2">
@@ -459,7 +494,7 @@
         <h2 class="font-bold text-sm text-amber-400">收款商户（钱直接进你的账户）</h2>
         <p class="text-[11px] text-slate-500 leading-relaxed">
           填你自己的 BufPay / Cryptomus 商户，客户在你站上付款时直接进你的账号。
-          不填的话，客户点充值会看到「暂未开通」，只能由你手动给他加余额（兜底方式，不推荐长期这样）。
+          填了这里的商户，收款方式会自动优先走你的商户；两条都没配/没开时，客户点充值才会看到「暂未开通」。
         </p>
         <div class="grid md:grid-cols-2 gap-3">
           <div>
@@ -741,7 +776,22 @@ const billingState = ref({ isAgent: false, isStaff: false, balance: 0, monthly: 
 // 所以标题与文案不能写「我的分站」
 const isStaffRole = computed(() => ['admin', 'super_admin'].includes(userStore.userInfo?.role))
 // 💰 平台代收 / 提现
-const settlement = ref({ available: 0, withdrawn: 0, pending_withdraw: 0, use_platform_merchant: 0, min_withdraw: 10, can_request: true, withdrawals: [] })
+const settlement = ref({ available: 0, withdrawn: 0, pending_withdraw: 0, use_platform_merchant: 0, min_withdraw: 10, can_request: true, withdrawals: [], pay_mode: 'auto', channels: {} })
+// 💳 收款方式三选一（祥哥 2026-10-29 定：A 平台代收 / B 自有商户 两条都要具备、免审批自助切换）
+const PAY_MODES = [
+  { value: 'auto', label: '自动选择', hint: '配了自己的商户就用自己的，没配就用平台代收' },
+  { value: 'own', label: '只用自己的商户', hint: '钱直接进你的账号，平台一分不碰' },
+  { value: 'platform', label: '只用平台代收', hint: '不用配商户，钱进主站账户、记你名下待结算' },
+]
+const activeChannel = computed(() => (settlement.value.channels || {}).rmb || { channel: 'off', hint: '', reason: '' })
+const setPayMode = async (mode) => {
+  if (!site.value || settlement.value.pay_mode === mode) return
+  const r = await fetch(`/api/sites/${site.value.id}/pay-mode`, {
+    method: 'POST', headers: headers(), body: JSON.stringify({ mode }),
+  }).then(x => x.json()).catch(() => null)
+  uiStore.notify(r?.message || (r?.status === 'success' ? '已保存' : '切换失败'))
+  if (r?.status === 'success') await loadSettlement()
+}
 const withdraw = ref({ amount: 0, note: '' })
 const withdrawing = ref(false)
 const money = (v) => Number(v || 0).toFixed(2)

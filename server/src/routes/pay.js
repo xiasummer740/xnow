@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.js';
 import axios from 'axios';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { addPendingPayment, markCompleted, markFailed, getPendingPayments, markProcessing, cleanOldPayments } from '../utils/paymentTracker.js';
+import { resolveChannel, offMessage } from '../utils/payChannel.js';
 
 const router = express.Router();
 const md5 = (str) => crypto.createHash('md5').update(str).digest('hex');
@@ -51,23 +52,25 @@ router.post('/rmb/sign', authenticate, async (req, res) => {
     try {
         const configs = await Config.findAll({ where: { key: ['bufpay_id', 'bufpay_key', 'site_name'] } });
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
-        // 🏬 分站自有商户优先：钱进站长账户，平台不碰
-        const siteCreds = req.site ? await sitePayCreds(Number(req.site.id), 'bufpay') : null;
-        // 💰 110 期祥哥定：站长没配自己的商户时，**可以**用主站商户代收 ——
-        //    但钱进的是平台账户，所以每一笔都要落「代收台账」（site_collections），
-        //    站长申请提现、主站管理员扫码转账确认后清账。不落账就等于平台吞钱。
-        //    开关在站长后台「收款」页，站长自己开/关，无需审批。
-        if (req.site && !siteCreds) {
-            if (Number(req.site.use_platform_merchant || 0) !== 1) {
-                return res.json({
-                    status: 'error',
-                    message: '本站在线充值暂未开通，请联系客服处理',
-                    code: 'NO_SITE_MERCHANT',
-                });
-            }
-            // 用平台商户，标记这一笔是代收
-            req.__platformCollected = true;
+        // 🏬 收款通道 A/B（祥哥 2026-10-29 定：两条都要具备、站长自助切换、免审批）
+        //    own      → 站长自己的商户，钱进站长账户，平台一分不碰
+        //    platform → 主站商户代收，钱进平台账户，必须落「代收台账」site_collections
+        //    off      → 明确告诉客户"未开通"（绝不偷偷用平台账户给没开代收的站收款）
+        const chan = resolveChannel(req.site, 'bufpay');
+        if (req.site && chan.channel === 'off') {
+            return res.json({
+                status: 'error',
+                message: offMessage('bufpay'),
+                code: 'NO_SITE_MERCHANT',
+                reason: chan.reason,   // 只给站长后台/日志看，前端不展示给客户
+            });
         }
+        const siteCreds = chan.channel === 'own' ? await sitePayCreds(Number(req.site.id), 'bufpay') : null;
+        if (req.site && chan.channel === 'own' && !siteCreds) {
+            return res.json({ status: 'error', message: offMessage('bufpay'), code: 'NO_SITE_MERCHANT', reason: 'OWN_MERCHANT_MISSING' });
+        }
+        // 标记这一笔是平台代收（回调入账时据此写台账）
+        req.__platformCollected = !!chan.platformCollected;
         if (siteCreds) { conf.bufpay_id = siteCreds.id; conf.bufpay_key = siteCreds.key; conf.site_name = siteCreds.name; }
         const cleanBufId = (val) => { if (!val) return ''; const match = val.match(/\/(\d+)$/); if (match) return match[1]; return val.replace(/[^0-9]/g, ''); };
         const realBufId = cleanBufId(conf.bufpay_id);
@@ -154,12 +157,13 @@ router.post('/usd', authenticate, async (req, res) => {
         const configs = await Config.findAll({ where: { key: ['cryptomus_id', 'cryptomus_key'] } });
         const conf = {}; configs.forEach(c => conf[c.key] = c.value);
         // 🏬 分站自有 Cryptomus 优先
-        const siteCredsUsd = req.site ? await sitePayCreds(Number(req.site.id), 'cryptomus') : null;
-        // 同一规则：没配 USDT 商户时，看站长有没有开「使用主站收款」
-        if (req.site && !siteCredsUsd) {
-            if (Number(req.site.use_platform_merchant || 0) !== 1) {
-                return res.json({ status: 'error', message: '本站 USDT 充值暂未开通，请联系客服', code: 'NO_SITE_MERCHANT' });
-            }
+        const chanUsd = resolveChannel(req.site, 'cryptomus');
+        if (req.site && chanUsd.channel === 'off') {
+            return res.json({ status: 'error', message: offMessage('cryptomus'), code: 'NO_SITE_MERCHANT', reason: chanUsd.reason });
+        }
+        const siteCredsUsd = chanUsd.channel === 'own' ? await sitePayCreds(Number(req.site.id), 'cryptomus') : null;
+        if (req.site && chanUsd.channel === 'own' && !siteCredsUsd) {
+            return res.json({ status: 'error', message: offMessage('cryptomus'), code: 'NO_SITE_MERCHANT', reason: 'OWN_MERCHANT_MISSING' });
         }
         if (siteCredsUsd) { conf.cryptomus_id = siteCredsUsd.id; conf.cryptomus_key = siteCredsUsd.key; }
         if (!conf.cryptomus_id || !conf.cryptomus_key) return res.json({ status: 'error', message: 'USDT商户参数未配置' });
@@ -360,10 +364,10 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
               try {
                 const paySite = await Site.findByPk(paySiteId, { transaction: t });
                 const isUsdt = orderId.startsWith('USDT');
-                const ownCreds = isUsdt
-                  ? !!(paySite?.cryptomus_id && paySite?.cryptomus_key)
-                  : !!(paySite?.bufpay_id && paySite?.bufpay_key);
-                if (paySite && Number(paySite.use_platform_merchant || 0) === 1 && !ownCreds) {
+                // 通道必须和开票时一致地重算：只有真正走了「平台代收」的那一笔才落台账。
+                // 站长中途改了收款方式也不会把历史账记错（自己的商户收到的钱平台没收到，落了台账就是凭空负债）。
+                const chan = resolveChannel(paySite, isUsdt ? 'cryptomus' : 'bufpay');
+                if (paySite && chan.channel === 'platform') {
                   await SiteCollection.findOrCreate({
                     where: { order_id: orderId },
                     defaults: { site_id: paySiteId, user_id: user.id, order_id: orderId, amount: realAddAmount },

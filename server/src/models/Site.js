@@ -19,6 +19,11 @@ const Site = sequelize.define('Site', {
   // 💰 110 期：站长没配自己的商户时，允许用主站商户代收（钱进平台，记台账，站长申请提现）
   //    站长自己开/关，无需审批（祥哥 2026-10-25 定）。
   use_platform_merchant: { type: DataTypes.TINYINT, allowNull: false, defaultValue: 0 },
+  // 💳 收款方式偏好（祥哥 2026-10-29：A 平台代收 / B 自有商户 两条都要具备）
+  //    auto     = 配了自有商户就用自己的，否则用平台代收
+  //    own      = 只用自有商户（钱进站长账户）
+  //    platform = 只用平台代收（钱进主站账户，落 site_collections 台账）
+  pay_mode: { type: DataTypes.STRING(12), allowNull: false, defaultValue: "auto" },
   announcement: { type: DataTypes.TEXT, allowNull: true },
   // 🎨 三期主题系统
   template: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'classic' },

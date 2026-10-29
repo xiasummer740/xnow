@@ -25,6 +25,7 @@ import servicesRoutes from './routes/services.js';
 import ordersRoutes from './routes/orders.js';
 import transactionsRoutes from './routes/transactions.js';
 import sitesRoutes from './routes/sites.js';
+import seoRoutes from './routes/seo.js';
 import siteSettlementRoutes from './routes/siteSettlement.js';
 import vpnRoutes from './routes/vpn.js';
 import analyticsRoutes from './routes/analytics.js';
@@ -58,6 +59,12 @@ app.use(helmet({
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(siteMiddleware);
+
+// 🤖 公开 SEO/AI 页面（robots / sitemap / 平台落地页 / 首页 HTML 壳）
+//    必须放在 siteMiddleware 之后（要靠它认域名），且**不**挂在 /api 下 ——
+//    nginx 把 `/`（精确）、`/robots.txt`、`/sitemap.xml`、`/c/` 四条转发到这里，
+//    其余路径照旧由 nginx 直接发静态文件。
+app.use(seoRoutes);
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
