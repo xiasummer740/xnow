@@ -46,7 +46,7 @@ const TYPE_RULES: Array<[string, RegExp]> = [
   ['订阅', /subscriber|订阅/i],
   ['粉丝', /follower|fans?\b|涨粉|成员|\bmember/i],
   ['点赞', /\blike/i],
-  ['播放', /\bview|play|stream|播放/i],
+  ['播放', /\bview|views?|play|stream|播放|浏览|观看/i],
   ['评论', /comment|评论/i],
   ['分享', /share|分享|repost|转发/i],
   ['直播', /\blive\b|直播/i],

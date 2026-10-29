@@ -73,6 +73,46 @@ server {
         access_log off;
     }
 
+    # SEO / AI 公开页（2026-10-29）：后端 server/src/routes/seo.js 服务端渲染
+    location = /robots.txt {
+        proxy_pass http://127.0.0.1:3000/robots.txt;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    location = /sitemap.xml {
+        proxy_pass http://127.0.0.1:3000/sitemap.xml;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    location ^~ /c/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
+    location = / {
+        proxy_pass http://127.0.0.1:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+        proxy_intercept_errors on;
+        error_page 502 504 @spa_home;
+    }
+
+    location @spa_home {
+        root /var/www/xnow/client/dist;
+        try_files /index.html =503;
+    }
+
     # 构建产物带内容哈希：内容一变文件名就变，可以放心长缓存
     location /assets/ {
         root /var/www/xnow/client/dist;

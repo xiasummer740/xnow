@@ -1570,3 +1570,29 @@ Instagram/Twitter 旧版小鸟/Line/Shopee/WhatsApp），**内联进 bundle**，
 
 **经验**：这一轮三个"电脑上看不出来"的问题（操作列在屏幕外、三处重复入口、按钮冒泡）
 都是他拿手机（390px）验收才发现的。以后改页面先按 390×844 截图确认再交付。
+
+## 2026-10-29 · A/B 双收款通道 + 分站 SEO/GEO 底座
+
+祥哥给了三个字：「两条都要具备」「放行」「全做完」，于是同一晚做了两件事。
+
+**收款（A 平台代收 / B 自有商户 并存）**
+- `sites.pay_mode`（auto / own / platform）+ `utils/payChannel.js` 统一判定，
+  人民币与 USDT 共用；**回调只对真正走平台代收的单写 `site_collections` 台账**
+  （自有商户的钱平台没收到，落台账就是凭空负债）
+- 站长后台「收款」页显示当前生效通道，三选一免审批自助切换；新站默认开平台代收（零配置能收款）
+- Beta 九种组合实测全对（含 own 没配商户、platform 但开关关）
+
+**SEO / GEO（参考一篇讲「SEO 让搜索引擎抓到、GEO 让 AI 引用你」的公众号文章）**
+- 先量底子：分站首页 HTML 1676 字节 / 可见文字 6 字 / title 全站一样 / sitemap 404 / 0 条 JSON-LD；
+  主站 sitemap 只有 3 条。也就是说文章第一步就走不了
+- 新增 `routes/seo.js` 服务端渲染：`/robots.txt`（放行检索型 AI 爬虫）、
+  `/sitemap.xml`（17 条）、`/c/<平台>` 落地页（真实价格 + 分型表 + FAQ + 5 条 JSON-LD）、
+  首页 HTML 壳（title/description/canonical/结构化数据 + 可抓内容）
+- 上游分区名（带「推荐👉27802」这类内部编号）一律不进标题/URL，统一按平台+服务类型归一化
+- 前端补 `/c/:slug` 路由且免登录（否则搜索引擎导流进来会被踢去登录页）
+- nginx 分站模板 + 主站 vhost + install.sh 三处同步，后端挂了首页回落静态页
+
+**结果**：主站可见文字 370→2038、分站 6→2089；分站 title 带上站名；两站 sitemap 17 条、JSON-LD 2~5 条。
+
+**待祥哥操作**：Cloudflare 后台关掉「Enable Bot Preference Sync」，
+否则 CF 注入的 `GPTBot Disallow: /` 会压过我们自己的放行规则（GEO 仍然无效）。

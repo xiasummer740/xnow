@@ -145,10 +145,19 @@ const loadCatalog = async (site) => {
     return data;
 };
 
+// 首页/描述里平台的展示顺序：按客户认知的主次排，而不是"谁的服务数最多"。
+// （第一版按数量排，结果 meta description 开头是「网站流量、TikTok…」，很怪）
+const PREFERRED = ['TikTok', 'Instagram', 'YouTube', 'Telegram', 'Facebook', 'Twitter',
+    'Shopee', 'WhatsApp', 'Line', 'Traffic', 'Spotify', 'Discord', 'Twitch', 'Apple Music', 'SoundCloud', 'Other'];
+const prefIndex = (label) => { const i = PREFERRED.indexOf(label); return i < 0 ? 99 : i; };
+
 const brandOf = (req, catalog) => {
     const site = req.site;
+    // 主站沿用「XNOW PRO」这个既有品牌（别把已经建立起来的名字换掉），分站只用站长自己的站名
+    const mainBrand = String(catalog.globalBrand || 'XNOW');
+    const mainName = /pro/i.test(mainBrand) ? mainBrand : `${mainBrand} PRO`;
     return {
-        name: site ? String(site.name || '本店') : (catalog.globalBrand || 'XNOW PRO'),
+        name: site ? String(site.name || '本店') : mainName,
         host: hostOf(req),
         isSubsite: !!site,
         site,
@@ -339,9 +348,10 @@ router.get('/sitemap.xml', async (req, res) => {
         const base = `https://${brand.host}`;
         const now = new Date().toISOString().slice(0, 10);
         const urls = [{ loc: `${base}/`, pri: '1.0' }];
-        for (const p of catalog.platforms) {
+        const ordered = [...catalog.platforms].sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
+        for (const p of ordered) {
             if (!p.count) continue;
-            urls.push({ loc: `${base}/c/${p.slug}`, pri: p === catalog.platforms[0] ? '0.9' : '0.8' });
+            urls.push({ loc: `${base}/c/${p.slug}`, pri: p === ordered[0] ? '0.9' : '0.8' });
         }
         const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -406,12 +416,15 @@ router.get('/', async (req, res, next) => {
         const catalog = await loadCatalog(req.site);
         const brand = brandOf(req, catalog);
         const canonical = `https://${brand.host}/`;
-        const top = catalog.platforms.filter((p) => p.label !== 'Other').slice(0, 6);
+        const top = [...catalog.platforms]
+            .filter((p) => p.label !== 'Other')
+            .sort((a, b) => prefIndex(a.label) - prefIndex(b.label))
+            .slice(0, 6);
         const topNames = top.map((p) => PLATFORM_CN[p.label] || p.label).join('、');
         const cheapest = top.length ? per1000(Math.min(...top.map((p) => p.minPrice))) : '—';
         const title = brand.isSubsite
             ? `${brand.name} · 社媒增长服务（${topNames}）`
-            : `${brand.name} · 社媒增长服务平台`;
+            : `${brand.name} - TikTok涨粉/IG涨粉/YouTube订阅 全网底价社媒增长平台`;
         const desc = `${brand.name} 提供 ${topNames} 等平台的粉丝、点赞、播放、评论增长服务，${cheapest} 元起 / 1000 个，自动交付，在线充值即用。`;
         const faq = faqOf(brand, top[0] ? (PLATFORM_CN[top[0].label] || top[0].label) : '社媒', top[0] || null);
 

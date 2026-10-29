@@ -72,7 +72,9 @@ router.beforeEach((to, from, next) => {
     return next('/');
   }
 
-  if (!publicPaths.includes(to.path) && !token) {
+  // 🤖 平台落地页（/c/tiktok）也必须免登录 —— 那是搜索引擎/AI 导流进来的第一页，
+  //    要求登录等于把流量全丢掉。
+  if (!publicPaths.includes(to.path) && !to.path.startsWith('/c/') && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');
   } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin')) {

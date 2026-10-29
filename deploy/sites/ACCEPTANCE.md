@@ -4470,3 +4470,113 @@ nginx 里还没有这个域名的 server 块，请求落到默认站点（主站
 
 ⚠️ 下次如果有人问"为什么营收里有钱对不上"，先想起这三条：不是 bug，是当时的决定。
 要动的话改动点记在 handover 里（订单表加 `is_test` + 统计口径排除）。
+## 八十五、A/B 双收款通道 + 让分站能被搜索引擎与 AI 抓到（2026-10-29 · 祥哥「两条都要具备」「放行」「全做完」）
+
+祥哥扔来一篇公众号文章（讲 SEO+GEO：搜索引擎收录 + 被 AI 引用），问「我们能参考这个吗」。
+顺手把上一条悬着的「收款通道 A/B」一起定掉：**1. 无需审批  2. 放行  全做完**。
+
+### 一、收款：两条通道都具备，站长自助切换（免审批）
+
+**先纠正一个误解**：A（平台代收）和 B（自有商户）代码里本来都在，只是**互斥是隐式的** ——
+`pay.js` 里写的是「有自有商户就用自有，否则看代收开关」。站长两个都配好后，代收开关等于摆设，
+界面上也看不出「我现在到底走哪条」。三个后果：
+① 站长不知道自己收的钱进谁账户；② 客户偶尔撞上「未开通」，站长不知道为什么；③ 台账边界靠猜。
+
+改法：
+- 新增 `sites.pay_mode`：`auto`（默认，有自有商户就用自己的，否则平台代收）/ `own` / `platform`
+- 判定收进 `server/src/utils/payChannel.js`（唯一来源），人民币与 USDT 两条路都走它
+- **回调只对「确实走了平台代收」的单写台账**（`site_collections`）。自有商户收到的钱平台一分没收到，
+  会计入台账等于凭空负债 —— 这一条是账务红线
+- 新站零配置就能收款：建站默认 `use_platform_merchant=1` + `pay_mode=auto`
+- 站长后台「收款」页：顶部徽标显示**当前生效通道**（自有商户 / 平台代收 / **未开通**），
+  三选一即时切换；选 `own` 但没填商户当场拦住；未开通时直接提示原因
+- 新接口 `POST /api/sites/:id/pay-mode`（只有站长本人，免审批）
+- 平台代收开关保留（站长可关掉，关掉后只剩自有商户）
+
+实测（Beta，直连后端 + 走 nginx 各一遍）：
+
+| 场景 | 结果 |
+|---|---|
+| auto + 都没配 | `NO_SITE_MERCHANT` / `NO_CHANNEL` |
+| auto + 代收开关开 | 走平台商户（Beta 平台商户未配 → 明确报未开通） |
+| auto + 自有商户 | 走自有，**不写台账** |
+| auto + 两个都配 | 走自有（自有优先） |
+| 强制 own 但没配 | `OWN_MERCHANT_MISSING` |
+| 强制 platform 但开关关 | `PLATFORM_NOT_OPEN` |
+| 都配了但强制 platform | 走平台 + 写台账 |
+
+⚠️ 生产上给他自己那个站（#1 星辰增长）打开了平台代收（`pay_mode=auto`），
+因为他要能马上收款卖服务。
+
+### 二、SEO / GEO：先量了一下我们自己的底子
+
+文章讲五步（关键词+引用源、AI 可抽取的写法、交叉验证、sitemap、双平台验证）。
+拿它当尺子量我们的站，结论是**地基是 0**：
+
+| 指标 | 主站（改前） | 分站（改前） |
+|---|---|---|
+| 首页 HTML | 3441 字节 | **1676 字节** |
+| 首页可见文字 | ~370 字 | **6 个字** |
+| title | 有 | **「社媒增长服务」—— 没有站名，且所有分站一模一样** |
+| sitemap.xml | 3 条 | **404** |
+| JSON-LD | 1 条 | **0 条** |
+| AI 爬虫 | GPTBot / ClaudeBot / Google-Extended / Bytespider 全部 `Disallow: /`（Cloudflare 托管注入） | 同左 |
+
+也就是说：文章第一步就做不下去 —— 没有内容、页面不可枚举、结构化数据缺失、AI 进不来。
+而且**分站全都是同一份 title、同一份空壳**，这在内行眼里就是站群（doorway pages）。
+
+### 三、做了什么
+
+**服务端渲染（`server/src/routes/seo.js`）**，按域名区分主站/分站：
+
+| 地址 | 内容 |
+|---|---|
+| `/robots.txt` | 按域名生成；放行检索型 AI（GPTBot / ChatGPT-User / OAI-SearchBot / PerplexityBot / Claude-Web / Google-Extended / Bingbot），保留后台与 API 禁止抓取 |
+| `/sitemap.xml` | 首页 + 每个平台落地页（主站 17 条，分站 17 条；此前分站是 404） |
+| `/c/<平台>` | 平台落地页：H1 + 40–60 字结论 + **真实价格区间** + 服务分型表格 + 4 条 FAQ + JSON-LD（Organization / WebSite / BreadcrumbList / FAQPage / ItemList+Offer） |
+| `/` | 首页 HTML 壳：注入 title / description / **canonical（自指）** / 结构化数据 + 一屏可抓内容块（平台价格表 + FAQ） |
+
+配套：
+- **分类名归一化**（`utils/platform.js`，前后端同一套）：上游分区名里带内部编号与营销话术
+  （`TikTok - 粉丝【推荐👉27802、目前不掉】`），直接拿来当标题/URL 既泄露底细又搜不到。
+  改为按「平台 + 服务类型」重新归类，客户看到的是 `TikTok 粉丝 / 点赞 / 播放 / 直播`。
+- 平台展示顺序按客户认知排（TikTok→Instagram→YouTube→Telegram…），
+  而不是「谁的服务数最多」（第一版按数量排，description 开头成了「网站流量、TikTok…」）。
+- 前端新增 `/c/:slug` 落地页（`views/Landing.vue`，免登录）：人点进来不能是 404；
+  路由守卫原本会把无令牌访问踢去 `/login` —— 搜索引擎的流量会全丢，已加白名单。
+- nginx：分站 vhost 模板 + 主站 vhost + `install.sh` 模板各加 4 条转发；
+  **后端挂了首页回落到静态 `site.html`/`index.html`**（不能让 SEO 改造变成白屏风险）。
+  生产主站 vhost 存档已同步回 `deploy/nginx/production/xnow-spa-html`→`xnow-spa-https`。
+
+### 四、实测（生产，2026-10-29 深夜）
+
+| 指标 | 主站 | 分站 #1 星辰增长 |
+|---|---|---|
+| 首页可见文字 | 370 → **2038 字** | 6 → **2089 字** |
+| title | XNOW PRO - TikTok涨粉/IG涨粉/YouTube订阅 全网底价社媒增长平台（SSR 与前端一致） | **星辰增长 · 社媒增长服务（TikTok、Instagram、YouTube…）** |
+| sitemap | 3 → **17 条** | 404 → **17 条** |
+| JSON-LD | 1 → 2 条（首页） | 0 → **2 条**（首页） |
+| 落地页 | `/c/tiktok` 200，JSON-LD 5 条 | `/c/tiktok` 200，JSON-LD 5 条 |
+| robots | 200 | 200（此前写死一句 `Allow: /`） |
+
+落地页实测数据（生产真价）：TikTok 共 396 个服务，最低 ¥0.05/1000；
+分型后 播放 123 档 / 直播 44 / 点赞 24 / 粉丝 14 / 评论 11。
+
+### 五、⚠️ 还差祥哥在 Cloudflare 点一下
+
+生产 `robots.txt` 现在是 **167 行**，因为 Cloudflare 在前面注入了一段「Managed content」：
+里面明确 `User-agent: GPTBot → Disallow: /`（还有 ClaudeBot / Google-Extended / Bytespider）。
+我们自己的那份（37 行）在后面，同一个 UA 出现两次、规则冲突，
+**AI 爬虫很可能仍按 CF 那段的禁止执行** —— 那样 GEO 一步都走不了。
+
+祥哥要做的（Cloudflare 后台，30 秒）：
+`域名 taikon.top` → **Security → Settings** → 筛 **Bot traffic** → **Configure AI bot policies**
+→ 把 **Enable Bot Preference Sync** 关掉 → Save。
+关掉后 `robots.txt` 只剩我们自己那 37 行，AI 检索爬虫就真的放行了。
+（若他想保留 CF 那段，就把 Training 设成 Allow，但那样连训练爬虫也放开了。）
+
+### 六、顺带确认的事
+
+- 三件他说「不用改」的（测试账号 / 测试单标记 / 历史加款原因）继续不动
+- 生产数据未变：6 用户 / 31 单 / 1 分站 / 余额合计 ¥100,903.5814
+- 主站与分站首页都 200，视觉无异常（390px 截图确认）
