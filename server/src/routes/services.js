@@ -1,6 +1,7 @@
 import express from 'express';
 import { Service, Config, User, SiteServicePrice } from '../models/index.js';
 import { customerDiscountMultiplier } from '../utils/customerPrice.js';
+import { isAgentActive } from '../utils/agentStatus.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -80,7 +81,8 @@ router.get('/', authenticate, async (req, res) => {
       finalMultiplier = 1.0;
     } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) {
       finalMultiplier = parseFloat(user.custom_multiplier);
-    } else if (actualRole === 'agent') {
+    } else if (isAgentActive(actualRole, user && user.agent_expire_at)) {
+      // 👑 列表价与扣费同口径：代理 8 折必须在有效期内（2026-10-30 修）
       finalMultiplier = baseMultiplier * agentDiscount;
     }
 

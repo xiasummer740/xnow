@@ -4886,3 +4886,56 @@ GSC / Cloudflare 这类后台只认「真人点击」，合成事件无效，所
 - 三步：`app.js` 拷回 → 删 `server/src/utils/seoWatch.js` → `pm2 restart xnow-backend`
   ⚠️ 必须一起回：`setInterval` 挂在 `app.js` 里，只删文件会让进程起不来
 
+
+---
+
+## 八十七、代理折扣纳入有效期 + 补单队列三处修补（2026-10-30 晚）
+
+> 起因：祥哥问「用户能正常充值、用代理/分站了吗」，逐个实测时发现**代理 8 折根本不看到期时间**。
+> 祥哥当场拍板：「代理折扣只看角色，不看到期时间 —— 可以（改）」。
+
+### 一、发现的三个问题
+
+| # | 问题 | 证据 |
+|---|---|---|
+| 1 | 代理折扣只看 `role`，不看 `agent_expire_at` → 只要角色是 agent 就**永久** 8 折 | 生产 UID 3993：`role=agent`、`agent_expire_at=0`，实测报价仍是 8 折 |
+| 2 | 密室「赠送代理时长」写的是 `vip_expire_at`，而所有计费逻辑读 `agent_expire_at` → **送的天数等于白送** | 3993 `vip_expire_at=2026-11-24`（界面显示到期 11-24）、`agent_expire_at=0`（计费端看到"不过期"） |
+| 3 | 补单队列里的单子：① 卡在 `processing` 的**永远不会再检查**；② 只清 `completed`，`failed`/卡死的越堆越多；③ 7 天前的老单每轮都推 TG | 生产 `data/pending_payments.json` 里 8-30 的记录还在，状态 `processing` |
+
+### 二、改法
+
+- 新增 `server/src/utils/agentStatus.js`：唯一判定 `isAgentActive(role, expireAt)` = **角色 agent 且到期时间在未来**（`exp=0` 视为无效，防止"随手改角色 = 永久 8 折"）
+- `orders.js`（单笔 + 批量）、`services.js`（列表价）三处计价统一走它 → 显示价与扣费一个口径
+- `admin.js` 授予代理：**同时写** `agent_expire_at`（权威，毫秒）与 `vip_expire_at`（界面镜像）；不给天数时默认 30 天，不再产生"有角色无期限"
+- `billing.js` 自助开通/续费：同步镜像 `vip_expire_at`（以前自己花钱开通，Vip 页看不到有效期）
+- `user.js` `/api/user/status`：多返回一个权威字段 `agent_expire_at`
+- `pay.js` 补单引擎：`processing` 超过 10 分钟视为锁失效重新检查；**7 天前的老单静默判死**（不再每轮推 TG）
+- `paymentTracker.js` 清理：`completed`/`failed` 超 30 天删、`pending`/`processing` 超 90 天删
+- 数据迁移（生产）：`role=agent AND agent_expire_at=0 AND vip_expire_at IS NOT NULL` → 用 `vip_expire_at` 补写 `agent_expire_at`
+  —— **这一条是关键**：不补的话，改完 3993 会当场失去 8 折（他实际有赠期到 11-24）
+
+### 三、实测证据（都是真跑，不是看代码）
+
+| 场景 | 结果 |
+|---|---|
+| 纯逻辑自测 `scripts/agent-status-selftest.mjs` | **13 项全过**（user/过期/0/null/admin/秒级时间戳/Date/字符串） |
+| 生产 · 普通用户 4948 | 服务 30094 → **¥31.2500**（原价） |
+| 生产 · 代理 3993（到期 11-24） | 同一服务 → **¥25.0000**（8 折，迁移后仍有效） |
+| Beta · 代理 id=5 `exp=0` | **¥31.2500**（无折扣） |
+| Beta · 同一人给 30 天有效代理 | **¥25.0000** |
+| Beta · 同一人把到期改成昨天 | **¥31.2500**（到期即回落原价） |
+| Beta · 密室授予 +7 天 | `agent_expire_at` = +7 天，`vip_expire_at` 同步镜像 |
+| Beta · 密室不给天数 | 自动按 **30 天**（不再永久） |
+| Beta · 降回普通用户 | 两个字段都被清空 |
+| 站点/接口 | 主站 200、`/api/public/config` 200、Beta 200 |
+
+### 四、没验到的
+
+1. 生产上**没有真正走一遍**「密室改角色」—— 那会动真实用户的身份，只在 Beta 验了同一份代码
+2. 代理**到期自动降级**（`siteBilling` 每 10 分钟把 role 降回 user）没有等一个真实的到期点；逻辑没动，只改了"有没有折扣"
+3. 补单引擎的「7 天静默判死」只等到进程重启后跑一轮，没等满两个周期
+
+### 五、回滚
+
+- 回滚点：`git revert` 本轮提交即可（纯代码 + 一条 `UPDATE`）
+- 那条迁移是**单向的**（把界面字段补进权威字段），回滚代码后 `agent_expire_at` 仍有值 —— 不会造成误扣，只是代理会正常到期

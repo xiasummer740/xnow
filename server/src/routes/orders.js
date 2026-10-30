@@ -2,6 +2,7 @@ import express from 'express';
 import axios from 'axios';
 import { sequelize, Order, Service, Config, User, Transaction, SiteServicePrice } from '../models/index.js';
 import { customerDiscountMultiplier } from '../utils/customerPrice.js';
+import { isAgentActive } from '../utils/agentStatus.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 
@@ -156,8 +157,9 @@ router.post('/add', authenticate, async (req, res) => {
       finalMultiplier = 1.0; 
     } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) { 
       finalMultiplier = parseFloat(user.custom_multiplier); 
-    } else if (actualRole === 'agent') { 
-      finalMultiplier = baseMultiplier * agentDiscount; 
+    } else if (isAgentActive(actualRole, user && user.agent_expire_at)) {
+      // 👑 代理 8 折必须"在有效期内"才算（2026-10-30 修：以前只看角色）
+      finalMultiplier = baseMultiplier * agentDiscount;
     }
 
     // 🔑 管理员/至尊管理员按上游原价：custom_rate 是「面向客户的零售价」，
@@ -416,7 +418,8 @@ router.post('/batch', authenticate, async (req, res) => {
         finalMultiplier = 1.0;
       } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) {
         finalMultiplier = parseFloat(user.custom_multiplier);
-      } else if (actualRole === 'agent') {
+      } else if (isAgentActive(actualRole, user && user.agent_expire_at)) {
+        // 👑 批量下单同口径：代理 8 折也必须在有效期内
         finalMultiplier = baseMultiplier * agentDiscount;
       }
 

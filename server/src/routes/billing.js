@@ -96,6 +96,9 @@ router.post('/agent/subscribe', authenticate, async (req, res) => {
 
     const base = Math.max(Date.now(), Number(me.agent_expire_at || 0));
     me.agent_expire_at = base + cfg.renewDays * DAY;
+    // 🖥 界面镜像：Vip.vue 与用户列表读的是 vip_expire_at，这里同步一份，
+    //    否则自己花钱开通的代理在页面上看不到有效期（2026-10-30 修）
+    me.vip_expire_at = new Date(me.agent_expire_at);
     me.agent_remind_keys = '';
     if (!['admin', 'super_admin'].includes(me.role)) me.role = 'agent';
     await me.save({ transaction: t });

@@ -12,6 +12,7 @@ import { sendTgMessage } from '../utils/tgBot.js';
 import { createBackup, restoreBackup, isBackupFile } from '../utils/backupEngine.js';
 import { sanitizeAnnouncement, announcementToText } from '../utils/sanitize.js';
 import refundSiteCost from '../utils/siteRefund.js';
+import { expiryMs } from '../utils/agentStatus.js';
 
 const router = express.Router();
 const BACKUP_DIR = path.resolve('/var/www/xnow/backups');
@@ -237,15 +238,29 @@ router.post("/user/role", authenticate, async (req, res) => {
     if (touchesPriv && req.user.role !== 'super_admin') return res.json({ status: "error", message: "仅至尊管理员可管理管理员身份" });
 
     const oldRole = user.role; user.role = role;
-    if (role === "agent" && addDays > 0) {
-      const now = Date.now(); const currentExpire = user.vip_expire_at ? new Date(user.vip_expire_at).getTime() : now;
-      user.vip_expire_at = new Date((currentExpire > now ? currentExpire : now) + Number(addDays) * 24 * 60 * 60 * 1000);
-    } else if (role !== "agent") { user.vip_expire_at = null; }
+    // 🔴 2026-10-30 修：以前这里只写 vip_expire_at，而所有计费/降级逻辑读的是
+    //    agent_expire_at —— 结果"密室送 30 天代理"等于白送：界面显示有效期，
+    //    计费端却看到 0（= 不过期），折扣永久有效。
+    //    现在两个字段一起写：agent_expire_at 是权威（毫秒时间戳），
+    //    vip_expire_at 只做界面显示镜像（Vip.vue / 用户列表读的是它）。
+    let grantedDays = 0;
+    if (role === 'agent') {
+      // 手滑没填天数时按 1 个月算，避免又造出"有角色、无期限"的免费代理
+      grantedDays = Number(addDays) > 0 ? Number(addDays) : 30;
+      const now = Date.now();
+      const current = Math.max(now, expiryMs(user.agent_expire_at));
+      const next = current + grantedDays * 24 * 60 * 60 * 1000;
+      user.agent_expire_at = next;
+      user.vip_expire_at = new Date(next);
+    } else {
+      user.agent_expire_at = 0;
+      user.vip_expire_at = null;
+    }
     await user.save();
 
     const roleMap = { 'super_admin':'至尊管理员', 'admin':'管理员', 'agent':'👑 至尊代理', 'user':'黄金用户' };
-    await logAudit(req, 'user_role', 'user', userId, { oldRole, newRole: role, addDays });
-    sendTgMessage('🛡️ [管理操作] 用户权限调度\n🆔 UID: <code>' + user.id + '</code>\n👤 账号: <code>' + user.phone + '</code>\n🔄 变更: ' + roleMap[oldRole] + ' ➡️ ' + roleMap[role] + '\n⏳ 赠送时长: ' + (addDays > 0 ? addDays + ' 天' : '无'));
+    await logAudit(req, 'user_role', 'user', userId, { oldRole, newRole: role, addDays: grantedDays });
+    sendTgMessage('🛡️ [管理操作] 用户权限调度\n🆔 UID: <code>' + user.id + '</code>\n👤 账号: <code>' + user.phone + '</code>\n🔄 变更: ' + roleMap[oldRole] + ' ➡️ ' + roleMap[role] + '\n⏳ 赠送时长: ' + (grantedDays > 0 ? grantedDays + ' 天' : '无'));
     res.json({ status: "success", message: "权限与时长已同步更新" });
   } catch (e) { res.status(500).json({ status: "error", message: "调度失败" }); }
 });

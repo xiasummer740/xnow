@@ -84,15 +84,24 @@ export function markFailed(order_id, reason) {
   }
 }
 
-// 清理30天前的已完成记录
+// 清理过期的补单记录
+//   2026-10-30 修：以前只清 completed，于是 failed / 卡死的 processing 会一直堆在文件里
+//   （生产上攒了 8 月底的记录）。规则：
+//     completed / failed  超过 30 天 → 删（判死的单不会再有转机）
+//     pending / processing 超过 90 天 → 删（连支付网关都不认了，留着只是噪音）
+//     其余一律保留（可能是用户正在等他付款到账，删了就等于吞钱）
 export function cleanOldPayments() {
-  const list = getPendingPayments()
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
-  const filtered = list.filter(p => {
-    if (p.status === 'completed') {
-      return new Date(p.last_check || p.created_at).getTime() > cutoff
-    }
-    return true
+  const now = Date.now()
+  const cutoff = now - 30 * 24 * 60 * 60 * 1000
+  const hardCutoff = now - 90 * 24 * 60 * 60 * 1000
+  const filtered = getPendingPayments().filter((p) => {
+    // 计龄口径：已结束的（completed/failed）看「发起时间」，还没结束的看「最后一次检查」
+    // —— 否则 markFailed 刚把 last_check 刷成现在，这条永远不到 30 天，清不掉。
+    const ended = p.status === 'completed' || p.status === 'failed'
+    const ts = new Date(ended ? p.created_at : (p.last_check || p.created_at)).getTime()
+    if (!Number.isFinite(ts)) return false
+    if (ended) return ts > cutoff
+    return ts > hardCutoff
   })
   savePendingPayments(filtered)
 }

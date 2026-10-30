@@ -425,9 +425,22 @@ export async function reconcilePayments() {
   const list = getPendingPayments()
   const now = Date.now()
   for (const pay of list) {
-    if (pay.status !== 'pending') continue
+    // 🔴 2026-10-30 修：卡在 processing 的单子以前永远不会再被检查 ——
+    //    补单引擎把状态改成 processing 后如果进程重启/查证中途抛错，这条单就
+    //    "用户可能已付款、网关回调丢了、引擎也不再看它"，只能等客户投诉。
+    //    现在把 last_check 超过 10 分钟的 processing 当作锁已失效，重新纳入检查。
+    if (pay.status === 'processing') {
+      const stale = now - new Date(pay.last_check || pay.created_at).getTime() > 10 * 60 * 1000
+      if (!stale) continue
+    } else if (pay.status !== 'pending') {
+      continue
+    }
     const age = now - new Date(pay.created_at).getTime()
     if (age < 180000) continue
+    // 🧹 太老的单直接静默判死：BufPay 订单 5 分钟过期、Cryptomus 发票 1 小时，
+    //    放了 7 天还没人付款的单不可能再付款成功。以前这类单会一直重试、并在
+    //    每轮把 "Payment callback missing" 推给祥哥 —— 真出事的告警就被淹掉了。
+    if (age > 7 * 24 * 60 * 60 * 1000) { markFailed(pay.order_id, 'too old (7d)'); continue }
     const isUsdt = pay.pay_type === 'USDT'
     // 🔒 BufPay 约 5 次重试(≈10分钟)判死重来；USDT 发票 1 小时有效，绝不能提前判死，否则用户正付款就被杀单
     if (!isUsdt && pay.retry_count >= 5) { markFailed(pay.order_id, 'over max retry'); continue }
