@@ -4939,3 +4939,67 @@ GSC / Cloudflare 这类后台只认「真人点击」，合成事件无效，所
 
 - 回滚点：`git revert` 本轮提交即可（纯代码 + 一条 `UPDATE`）
 - 那条迁移是**单向的**（把界面字段补进权威字段），回滚代码后 `agent_expire_at` 仍有值 —— 不会造成误扣，只是代理会正常到期
+
+## 八十八、密室「补单队列」页面（2026-10-30 晚 · 祥哥「需要顺手加个页面吗？加吧」）
+
+### 一、为什么加
+
+补单记录一直存在 `server/data/pending_payments.json`，后台每 2 分钟自动查一次，**但从来没有界面**。
+客户说「我付了钱没到账」时，只能 ssh 上去 `cat` 那个文件 —— 这不该是运维的日常。
+
+### 二、改了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 后端 | `routes/pay.js` | 把每笔单的查证逻辑抽成 **`reconcileOne(pay)`**，补单引擎和「人工重查」共用同一份 —— 钱的事不能有两套口径 |
+| 后端 | `routes/paymentsAdmin.js`（新） | `GET /api/admin/payments` 列表+统计、`POST /recheck` 立即重查、`POST /dismiss` 判死、`POST /clean` 清理老单；全部 `authenticate` + 角色白名单 + 写 `AuditLog` |
+| 后端 | `app.js` | 挂载 `/api/admin/payments`（放在 `/api/admin` 之前） |
+| 前端 | `views/AdminPayments.vue`（新） | 统计卡片 + 明细表（单号/用户/金额/通道/状态/距发起/末次查证/原因）+ 行内「立即重查 / 判死」+ 20 秒自动刷新 |
+| 前端 | `router/index.ts`、`layouts/DashboardLayout.vue` | 路由 `/admin/payments`（沿用既有 `admin/*` 角色守卫）、侧边栏入口带「还在查证」角标（仅管理员发请求） |
+
+**列表里两个贴心字段**：
+- `credited`：队列说没完成、但流水里已经有这单 → 显示「✔ 流水已有」，说明钱其实到了，点重查会自动标完成
+- 顶部红条：`suspicious > 0` 时提示有几笔这种「状态没跟上」的单
+
+**刻意不做「手动入账」按钮**：真要补钱走「用户管理 → 后台调账」并写原因。手动入账点错一次就是记错一笔钱，
+而「立即重查」已经覆盖了「网关确实已付但我这边状态没跟上」这个真实场景。
+
+### 三、实测证据（生产，真跑）
+
+| 场景 | 结果 |
+|---|---|
+| 普通用户 token 访问 | **HTTP 403**「权限不足」 |
+| 管理员列表 | `summary: {total:7, open:2, failed:3, completed:2, suspicious:0}`，字段 `order_id/user_id/phone/amount/pay_type/status/age_min/last_check/last_min/retry_count/fail_reason/credited` 齐全 |
+| 「✔ 流水已有」判定 | 两笔 completed 的单 `credited:true`，其余 false（与 `transactions` 实际一致） |
+| 立即重查（没付款的单） | `success / 网关未显示已支付`，`gateway_error: Request failed with status code 404`（BufPay 侧该测试单不存在，符合预期） |
+| 判死 | `success / 已判死：联调测试单`，列表状态变「已判死」 |
+| 重新查证（对已判死的单） | 允许 —— 覆盖「自动判死后客户说确实付了」的捞回场景 |
+| 一键清理老单 | `已判死 0 条老单，队列剩 7 条`（没有 7 天以上的未结束单） |
+| 响应瘦身 | 重查接口只回 `{state, paid, gateway_error}`（最初把整条 `AxiosError` 塞进去了，太长，已改） |
+| 前端产物 | `assets/AdminPayments-BNAaVlHG.js` 公网 200（10.1 KB），chunk 内含新按钮文案；`/admin/payments` SPA 路由 200 |
+| 主包 | `assets/index-DQ6nfFrD.js` 公网 200（302 KB） |
+| 队列最终态 | 7 条：2 已入账、5 已判死、0 待查证（**上午联调造的 2 条测试单已判死，没留垃圾**） |
+
+### 四、⚠️ 过程中把线上静态资源全删了一遍（已恢复，必须记住）
+
+清理旧哈希包时，我用「本地生成文件名清单 → scp → 服务器 `grep -qxF` 比对」这个做法，
+清单文件从 Windows 写出去带了 **CRLF**，于是服务器上每个名字都变成 `xxx.js\r`，一条都对不上，
+`for f in *; do grep -qxF "$f" list || rm -f "$f"; done` **把两个站的 assets 全删了**（222 + 99 个）。
+
+- 影响时间：约 3 分钟（`index.html` 还在、引用的 JS 404 → 页面白屏）
+- 恢复：重新 `tar` 上传解包，24 个新文件回来，`index.html` 引用的主包校验存在才收工
+- 正确做法（本次已改）：**保留名单从服务器上的 tar 清单生成**
+  `tar -tzf dist.tgz | grep '^\./assets/' | sed ... > keep.txt`，全程不出服务器，不存在编码问题
+- 顺带教训：**删文件前先 `wc -l` 比对新旧数量**，并在删除后立刻校验 `index.html` 引用的主包是否存在
+
+### 五、没验到的
+
+1. 页面**没有在真实浏览器里点过** —— 我只能证明「构建产物含新文案 + 公网 200 + 接口全部通过」，
+   排版/深色主题细节要祥哥打开看一眼
+2. 没有用「真的付了钱但回调丢了」的单验证过 —— 那需要真花钱走一遍网关（重查会真的入账，正是设计意图）
+3. 侧边栏角标在真机上的显示位置（有数字 / 没数字两种情况）没截图确认
+
+### 六、回滚
+
+`git revert` 本轮提交即可（纯代码，无数据迁移）。前端回滚注意：`client/dist` 不在 git 里，
+要回滚得用旧包重传（`backups/` 里有历史快照，但**只含数据库与补单记录，不含前端产物**）。

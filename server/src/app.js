@@ -19,6 +19,7 @@ import { seoGuardTick, SEO_GUARD_INTERVAL_MS } from './utils/seoWatch.js';
 
 import payRoutes from './routes/pay.js';
 import adminRoutes from './routes/admin.js';
+import paymentsAdminRoutes from './routes/paymentsAdmin.js';
 import publicRoutes from './routes/public.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
@@ -111,6 +112,9 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/billing', billingRoutes);   // 💳 代理/分站月费（87 期） 
 app.use('/api/transactions', transactionsRoutes); 
 app.use('/api/pay', payRoutes);
+// 💳 密室 · 补单队列（待付款/补单记录）：必须挂在 /api/admin 之前，
+//    否则会被下面那个大 router 先吃掉（虽然 adminRoutes 里没有这个路径，但顺序更稳）
+app.use('/api/admin/payments', paymentsAdminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/sites', sitesRoutes);

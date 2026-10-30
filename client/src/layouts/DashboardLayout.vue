@@ -38,6 +38,7 @@
           <router-link to="/admin" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>{{ appStore.t('menu_admin') }}</span><span v-if="pendingWithdraws > 0"
               class="ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-black leading-none">{{ pendingWithdraws > 99 ? '99+' : pendingWithdraws }}</span></router-link>
           <router-link to="/admin/backup" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/backup')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg><span>{{ appStore.t('menu_backup') || '灾备中心' }}</span></router-link>
+          <router-link to="/admin/payments" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/payments')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg><span>{{ appStore.lang === 'zh' ? '补单队列' : 'Payment Queue' }}</span><span v-if="pendingPayments > 0" class="ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-black text-[9px] font-black leading-none">{{ pendingPayments > 99 ? '99+' : pendingPayments }}</span></router-link>
           <router-link v-if="!appStore.isSubsite" to="/api-doc" @click="handleNav('/api-doc')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg><span>{{ appStore.t('menu_api') || '开发者 API' }}</span></router-link>
         </template>
 
@@ -253,6 +254,18 @@ const syncUserStatus = async () => {
   } catch (e) {}
 };
 
+// 💳 补单队列角标：有多少笔「还在查证」的支付（管理员才看得到这个入口）
+const pendingPayments = ref(0);
+const fetchPendingPayments = async () => {
+  if (!userStore.token) return;
+  if (!['admin', 'super_admin'].includes(userStore.userInfo?.role)) return;
+  try {
+    const res = await fetch(`/api/admin/payments?_t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const j = await res.json();
+    if (j.status === 'success') pendingPayments.value = j.data?.summary?.open || 0;
+  } catch (e) {}
+};
+
 // 通知
 const showNotifPanel = ref(false);
 const notifList = ref([]);
@@ -288,6 +301,7 @@ const formatNotifTime = (t) => { if (!t) return ''; try { const d = new Date(t);
 // 定期检查通知 & 同步用户状态
 let notifInterval = null;
 let statusInterval = null;
+let pendingPayInterval = null;
 onMounted(() => {
   appStore.fetchConfig(); syncUserStatus();
   // 每60秒检查一次新通知
@@ -295,12 +309,16 @@ onMounted(() => {
     fetchNotifs();
     notifInterval = setInterval(fetchNotifs, 60000);
   }
+  // 💳 补单队列角标（只有管理员会真正发请求）
+  fetchPendingPayments();
+  pendingPayInterval = setInterval(fetchPendingPayments, 60000);
   // 每30秒同步用户状态（角色/余额等），确保权限变更后自动更新
   statusInterval = setInterval(syncUserStatus, 30000);
 });
 onUnmounted(() => {
   if (notifInterval) clearInterval(notifInterval);
   if (statusInterval) clearInterval(statusInterval);
+  if (pendingPayInterval) clearInterval(pendingPayInterval);
 });
 </script>
 

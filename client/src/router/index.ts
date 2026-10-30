@@ -22,6 +22,8 @@ const routes = [
       { path: 'vip', component: () => import('../views/Vip.vue') },
       { path: 'admin', component: () => import('../views/Admin.vue') },
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
+      // 💳 补单队列：支付回调丢了也不丢钱 —— 客户说"付了没到账"时在这里当场查/判死
+      { path: 'admin/payments', component: () => import('../views/AdminPayments.vue') },
   { path: 'admin/site-customers', component: () => import('../views/AdminSiteCustomers.vue') },
   { path: 'admin/sites', component: () => import('../views/AdminSites.vue') },
   { path: 'admin/site-withdrawals', component: () => import('../views/AdminWithdrawals.vue') },

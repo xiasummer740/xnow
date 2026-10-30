@@ -421,6 +421,44 @@ export default router;
 // ============================================================
 // 支付补单引擎 - 每2分钟自动执行，处理回调失败的单子
 // ============================================================
+/**
+ * 对「一条待支付记录」做一次查证：流水里已经有就当完成；否则问网关有没有付；
+ * 付了就直接入账。补单引擎（每 2 分钟）和密室「立即重查」（人工点）共用这一份逻辑 ——
+ * 两边各写一遍迟早会跑偏，钱的事不能有两套口径。
+ *
+ * @returns {Promise<{state:'done'|'pending'|'error', paid?:boolean, note?:string, queryErr?:any}>}
+ */
+export async function reconcileOne(pay) {
+  const isUsdt = pay.pay_type === 'USDT'
+  // ① 流水里已经有这单 → 说明回调/补单已经入过账，只是记录没标完成
+  const exist = await Transaction.findOne({
+    where: { description: { [sequelize.Sequelize.Op.like]: '%' + pay.order_id + '%' } }
+  })
+  if (exist) { markCompleted(pay.order_id); return { state: 'done', paid: true, note: '流水里已有这单，标记完成' } }
+
+  // ② 问网关
+  let paid = false
+  let queryErr = null
+  try {
+    if (isUsdt) {
+      // USDT：服务端签名向 Cryptomus 查证，不信回调明文
+      paid = await cryptomusCheckPaid(pay.order_id)
+    } else {
+      const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
+      paid = !!(res.data && (res.data.status === 'success' || res.data.status === 'payed'))
+    }
+  } catch (e) { queryErr = e }
+
+  // ③ 付了就入账
+  if (paid) {
+    const ok = await handleSuccessPay(pay.order_id, pay.user_id, pay.amount, isUsdt ? 'Cryptomus补单' : 'BufPay auto')
+    if (ok) { markCompleted(pay.order_id); return { state: 'done', paid: true, note: '网关确认已付，已入账' } }
+    // 入账失败：不标完成，下一轮自动重试
+    return { state: 'error', paid: true, note: '网关说已付，但入账失败（下一轮会重试）' }
+  }
+  return { state: 'pending', paid: false, queryErr }
+}
+
 export async function reconcilePayments() {
   const list = getPendingPayments()
   const now = Date.now()
@@ -446,35 +484,15 @@ export async function reconcilePayments() {
     if (!isUsdt && pay.retry_count >= 5) { markFailed(pay.order_id, 'over max retry'); continue }
     markProcessing(pay.order_id)
     try {
-      const exist = await Transaction.findOne({
-        where: { description: { [sequelize.Sequelize.Op.like]: '%' + pay.order_id + '%' } }
-      })
-      if (exist) { markCompleted(pay.order_id); continue }
-      let paid = false
-      let queryErr = null
-      try {
-        if (isUsdt) {
-          // USDT：服务端签名向 Cryptomus 查证，不信 bufpay 查询接口
-          paid = await cryptomusCheckPaid(pay.order_id)
-        } else {
-          const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
-          paid = !!(res.data && (res.data.status === 'success' || res.data.status === 'payed'))
-        }
-      } catch (e) { queryErr = e }
-      if (paid) {
-        const ok = await handleSuccessPay(pay.order_id, pay.user_id, pay.amount, isUsdt ? 'Cryptomus补单' : 'BufPay auto')
-        if (ok) {
-          markCompleted(pay.order_id)
-          continue
-        }
-        // 入账失败：不标完成，下一轮自动重试（BufPay 到 retry 上限判死；USDT 以 1 小时发票为界）
-      }
-      const failAge = isUsdt ? 3900000 : 1800000   // USDT 65 分钟(发票60+缓冲)，BufPay 30 分钟
+      const r = await reconcileOne(pay)
+      if (r.state === 'done' || r.state === 'error') continue
+      // 还没付：按年龄判死（BufPay 约 30 分钟，USDT 发票 1 小时 + 缓冲）
+      const failAge = isUsdt ? 3900000 : 1800000
       if (age > failAge) {
         markFailed(pay.order_id, isUsdt ? 'cryptomus 1h 未支付' : 'callback timeout')
         if (isUsdt) {
           // 查证抛错 = 无法确认是否真付了，资金可能悬空 → TG 告警人工核对；干净未付(用户放弃)则不打扰
-          if (queryErr) sendTgMessage('⚠️ <b>USDT 支付单无法向 Cryptomus 确认，已置失败待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + (queryErr.message || queryErr))
+          if (r.queryErr) sendTgMessage('⚠️ <b>USDT 支付单无法向 Cryptomus 确认，已置失败待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + (r.queryErr.message || r.queryErr))
         } else {
           sendTgMessage('Payment callback missing: ' + pay.order_id + ' user:' + pay.user_id + ' amount:' + pay.amount)
         }
