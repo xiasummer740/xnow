@@ -4773,3 +4773,97 @@ GSC / Cloudflare 这类后台只认「真人点击」，合成事件无效，所
 
 （其余平台页交给 sitemap 自然抓取；分站 `7h2d5u.taikon.top` 是独立资源，GSC 里还没加，
 要加得新做一次验证 —— 目前靠 sitemap + IndexNow，够用。）
+
+---
+
+## 八十六、抓取防回退自检（2026-10-30 · 祥哥「接着做，都完善了吗」）
+
+### 一、开工先说清现状：内容侧已经收口，TODO 里那句是过期信息
+
+祥哥给的选项是「继续 SEO：剩余 9 个平台页补差异化内容」。**核实后不成立**，
+不能照着做（否则就是重复劳动）：
+
+| 核实项 | 实测 |
+|---|---|
+| 15 个平台页专属内容 | **全都有**（逐页扒生产正文，见下表） |
+| `platformCopy.js` 词条数 | **15 个**（含带引号的 `'Apple Music'`；我第一版识别正则漏了引号，一度误判缺 1 个） |
+| 首页 → 平台页内链 | **16 条** `/c/` 链接；每个落地页底部再链 10 个平台 |
+| IndexNow cron | 今天 03:20 真跑过：主站 `HTTP 200` / 分站 `HTTP 200` |
+| 生产 = 仓库 | 都是 `cebde08b` |
+
+逐页正文字符（生产实测，已剔 style/script）：
+
+| 页面 | 字符 | 页面 | 字符 | 页面 | 字符 |
+|---|---|---|---|---|---|
+| tiktok | 1389 | youtube | 1289 | facebook | 1284 |
+| instagram | 1278 | telegram | 1243 | twitter | 1179 |
+| spotify | 1156 | soundcloud | 1088 | shopee | 1067 |
+| traffic | 1058 | twitch | 1055 | discord | 1052 |
+| line | 1045 | apple-music | 1020 | | |
+
+> ⚠️ 已在 `.claude/TODO.md` 把「给剩 9 个平台页也补差异化内容」改成「已完成」并注明这次误判，
+> 免得下一个 AI 再按它做一遍。
+
+### 二、改做什么：抓取这件事的「防回退」
+
+内容齐了，剩下的风险不是「内容不够」，而是**已经抓得到这件事会被静默回退**。
+三处地基都在我们代码之外，改回去时站点照样 200、日志一行不写：
+
+| 环节 | 谁在管 | 回退姿势 |
+|---|---|---|
+| robots.txt | 后端 `routes/seo.js` | 改动/nginx 转发一坏就 200 返回错内容，没人会去看 |
+| CF「AI 自动程序策略 · 训练」 | Cloudflare 后台 | 2026-09-15 起对新域名**默认禁止训练类** → GPTBot/ClaudeBot 403（10-29 已实测踩过一次） |
+| CF「自动程序偏好同步」 | Cloudflare 后台 | 开着就往前塞 167 行托管内容，盖掉我们那 35 行 |
+
+### 三、实现
+
+| 文件 | 作用 |
+|---|---|
+| `server/src/utils/seoWatch.js` | 巡检本体。起服 1 分钟后先跑一轮，之后每 30 分钟一轮 |
+| `server/src/app.js` | 挂定时器（与 `checkNginxTempDirs` / `checkNginxErrors` 同一层） |
+| `scripts/seo-guard-check.mjs` | 手动跑一轮（不推 TG），打印 4 项实测值；退出码 0/1 |
+
+每个站点 4 项（站点清单读 `.indexnow-hosts` = 主站 + 所有带域名的分站）：
+
+1. `robots.txt` 200 / 首行必须是 `# <host>` / 含 `Content-Signal` / 含自指 `Sitemap:` / 行数 ≤80
+2. **GPTBot 真实 UA 抓首页 200 且 ≥500 字节**
+3. 同上 ClaudeBot
+4. `sitemap.xml` 200 / 合法 `<urlset>` / 地址数 ≥3
+
+纪律：**只在状态迁移时推 TG**（好→坏、坏→好各一条），持续坏 12 小时提醒一次；
+「被拦（403）」与「我方抓不到（网络失败）」措辞分开，不把人带错方向。
+
+开关：`SEO_GUARD=off` / `SEO_GUARD_HOSTS=` / `SEO_GUARD_INTERVAL_MIN=` / `SEO_GUARD_VERBOSE=1` / `SEO_GUARD_TEST=1`。
+
+### 四、实测
+
+| 验证 | 结果 |
+|---|---|
+| 生产自检脚本 | **8/8 通过**（2 站点 × 4 项）：主站 GPTBot/ClaudeBot 各 200/5306 字节、sitemap 16 条；分站 5425 字节、16 条 |
+| 进程内首轮 | `[SeoGuard] 已启动：每 30 分钟自检 xnow.taikon.top, 7h2d5u.taikon.top（robots / GPTBot / ClaudeBot / sitemap）` |
+| **定时器真在跑** | Beta 上临时 `SEO_GUARD_INTERVAL_MIN=1 SEO_GUARD_VERBOSE=1` → 连续 **4 轮 `本轮 4/4 项通过`**（间隔 1 分钟），验完已还原 |
+| 反向对照① | `SEO_GUARD_HOSTS=example.com` → `robots HTTP 404`、`sitemap HTTP 404`、退出码 1 |
+| 反向对照② | 不存在的域名 → `请求失败（不是被拦，是我方抓不到）`，未误报成「被 CF 拦」 |
+| Beta 不重复告警 | `未找到 /var/www/xnow-beta/.indexnow-hosts，跳过` |
+| 站点与数据 | 主站/分站/Beta 全 200，API 200；数据未变（6 用户 / 31 单 / 1 分站） |
+
+### 五、我首版踩的两个坑（从 pm2 日志当场发现并修掉）
+
+1. **首轮全好被算成「8 项已恢复」并推了假告警**：恢复分支只看 `r.ok`，没判上一轮是否坏的。
+   20:07:29 日志实锤 `✅ [SeoGuard] 8 项已恢复`。改为 `prev && prev.ok === false` 才算恢复。
+   ⚠️ **祥哥手上那条「8 项已恢复」是假告警**，起因就是这行。
+2. **站点清单路径写死 `/var/www/xnow/.indexnow-hosts`** → Beta 也读**生产**清单，两个进程会各推一遍。
+   改成相对本文件算 `../../../.indexnow-hosts`（prod → `/var/www/xnow/`，beta → `/var/www/xnow-beta/` 不存在 → 跳过）。
+
+### 六、没验到的（别下一个人当已验）
+
+1. CF 托管内容灌回来那条分支（首行判定 / 行数 >80）：**只走代码路径，没造真实样本**（得把生产 robots 弄坏，没做）
+2. 「坏 → 好」恢复告警：**没有真实翻转样本**（首轮那条误报是同一段代码的旁证，不是正样本）
+3. 12 小时重复提醒：**没等**（周期太长）
+
+### 七、回滚
+
+- 备份：`/root/xnow-rollback-seoguard-20261030-200606`（原 `app.js` + `HEAD.txt`）
+- 三步：`app.js` 拷回 → 删 `server/src/utils/seoWatch.js` → `pm2 restart xnow-backend`
+  ⚠️ 必须一起回：`setInterval` 挂在 `app.js` 里，只删文件会让进程起不来
+

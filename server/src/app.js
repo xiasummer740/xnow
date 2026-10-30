@@ -15,6 +15,7 @@ import billingRoutes from './routes/billing.js';
 import { runSiteBillingCheck } from './utils/siteBilling.js';
 import { autoTrafficWarning } from './routes/vpn.js';
 import { checkNginxErrors, checkNginxTempDirs } from './utils/nginxWatch.js';
+import { seoGuardTick, SEO_GUARD_INTERVAL_MS } from './utils/seoWatch.js';
 
 import payRoutes from './routes/pay.js';
 import adminRoutes from './routes/admin.js';
@@ -224,4 +225,8 @@ app.listen(PORT, "127.0.0.1", async () => {
   setInterval(autoTrafficWarning, 1000 * 60 * 60); // 每小时检查流量预警
   setInterval(checkNginxTempDirs, 1000 * 60 * 5);  // nginx 临时目录属主自愈（防大响应被腰斩）
   setInterval(checkNginxErrors, 1000 * 60 * 5);    // nginx 严重错误告警（防静默故障）
+  // 🔎 抓取防回退自检：robots 被 CF 托管内容盖回去 / GPTBot 被 AI 策略再拦 / sitemap 掉地址，
+  //    这三件事都不会写日志、站点照样 200，只是从此不被收录 —— 只能靠从公网主动验（见 utils/seoWatch.js）
+  setTimeout(seoGuardTick, 1000 * 60);             // 起服 1 分钟后先验一轮（部署后立刻能看日志）
+  setInterval(seoGuardTick, SEO_GUARD_INTERVAL_MS);
 });
