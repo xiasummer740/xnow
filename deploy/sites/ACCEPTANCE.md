@@ -5088,3 +5088,20 @@ nginx -t && systemctl reload nginx
 
 ⚠️ 如果以后重装/重跑 `install.sh`，nginx 会回到「:80 无条件 301」的老样子；届时若 CF 还是 Flexible，故障会立刻复发。
 **建议把 CF 改回 Full 作为长期解，本补丁只是不依赖 CF 后台的保险。**
+
+### 补充（本轮 21:20）：靠「重建换哈希」先把站点救回可用
+
+清 CF 缓存要等祥哥操作，但页面能不能打开是当下的事。故障期间 CF 把**旧哈希包的 301 也缓存了**
+（`/assets/index-DQ6nfFrD.js` → `cf-cache-status: HIT` 的 301），而新访客拿到的 `index.html` 引用的正是它 →
+**HTML 200、JS 301 → 依旧白屏**。
+
+做法：改 `client/src/main.ts` 的入口内容（加 `window.__XNOW_BUILD__` 标记）→ 重新 `vite build` →
+主包哈希从 `index-DQ6nfFrD.js` 变成 **`index-CjlE6byT.js`** → 新 URL 不在 CF 缓存里 → 200。
+⚠️ 踩过的小坑：**在懒加载的 `.vue` 里加注释不会改主包哈希**（注释还会被压缩器剥掉，等于没改），
+必须动**入口图**里的真实代码。
+
+部署仍走安全剪枝（保留名单在服务器上从 tar 清单生成，不用本地名单 —— 八十八 §四 的教训）。
+
+实测（经 CF）：`index.html` 引用的 2 个入口资源全 200；分站同样 0 异常；分站标题仍是「星辰增长」。
+**仍欠祥哥一步**：`robots.txt` 还是 CF 缓存里的 301（`cf-cache-status: HIT`，`sitemap.xml` 已是 DYNAMIC 200），
+清缓存后 SeoGuard 才会恢复正常。

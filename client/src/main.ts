@@ -1,3 +1,5 @@
+// 构建标记：换掉入口图内容 → 产物哈希变化（2026-11-03 CF 缓存了旧包的 301，靠这个换新 URL）
+;(window as any).__XNOW_BUILD__ = '2026-11-03-flex';
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
