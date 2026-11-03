@@ -58,6 +58,12 @@ bash install.sh    # 裸机引导部署（环境 + 数据库 + Nginx + SSL）
   **上游的备份与恢复责任不归我们，别再问、也别再提**（已记入 `.claude/TODO.md` 的「不用做」清单）。
 - ⚠️ **Cloudflare 的 SSL 模式不要改成 Full (strict)**：源站证书是自签（`CN=IP`），
   靠 CF 接受自签才对外可用，改 strict 会立刻全站 502。
+- 🔴 **也绝不要改成 Flexible**（2026-11-03 血的教训）：所有 vhost 的 `:80` 都无条件 301 到 https，
+  Flexible 下「CF→源站走 80 → 源站 301 → CF 把 301 回给浏览器 → 浏览器再走 https → 又回 80」**无限跳转**，
+  全站打不开（那次瘫了 8 小时，还被 CF 把 301 缓存下来，必须 Purge Everything 才好）。
+  正确值**只有一个：Full**。应急脚本 `deploy/sites/fix-cf-flexible-loop.sh`（:80 遇到
+  `X-Forwarded-Proto: https` 就本地转发到 `127.0.0.1:443`，直连 http 仍 301）。细节见 `ACCEPTANCE.md` 八十九。
+  🧪 **改完 CF 任何开关，立刻用浏览器开一次主站 + 分站**；只看源站 `curl https://127.0.0.1/` 200 是查不出来的。
 - ⚠️ **`ISSUES.md` 被 gitignore（仓库是 PUBLIC），永远不要 push 它**
 - 🔑 **新装机器会自动创建初始管理员 `admin` / `admin123`**（`install.sh` 收尾，仅在 `users` 表为空时）。
   这是 2026-10-15 补的"冷启动"：此前新装机器是**死锁** —— 注册要邮箱验证码 → 要配 SMTP → SMTP 存在数据库里 →

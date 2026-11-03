@@ -5003,3 +5003,88 @@ GSC / Cloudflare 这类后台只认「真人点击」，合成事件无效，所
 
 `git revert` 本轮提交即可（纯代码，无数据迁移）。前端回滚注意：`client/dist` 不在 git 里，
 要回滚得用旧包重传（`backups/` 里有历史快照，但**只含数据库与补单记录，不含前端产物**）。
+
+## 八十九、🚨 全站 301 死循环（CF 被切成 Flexible）+ 应急补丁（2026-11-03）
+
+### 一、现象
+
+2026-11-03 21:00（北京）接力会话一开工体检，发现**主站与分站经 Cloudflare 全部无限跳转**：
+
+```
+GET https://xnow.taikon.top/  → 301 Location: https://xnow.taikon.top/   （同一地址，死循环）
+浏览器报「重定向次数过多」，第三方（另一条网络）复现一致
+```
+
+- 静态资源、`robots.txt`、甚至不存在的路径**全都 301**
+- 时间窗：**2026-11-03 13:00 → 21:00 北京时间**（约 8 小时，UTC 05:00 → 13:00）
+- SeoGuard 在 **05:38 UTC 已报「8 项抓取链路异常」**（它就是为这种事故做的，这次真派上用场）
+- 同一时段 `[AutoSync]` 报 502 / timeout / 405 —— 那是上游 `tk7188.com` 自己的抖动，与本故障无关，
+  21:00 复查已恢复（`✅ 所有 2809 条服务已写入`）
+
+### 二、根因
+
+| 环节 | 事实 |
+|---|---|
+| 源站 :443 | `curl -k -H 'Host: xnow.taikon.top' https://127.0.0.1/` → **200 正常** |
+| 源站 :80 | 无条件 `return 301 https://$host$request_uri`（所有 vhost 都是这个写法） |
+| CF 回源 | nginx 日志里最近 200 条 CF 回源请求：**198 条 301、只有 2 条 200**，且 URI 正是客户端的那些 |
+| 结论 | **Cloudflare 的 SSL/TLS 模式被改成了 Flexible**（CF→源站走 80）→ 源站 301 → CF 把 301 原样回给浏览器 → 浏览器再走 https → 又是 80 → 死循环 |
+
+⚠️ `CLAUDE.md` 里只写了「不要改成 Full (strict)」，**没人写"也不能改成 Flexible"**，这次就撞在这上面。
+
+### 三、应急补丁（已上线，源站侧，不依赖 CF 后台）
+
+`deploy/sites/fix-cf-flexible-loop.sh`（可重复执行、自带备份与回滚）：
+
+1. 新增 `/etc/nginx/snippets/xnow-cf-realip.conf`（CF 全部网段 + `127.0.0.1` + `real_ip_header CF-Connecting-IP`）
+2. 所有「80 端口 301」的 vhost（7 个文件）改成：
+   - 请求带 `X-Forwarded-Proto: https`（= 原始访客走的是 https，即 CF 回源）→ **本地转发 `https://127.0.0.1:443`**，内容原样返回
+   - 直连 http 的访客 → 仍然 `301`（用 `return 418` + `error_page` 实现，行为不变）
+3. 443 侧的 `xnow-spa-https` 增加 `set_real_ip_from 127.0.0.1;` —— 否则本地转发后真实客户端 IP 会退化成 CF 边缘地址
+   （注册限流、黑名单、日志会一起失真）
+
+### 四、实测（补丁后）
+
+| 场景 | 结果 |
+|---|---|
+| `:80` 直连无 `XFP`（纯 http 访问） | **301**（保持原行为） |
+| `:80` 带 `XFP: https` | **200** + `<title>XNOW PRO…</title>` |
+| `:80` 带 `XFP` 取静态资源 / 调接口 | 200 / 200 |
+| 分站 `:80` 带 `XFP` | **200** + `<title>星辰增长…</title>` |
+| **经 Cloudflare：主站 `/`** | **200，0 次跳转**，标题正确，HTML 内含 SPA 根节点与主包引用 |
+| 经 Cloudflare：`/api/public/config`、`/sitemap.xml`、`/admin/payments` | 200 / 200 / 200 |
+| 经 Cloudflare：分站 `/` | 200；`/vpn` 仍 404（分站屏蔽平台页，符合设计） |
+| `nginx -t` + reload | 通过（有一条既存的 `conflicting server name *.xnow.taikon.top` 警告，与本次无关） |
+
+### 五、⚠️ 还没解决的：Cloudflare 边缘缓存里存着 301
+
+```
+/assets/index-DQ6nfFrD.js        → 301（cf-cache-status: HIT, Age: 191）
+/assets/index-DQ6nfFrD.js?v=随机 → 200（MISS）
+robots.txt?x=随机                → 200（MISS）
+```
+
+故障期间 CF 把 301 也缓存了（静态扩展名默认缓存）。**必须清 CF 缓存**，否则老访客/爬虫仍拿到 301：
+
+1. Cloudflare → **Caching → Configuration → Purge Everything**（一键）
+2. Cloudflare → **SSL/TLS → Overview → 改回 Full**（不是 Flexible、也不是 Full strict —— 源站是自签 `CN=IP`，strict 会 526）
+
+改回 Full 之后，本补丁**不再被触发**（CF 恢复走 443），可以留着当保险，也可以按脚本里的回滚命令撤掉。
+
+### 六、没验到的
+
+1. 补丁后**没有在真实浏览器里点一遍完整下单流程**（只验证了 200/标题/接口/静态资源）
+2. 真实客户端 IP 还原在「经 CF → :80 → 本地 443」这条链路上只做了配置层面的推理 + `nginx -t`，没抓日志对比
+3. 缓存 301 具体污染了哪些 URL —— 没有 CF API token，只能在清缓存后复查
+4. 故障 8 小时内的真实影响面（有多少访客撞到白屏）无从统计，`access.log` 只能看到都是 301
+
+### 七、回滚
+
+```bash
+cp -a /root/xnow-rollback-cf-flexible-20261103-130236/sites-enabled/. /etc/nginx/sites-enabled/
+cp -a /root/xnow-rollback-cf-flexible-20261103-130236/snippets/.    /etc/nginx/snippets/
+nginx -t && systemctl reload nginx
+```
+
+⚠️ 如果以后重装/重跑 `install.sh`，nginx 会回到「:80 无条件 301」的老样子；届时若 CF 还是 Flexible，故障会立刻复发。
+**建议把 CF 改回 Full 作为长期解，本补丁只是不依赖 CF 后台的保险。**
