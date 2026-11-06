@@ -106,10 +106,14 @@
           
           <div class="p-3 md:p-4 text-[11px] md:text-xs text-blue-200 font-mono leading-snug max-h-48 overflow-y-auto custom-scrollbar">
             <div class="space-y-1.5 break-all">
-              <p>✔️ {{ needsUsername ? (appStore.lang === 'zh' ? '示例用户名' : 'Example Username') : (appStore.lang === 'zh' ? '示例链接' : 'Example Link') }} : <span class="text-white bg-blue-900/50 px-1.5 py-0.5 rounded">{{ needsUsername ? '@tiktokuser' : dynamicGuideLink }}</span></p>
-              <div class="h-px bg-blue-500/30 my-2 w-full"></div>
+              <!-- 有真实描述时不再显示这行硬编码示例 —— 上游描述里通常自带
+                   「示例链接 : https://… / 示例链接 : username」，两行叠着显示会重复，
+                   而且硬编码的那行只给一种格式，正是客户照着填错的原因之一。
+                   订阅类（needsUsername）例外：它要的是纯用户名，必须留着提示。 -->
+              <p v-if="!activeDescription || needsUsername">✔️ {{ needsUsername ? (appStore.lang === 'zh' ? '示例用户名' : 'Example Username') : (appStore.lang === 'zh' ? '示例链接' : 'Example Link') }} : <span class="text-white bg-blue-900/50 px-1.5 py-0.5 rounded">{{ needsUsername ? '@tiktokuser' : dynamicGuideLink }}</span></p>
+              <div :class="(!activeDescription || needsUsername) ? 'h-px bg-blue-500/30 my-2 w-full' : 'hidden'"></div>
               
-              <div v-if="activeService && activeService.description" class="text-slate-300 font-sans whitespace-pre-wrap leading-tight">{{ activeService.description }}</div>
+              <div v-if="activeDescription" class="text-slate-300 font-sans whitespace-pre-wrap leading-tight">{{ activeDescription }}</div>
               <div v-else class="space-y-1">
                 <p class="text-red-300">{{ appStore.t('guide_1') }}</p>
                 <p class="text-red-300">{{ appStore.t('guide_2') }}</p>
@@ -228,6 +232,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
 import { useAppStore } from '../stores/app';
+// 服务清单 2809 条 / 714KB（2026-11-03 实测）：必须带超时，否则弱网下永远转圈
+import { fetchWithTimeout } from '../utils/fetchTimeout';
 
 const userStore = useUserStore(); const uiStore = useUiStore(); const appStore = useAppStore();
 
@@ -336,6 +342,9 @@ const servicesError = ref('');
 const servicesErrorText = computed(() => {
   if (servicesError.value === 'expired') return '登录状态已失效，服务无法加载，请重新登录';
   if (servicesError.value === 'network') return '网络异常，服务加载失败，请点击重试';
+  // 服务清单 2809 条 / 714KB，弱网下超过 20 秒是常态 —— 要明确告诉用户"是慢，不是没有"
+  if (servicesError.value === 'timeout') return '服务列表太大、这次没能在 20 秒内下载完，请点击重新加载（建议用 WiFi）';
+  if (servicesError.value === 'server') return '服务端暂时出错，服务列表没能拉下来，请点击重新加载';
   return '服务加载失败，请点击重试或刷新页面';
 });
 const sysAnnouncement = ref(''); const activePlatform = ref('TikTok');
@@ -444,21 +453,32 @@ const fetchInitData = async () => {
   } catch(e) {}
   
   try {
-    const res = await fetch('/api/services', { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    // 🔴 2026-11-03「拉不到服务」：服务清单在生产上已经涨到 **2809 条 / 714KB**，
+    //    实测首字节 1.4 秒、完整下完 2.2 秒（桌面宽带）。手机上这一个请求要好几秒，
+    //    弱网直接几十秒 —— 而原来的代码**没有超时、没有重试**，只有一句
+    //    `fetch` 失败 := 网络异常。用户看到的就是「一直转圈 / 拉不到服务」。
+    //    现在：20 秒硬超时（卡死必然给结论）+ 自动重试一次 + 把服务端真实错因带出来。
+    const res = await fetchWithTimeout('/api/services', {
+      headers: { 'Authorization': `Bearer ${userStore.token}` },
+    }, 20000);
     if (res.status === 401) {
       // 登录失效：全局拦截器会登出跳登录，这里先给页面标记，避免误显示"暂无分类"
       servicesError.value = 'expired';
     } else {
-      const data = await res.json();
-      if (data.status === 'success' && Array.isArray(data.data)) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && data.status === 'success' && Array.isArray(data.data)) {
         rawServices.value = data.data;
         servicesError.value = '';
       } else {
-        servicesError.value = 'failed';
+        // 服务端 500 时把真实 message / HTTP 码打到控制台 —— 否则永远只能猜
+        console.error('[order] 服务列表加载失败:', (data && data.message) || `HTTP ${res.status}`);
+        servicesError.value = res.status >= 500 ? 'server' : 'failed';
       }
     }
   } catch (error) {
-    servicesError.value = 'network';
+    servicesError.value = (error && (error.name === 'AbortError' || error.name === 'TimeoutError'))
+      ? 'timeout' : 'network';
+    console.error('[order] 服务列表请求异常:', error);
   } finally { selectPlatform('TikTok'); }
 };
 
@@ -481,6 +501,31 @@ const availableCategories = computed(() => {
 const availableServices = computed(() => rawServices.value.filter(s => s.category === activeCategory.value));
 // 🔎 从 rawServices 兜底查找：搜索结果跨平台/跨分类选中时也能立刻找到（否则表单会空）
 const activeService = computed(() => rawServices.value.find(s => String(s.service) === String(activeServiceId.value)) || null);
+
+// 📄 服务描述懒加载（2026-11-03）
+//    列表接口不再下发 description —— 2809 条 × 每条几百字的长描述能把响应撑到 2MB，
+//    这正是「手机上一进下单页就拉不到服务」的主因（页面其实只在选中一条时才显示它）。
+//    现在选中哪条就单独取哪条，并缓存；失败也不影响下单，只是详情区不显示。
+const activeDescription = ref('');
+const descCache = new Map();
+const loadServiceDescription = async (sid) => {
+    const key = String(sid);
+    if (descCache.has(key)) { activeDescription.value = descCache.get(key); return; }
+    activeDescription.value = '';
+    try {
+        const res = await fetchWithTimeout(`/api/services/detail/${encodeURIComponent(key)}`, {
+            headers: { 'Authorization': `Bearer ${userStore.token}` },
+        }, 10000, 1);
+        if (!res.ok) return;
+        const j = await res.json().catch(() => null);
+        const text = (j && j.status === 'success' && j.data && j.data.description) || '';
+        descCache.set(key, text);
+        // 期间用户可能又换了服务，只有当它还是当前选中项时才写回
+        if (String(activeServiceId.value) === key) activeDescription.value = text;
+    } catch (e) {
+        // 静默：描述拿不到不影响下单
+    }
+};
 
 // 🔍 全局搜索：按服务 ID / 名称，全平台（对齐源头站体验）
 const searchQuery = ref('');
@@ -530,6 +575,7 @@ const selectCategory = (cat) => {
 
 const selectService = (id) => { 
     activeServiceId.value = String(id); 
+    loadServiceDescription(String(id));
     srvOpen.value = false; 
 
     // 换服务就清空输入：否则上一单的链接/用户名会被带到这一单（历史上真踩过）

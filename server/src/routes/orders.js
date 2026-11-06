@@ -1,7 +1,9 @@
 import express from 'express';
 import axios from 'axios';
+import { Op } from 'sequelize';
 import { sequelize, Order, Service, Config, User, Transaction, SiteServicePrice } from '../models/index.js';
 import { customerDiscountMultiplier } from '../utils/customerPrice.js';
+import { refundOrderFully } from '../utils/orderRefund.js';
 import { isAgentActive } from '../utils/agentStatus.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
@@ -111,9 +113,21 @@ router.post('/add', authenticate, async (req, res) => {
   if (!serviceId) return res.json({ status: 'error', message: '参数非法' });
 
   const t = await sequelize.transaction();
+  // 事务是否已经提交。submit 之后绝不能再 rollback（会抛 "Transaction cannot be rolled back"），
+  // 而阶段 B 的补偿退款是另开事务的，不需要这把 t。
+  let committed = false;
+  // 提到外层：catch 里的补偿逻辑要靠它找到刚建出来的那一单
+  let orderNo = null;
   try {
     const service = await Service.findByPk(serviceId, { transaction: t });
     if (!service) { await t.rollback(); return res.json({ status: 'error', message: '商品不存在或已下架' }); }
+    // 🚫 sort=999999 是同步任务标记「上游已下架」的哨兵值（见 utils/sync.js）。
+    //    这些服务要么已被物理删除，要么因为护栏留在库里 —— 后者仍然能被 findByPk 查到，
+    //    不拦的话客户会下一单上游必然拒绝的订单（钱扣了、单失败、还要退款）。
+    if (Number(service.sort) === 999999) {
+      await t.rollback();
+      return res.json({ status: 'error', message: '该服务已下架，请刷新页面重新选择' });
+    }
 
     // 🔌 先按上游类型校验必填字段，再校验数量边界
     const orderType = normType(service.type);
@@ -124,6 +138,55 @@ router.post('/add', authenticate, async (req, res) => {
       username, delay, hashtag, answerNumber, posts: postsQty
     });
     if (fieldErr) { await t.rollback(); return res.json({ status: 'error', message: fieldErr }); }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 🔴 2026-11-06 下单前两道拦截。起因（祥哥反馈）：
+    //    客户把 TikTok **视频短链接** tiktok.com/t/xxx 填进了「涨粉」单，
+    //    上游必然取消 → 钱扣了又退 → 客户白等一场，还以为是平台不行。
+    //    同一链接重复下单也完全没拦（上游描述里明写禁止，会重复计数）。
+    //    这两类问题以前都只能等上游退回来才发现，等于让客户替我们试错。
+    // ══════════════════════════════════════════════════════════════════════
+    const targetForCheck = String(link || username || '').trim();
+    if (targetForCheck) {
+      const svcName = String(service.name || '');
+
+      // ① 涨粉/粉丝类：要的是「主页」或「用户名」，给视频链接上游一定退
+      const isFansSvc = /粉|粉丝|followers?|fans?/i.test(svcName);
+      const isVideoUrl = /tiktok\.com\/(t|video)\/|youtube\.com\/(watch|shorts)|instagram\.com\/(p|reel)\//i.test(targetForCheck);
+      if (isFansSvc && isVideoUrl) {
+        await t.rollback();
+        return res.json({
+          status: 'error',
+          message:
+            '这是涨粉服务，要填「主页」或「用户名」，不是视频链接。\n' +
+            '正确写法：https://www.tiktok.com/@你的用户名　或　直接填 用户名',
+        });
+      }
+
+      // ② 同一目标链接，在上一单完成之前不能重复下单
+      const normTarget = (x) => String(x || '')
+        .trim().toLowerCase()
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '')
+        .split('?')[0]
+        .replace(/\/+$/, '');
+      const myActive = await Order.findAll({
+        where: {
+          user_id: req.user.id,
+          status: { [Op.notIn]: ['已完成', '已取消', '已退款', '部分完成', 'Completed', 'Canceled', 'Cancelled', 'Partial'] },
+        },
+        attributes: ['order_no', 'link', 'status'],
+        transaction: t,
+      });
+      const dup = myActive.find((o) => normTarget(o.link) === normTarget(targetForCheck));
+      if (dup) {
+        await t.rollback();
+        return res.json({
+          status: 'error',
+          message: `这个链接已经有一单在进行中（单号 ${dup.order_no}），完成前请勿重复下单，否则会重复计数。`,
+        });
+      }
+    }
 
     if (qty < service.min || qty > service.max) {
       await t.rollback(); return res.json({ status: 'error', message: `数量限制: ${service.min} - ${service.max}` });
@@ -232,6 +295,20 @@ router.post('/add', authenticate, async (req, res) => {
         // （客户不可能给站长补库存，让他去做这件事只会一脸懵）
         await t.rollback(); return res.json({ status: 'error', message: '本站暂时无法接单，请稍后再试或联系客服' });
       }
+    } else {
+      // 🔴 2026-11-03：**主站原来没有任何成本地板** —— 只有分站那句 if (req.site) 才抬平。
+      //    主站的成本就是 upstream_charge（按上游原价算，含订阅型 billUnits）。
+      //    客户被设了 custom_multiplier=0.4（后台可填任意小数）或代理折扣叠加到成本以下时，
+      //    charge 就是纯亏 —— 卖一单倒贴一单，而且账面上完全看不出来（只有利润栏是负数）。
+      //    这里按"售价不得低于上游成本"无条件抬平，并留日志便于发现是谁被设了倒贴倍率。
+      const floorMain = parseFloat(upstream_charge);
+      if (isFinite(floorMain) && chargeFinal < floorMain) {
+        console.warn(
+          `[order] 主站售价低于上游成本，已抬平：charge=${chargeFinal} cost=${floorMain} ` +
+          `uid=${req.user.id} service=${service.service_id} mult=${finalMultiplier}`
+        );
+        chargeFinal = floorMain;
+      }
     }
 
     // 💰 客户余额校验放在"最终售价"确定之后（分站可能抬平到成本以上）
@@ -272,48 +349,77 @@ router.post('/add', authenticate, async (req, res) => {
     });
     const payload = new URLSearchParams(payloadObj);
     
-    let upRes;
+    // ══════════════════════════════════════════════════════════════════════
+    // 阶段 A（短事务）：扣款 + 建单 + 落流水，然后**立刻提交**。
+    // 原来「扣客户余额 → 调上游 → 建单 → commit」全在同一个事务里，两个后果：
+    //   · axios 一调就 15 秒，期间客户那行余额一直被行锁占着 → 并发下单全部排队；
+    //   · 上游**已经接了单**、本地 Order.create 若失败 → 整个事务回滚，
+    //     上游白服务、平台白送一单，账面上还什么都看不见。
+    // 现在先把本地这一单落定（含扣款），再出门调上游；上游失败走补偿退款。
+    // ══════════════════════════════════════════════════════════════════════
+    // 🏬 订单号前缀：主站沿用 XN；分站不带平台首字母 —— 这个号会出现在客户的历史订单、
+    //    邮件和客服对话里，'XN' 三个字母等于在每张单子上盖平台的章。
+    orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random()*100);
+    const pendingOrder = await Order.create({
+      order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
+      site_id: req.site ? Number(req.site.id) : 0,
+      site_cost: siteCost,
+      upstream_order_id: null, service_id: serviceId,
+      service_name: service.name,
+      // 🔌 订阅型/邀请型没有 link，用 username 落到 link 列：历史订单里才看得出"下给谁"
+      link: link || username, quantity: qty, charge: chargeFinal, upstream_charge,
+      status: '提交中'   // ← 上游单号回来之前停在这里；超时残留由 utils/orderSync.js 清扫退款
+    }, { transaction: t });
+
+    if (user) {
+      await Transaction.create({
+        user_id: user.id, phone: user.phone, amount: -chargeFinal, balance: user.balance,
+        type: '订单扣款', description: `购买服务 [ID:${serviceId}] 数量:${quantity}`,
+        site_id: req.site ? Number(req.site.id) : 0
+      }, { transaction: t });
+    }
+
+    await t.commit();
+    committed = true;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 阶段 B（无事务、不持任何锁）：真正去上游下单
+    // ══════════════════════════════════════════════════════════════════════
+    let upRes = null;
+    let axiosFailed = false;
     try {
       upRes = await axios.post(urlConf.value, payload.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 });
     } catch (axiosErr) {
-      await t.rollback();
-      return res.json({ status: 'error', message: '服务暂不可用，请稍后重试' });
+      axiosFailed = true;
+      console.error(`[order] 上游调用失败 order=${orderNo} uid=${req.user.id}:`, axiosErr && axiosErr.message);
     }
-    
-    if (upRes.data && upRes.data.order) {
-      // 🏬 订单号前缀：主站沿用 XN；分站不要带平台首字母 —— 这个号会出现在客户的
-    //    历史订单、邮件和客服对话里，'XN' 三个字母等于在每张单子上盖平台的章。
-    const orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random()*100);
-      const newOrder = await Order.create({
-        order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
-        // 🏬 分站归属与站主成本（主站订单固定为 0）
-        site_id: req.site ? Number(req.site.id) : 0,
-        site_cost: siteCost,
-        upstream_order_id: String(upRes.data.order), service_id: serviceId,
-        // 🔌 订阅型/邀请型没有 link，用 username 落到 link 列：历史订单里才看得出"下给谁"
-        service_name: service.name, link: link || username, quantity: qty, charge: chargeFinal, upstream_charge, status: '排队中'
-      }, { transaction: t });
-      
-      if (user) {
-        await Transaction.create({
-          user_id: user.id, phone: user.phone, amount: -chargeFinal, balance: user.balance, 
-          type: '订单扣款', description: `购买服务 [ID:${serviceId}] 数量:${quantity}`,
-      site_id: req.site ? Number(req.site.id) : 0
-        }, { transaction: t });
-      }
-      
-      await t.commit(); 
+
+    if (!axiosFailed && upRes.data && upRes.data.order) {
+      // 回填上游单号并转正常状态（单子已在阶段 A 落好，这里只做更新）
+      await Order.update(
+        { upstream_order_id: String(upRes.data.order), status: '排队中' },
+        { where: { id: pendingOrder.id } }
+      );
 
       // 💡 核心优化：TG 机器人增加对自定义评论的侦测播报
       const roleName = user ? (user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户') : '系统神权';
       const commentMark = comments ? `\n💬 <b>评论:</b> 包含 ${comments.split('\n').length} 行自定义内容` : '';
-      
-      sendTgMessage(`🛒 <b>用户新订单提交</b>\n🆔 <b>UID:</b> <code>${user ? user.id : '0'}</code>\n📱 <b>账号:</b> <code>${user ? user.phone : '最高管理'}</code>\n📧 <b>邮箱:</b> ${user ? (user.email || '未绑定') : '系统'}\n🔰 <b>等级:</b> ${roleName}\n📦 <b>商品:</b> [ID:${serviceId}] ${service.name}\n🔢 <b>数量:</b> ${quantity}\n💸 <b>扣费:</b> ￥${charge}\n🔗 <b>目标:</b> <code>${link || username}</code>${commentMark}\n🔖 <b>系统单号:</b> <code>${newOrder.order_no}</code>\n📡 <b>上游单号:</b> <code>${upRes.data.order}</code>`);
 
-      res.json({ status: 'success', message: '✅ 订单已秒级提交至全网', order_id: newOrder.order_no });
+      sendTgMessage(`🛒 <b>用户新订单提交</b>\n🆔 <b>UID:</b> <code>${user ? user.id : '0'}</code>\n📱 <b>账号:</b> <code>${user ? user.phone : '最高管理'}</code>\n📧 <b>邮箱:</b> ${user ? (user.email || '未绑定') : '系统'}\n🔰 <b>等级:</b> ${roleName}\n📦 <b>商品:</b> [ID:${serviceId}] ${service.name}\n🔢 <b>数量:</b> ${quantity}\n💸 <b>扣费:</b> ￥${chargeFinal}\n💰 <b>扣费后余额:</b> ￥${user ? Number(user.balance).toFixed(2) : '—'}\n🔗 <b>目标:</b> <code>${link || username}</code>${commentMark}\n🔖 <b>系统单号:</b> <code>${orderNo}</code>\n📡 <b>上游单号:</b> <code>${upRes.data.order}</code>`);
+
+      res.json({ status: 'success', message: '✅ 订单已秒级提交至全网', order_id: orderNo });
     } else {
-      await t.rollback();
-      const rawErr = String(upRes.data?.error || upRes.data?.message || '服务异常，请稍后重试');
+      // 🔁 补偿：上游没接单（或调用超时没回），把这一单全额退回客户、退回站长成本，
+      //    订单标记为「已退款」。步骤 A 已经提交，所以这里不需要（也不能）rollback 原事务。
+      const why = axiosFailed
+        ? '上游调用失败或超时'
+        : String((upRes && upRes.data && (upRes.data.error || upRes.data.message)) || '上游未返回单号');
+      const rf = await refundOrderFully(pendingOrder.id, { reason: '订单未能提交，已全额退款' });
+      if (!rf.ok) {
+        console.error(`🚨 [order] 补偿退款失败，需人工处理 order=${orderNo} uid=${req.user.id} why=${why}`);
+        sendTgMessage(`🚨 <b>补偿退款失败，需人工处理</b>\n🔖 单号: <code>${orderNo}</code>\n🆔 UID: <code>${req.user.id}</code>\n💸 金额: ￥${chargeFinal}\n❗ 原因: ${why}`);
+      }
+      const rawErr = String(upRes?.data?.error || upRes?.data?.message || (axiosFailed ? 'timeout' : '服务异常，请稍后重试'));
       const errMap = {
         'not enough funds': '服务暂不可用，充值补货中，请稍后再试',
         'incorrect request': '请求参数有误，请检查链接格式或服务是否有效',
@@ -345,8 +451,26 @@ router.post('/add', authenticate, async (req, res) => {
       res.json({ status: 'error', message: friendlyMsg });
     }
   } catch (e) {
-    await t.rollback();
-    res.json({ status: 'error', message: '系统繁忙，请稍后重试' });
+    console.error('[order] 下单异常:', e);
+    if (!committed) {
+      try { await t.rollback(); } catch (_) {}
+      return res.json({ status: 'error', message: '系统繁忙，请稍后重试' });
+    }
+    // 阶段 A 已经提交、后面某一步抛错（回填/TG/网络）→ 这一单必须退回去，
+    // 否则客户被扣了钱、订单却停在不完整状态，谁也不知道发生过。
+    try {
+      const o = await Order.findOne({ where: { order_no: orderNo }, attributes: ['id', 'status'] });
+      if (o && o.status === '提交中') {
+        const rf = await refundOrderFully(o.id, { reason: '订单未能提交，已全额退款' });
+        if (!rf.ok) {
+          console.error(`🚨 [order] 异常补偿退款失败，需人工处理 order=${orderNo} uid=${req.user && req.user.id}`);
+          sendTgMessage(`🚨 <b>异常补偿退款失败，需人工处理</b>\n🔖 单号: <code>${orderNo}</code>\n🆔 UID: <code>${req.user && req.user.id}</code>`);
+        }
+      }
+    } catch (e2) {
+      console.error('[order] 异常补偿失败:', e2);
+    }
+    return res.json({ status: 'error', message: '系统繁忙，请稍后重试' });
   }
 });
 
@@ -384,6 +508,12 @@ router.post('/batch', authenticate, async (req, res) => {
     try {
       const service = await Service.findByPk(serviceId, { transaction: t });
       if (!service) { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '商品不存在' }); continue; }
+      // 同上：sort=999999 = 上游已下架，批量下单也必须拦（否则整批里塞一个失效服务就全批失败）
+      if (Number(service.sort) === 999999) {
+        await t.rollback();
+        results.push({ serviceId, link, quantity, status: 'error', message: '该服务已下架，请刷新后重新选择' });
+        continue;
+      }
 
       // 🔌 批量下单只支持 Default 类型。
       //    - Custom Comments：必填字段是"评论内容"（每单不同），一行格式表达不了 → 上游必回 Missing comments
@@ -443,7 +573,13 @@ router.post('/batch', authenticate, async (req, res) => {
       let siteCost = 0;
       let siteOwner = null;
       if (req.site) {
-        const platformMult = parseFloat(conf.global_multiplier || 2.0) * parseFloat(conf.agent_discount || 0.8);
+        // 🔴 2026-11-03 修：这里原来写死 `conf.global_multiplier * conf.agent_discount`（全局 0.8），
+        //    而 /add 用的是**这个站**的 agent_discount。代理站 0.8 / 非代理站 1（原价），
+        //    于是非代理站在批量里被当成代理价算成本 —— 每单少收 20%，
+        //    等于"没买代理资格也享受代理进货价"，代理资格白卖。
+        const siteAd = parseFloat(req.site.agent_discount);
+        const useAd = (isFinite(siteAd) && siteAd > 0) ? siteAd : parseFloat(conf.agent_discount || 0.8);
+        const platformMult = parseFloat(conf.global_multiplier || 2.0) * useAd;
         siteCost = parseFloat(((qty / 1000) * parseFloat(baseRate) * platformMult).toFixed(6));
         if (!isFinite(siteCost) || siteCost < 0) {
           await t.rollback();
@@ -467,63 +603,111 @@ router.post('/batch', authenticate, async (req, res) => {
           results.push({ serviceId, link, quantity, status: 'error', message: '本站当前无法接单，请联系客服补充库存' });
           continue;
         }
+      } else {
+        // 🔴 主站批量同样要成本地板（/add 已加，批量以前完全裸奔）：
+        //    客户倍率被设成 0.4 时批量卖一单亏一单，且批量是最高频的下单方式。
+        const floorMain = parseFloat(upstream_charge);
+        if (isFinite(floorMain) && charge < floorMain) {
+          console.warn(`[batch] 主站售价低于上游成本，已抬平：charge=${charge} cost=${floorMain} uid=${req.user.id} service=${serviceId}`);
+          charge = floorMain;
+        }
       }
 
       // 💰 余额校验放在"最终售价"确定之后
-      if (user && parseFloat(user.balance) - totalCharge < charge) {
+      // 🔴 2026-11-03 修：这里原来是 `parseFloat(user.balance) - totalCharge < charge`。
+      //    user 是**每单重新带行锁查出来的**，而且下面第 510 行会立刻把这一单的 charge
+      //    从 user.balance 里扣掉 —— 也就是说 user.balance 本来就是「已扣到当前单」的真实余额。
+      //    再减一次 totalCharge（累计已扣金额）等于**重复扣**：
+      //      余额 100、每单 30 → 第 3 单算成 40-60 = -20 < 30 → 误判"余额不足"，
+      //      客户明明还有 40 元，却下不了第三单。批量下单越多越容易撞上。
+      if (user && parseFloat(user.balance) < charge) {
         await t.rollback();
         results.push({ serviceId, link, quantity, status: 'error', message: `余额不足，需要 ¥${charge}` });
         continue;
       }
 
+      // ══════════════════════════════════════════════════════════════════════
+      // 阶段 A（短事务）：扣款 + 建单 + 流水 → 立刻提交。
+      // 与 /add 同口径：axios 绝不能跑在事务里。批量是最高频的下单方式，
+      // 每单卡 15 秒的行锁能把整批（最多 50 条）拖成分钟级，而且上游接了单、
+      // 本地建单失败就整笔回滚 = 白送。
+      // ══════════════════════════════════════════════════════════════════════
+      const orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random() * 100);
+      const pendingOrder = await Order.create({
+        order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
+        site_id: req.site ? Number(req.site.id) : 0,
+        site_cost: siteCost,
+        upstream_order_id: null, service_id: serviceId,
+        service_name: service.name, link, quantity: qty, charge, upstream_charge,
+        status: '提交中'
+      }, { transaction: t });
+
+      if (user) {
+        totalCharge += parseFloat(charge);
+        user.balance = (parseFloat(user.balance) - parseFloat(charge)).toFixed(6);
+        await user.save({ transaction: t });
+
+        await Transaction.create({
+          user_id: user.id, phone: user.phone, amount: -charge, balance: user.balance,
+          type: '批量订单扣款', description: `批量购买 [ID:${serviceId}] ${service.name} 数量:${qty}`,
+          site_id: req.site ? Number(req.site.id) : 0
+        }, { transaction: t });
+      }
+
+      // 🏬 分站主成本扣减（与客户扣款同事务）
+      if (siteOwner) {
+        siteOwner.balance = (parseFloat(siteOwner.balance) - siteCost).toFixed(6);
+        await siteOwner.save({ transaction: t });
+        await Transaction.create({
+          user_id: siteOwner.id, phone: siteOwner.phone, amount: -siteCost, balance: siteOwner.balance,
+          type: '分站成本扣款', description: `分站批量订单成本 ${orderNo} [ID:${serviceId}] 数量:${qty}`,
+          site_id: req.site ? Number(req.site.id) : 0
+        }, { transaction: t });
+      }
+
+      await t.commit();
+
+      // ══════════════════════════════════════════════════════════════════════
+      // 阶段 B（无事务、不持锁）：调上游；失败就把这一条单独退回去
+      // ══════════════════════════════════════════════════════════════════════
       const payloadObj = { key: conf.upstream_key, action: 'add', service: serviceId, link, quantity: qty };
       const payload = new URLSearchParams(payloadObj);
-      const upRes = await axios.post(conf.upstream_url, payload.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000
-      });
+      let upRes = null;
+      let upFailed = false;
+      try {
+        upRes = await axios.post(conf.upstream_url, payload.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000
+        });
+      } catch (err) {
+        upFailed = true;
+        console.error(`[batch] 上游调用失败 service=${serviceId} uid=${req.user.id}:`, err && err.message);
+      }
 
-      if (upRes.data && upRes.data.order) {
-        const orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random() * 100);
-        const newOrder = await Order.create({
-          order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
-          site_id: req.site ? Number(req.site.id) : 0,
-          site_cost: siteCost,
-          upstream_order_id: String(upRes.data.order), service_id: serviceId,
-          service_name: service.name, link, quantity: qty, charge, upstream_charge, status: '排队中'
-        }, { transaction: t });
-
-        if (user) {
-          totalCharge += parseFloat(charge);
-          user.balance = (parseFloat(user.balance) - parseFloat(charge)).toFixed(6);
-          await user.save({ transaction: t });
-
-          await Transaction.create({
-            user_id: user.id, phone: user.phone, amount: -charge, balance: user.balance,
-            type: '批量订单扣款', description: `批量购买 [ID:${serviceId}] ${service.name} 数量:${qty}`,
-      site_id: req.site ? Number(req.site.id) : 0
-          }, { transaction: t });
-        }
-
-        // 🏬 分站主成本扣减（与客户扣款同事务）
-        if (siteOwner) {
-          siteOwner.balance = (parseFloat(siteOwner.balance) - siteCost).toFixed(6);
-          await siteOwner.save({ transaction: t });
-          await Transaction.create({
-            user_id: siteOwner.id, phone: siteOwner.phone, amount: -siteCost, balance: siteOwner.balance,
-            type: '分站成本扣款', description: `分站批量订单成本 ${orderNo} [ID:${serviceId}] 数量:${qty}`,
-      site_id: req.site ? Number(req.site.id) : 0
-          }, { transaction: t });
-        }
-
-        await t.commit();
+      if (!upFailed && upRes.data && upRes.data.order) {
+        await Order.update(
+          { upstream_order_id: String(upRes.data.order), status: '排队中' },
+          { where: { id: pendingOrder.id } }
+        );
         results.push({ serviceId, link, quantity: qty, status: 'success', order_no: orderNo, charge });
       } else {
-        await t.rollback();
-        results.push({ serviceId, link, quantity, status: 'error', message: upRes.data?.error || '服务暂不可用，请稍后重试' });
+        const rf = await refundOrderFully(pendingOrder.id, { reason: '订单未能提交，已全额退款' });
+        if (!rf.ok) {
+          console.error(`🚨 [batch] 补偿退款失败，需人工处理 order=${orderNo} uid=${req.user.id}`);
+          sendTgMessage(`🚨 <b>批量补偿退款失败，需人工处理</b>\n🔖 单号: <code>${orderNo}</code>\n🆔 UID: <code>${req.user.id}</code>\n💸 金额: ￥${charge}`);
+        } else {
+          totalCharge -= parseFloat(charge);   // 已退回，不计入本批总扣费
+        }
+        results.push({
+          serviceId, link, quantity: qty, status: 'error',
+          message: upFailed ? '服务暂不可用，请稍后重试' : ((upRes.data && upRes.data.error) || '服务暂不可用，请稍后重试')
+        });
       }
     } catch (e) {
       await t.rollback().catch(() => {});
-      results.push({ serviceId, link, quantity, status: 'error', message: `系统错误: ${e.message}` });
+      // 客户可见的错误里**不能带 e.message**：那是 SQL/上游/约束错误原文，
+      // 会把表名、字段名、上游返回体一起糊到客户脸上（也不符合「XNOW 就是服务源头」的对外口径）。
+      console.error(`[batch] 下单异常 service=${serviceId} uid=${req.user.id}:`, e);
+      results.push({ serviceId, link, quantity, status: 'error', message: '系统繁忙，该条未提交成功，请稍后重试' });
     }
   }
 
@@ -533,7 +717,7 @@ router.post('/batch', authenticate, async (req, res) => {
   // TG 播报
   if (reportUser) {
     const roleName = reportUser.role === 'super_admin' ? '至尊管理员' : reportUser.role === 'admin' ? '管理员' : reportUser.role === 'agent' ? '👑 至尊代理' : '黄金用户';
-    sendTgMessage(`📦 <b>批量下单完成</b>\n🆔 <b>UID:</b> <code>${reportUser.id}</code>\n📱 <b>账号:</b> <code>${reportUser.phone}</code>\n🔰 <b>等级:</b> ${roleName}\n✅ <b>成功:</b> ${successCount} 单\n❌ <b>失败:</b> ${failCount} 单\n💸 <b>总扣费:</b> ￥${totalCharge.toFixed(2)}`);
+    sendTgMessage(`📦 <b>批量下单完成</b>\n🆔 <b>UID:</b> <code>${reportUser.id}</code>\n📱 <b>账号:</b> <code>${reportUser.phone}</code>\n🔰 <b>等级:</b> ${roleName}\n✅ <b>成功:</b> ${successCount} 单\n❌ <b>失败:</b> ${failCount} 单\n💸 <b>总扣费:</b> ￥${totalCharge.toFixed(2)}\n💰 <b>扣费后余额:</b> ￥${Number(reportUser.balance).toFixed(2)}`);
   }
 
   res.json({ status: 'success', data: { total: batchOrders.length, success: successCount, fail: failCount, total_charge: totalCharge.toFixed(4), results } });
@@ -551,9 +735,23 @@ router.get('/', authenticate, async (req, res) => {
       order: [['created_at', 'DESC']],
       attributes: [
         'id', 'order_no', 'service_id', 'service_name', 'link', 'quantity',
-        'charge', 'status', 'remains', 'start_count', 'is_refunded', 'created_at'
+        'charge', 'status', 'remains', 'start_count', 'is_refunded', 'created_at',
+        // 💬 退款原因：客户看到「已退款」却没有原因，会默认是平台不行
+        'refund_reason'
       ]
     });
+    // 🌐 状态兜底汉化：上游偶尔回 Canceled / Cancelled / Fail 这类原文，
+    //    orderSync 那边映射漏一个，客户界面就会直接露出英文（2026-11-06 截图里的
+    //    「Cancelled」就是这么来的）。这里出库前统一过滤一遍。
+    const STATUS_ZH = {
+      'Pending': '排队中', 'In progress': '进行中', 'Processing': '处理中',
+      'Completed': '已完成', 'Partial': '部分完成',
+      'Canceled': '已取消', 'Cancelled': '已取消', 'Fail': '已取消', 'Failed': '已取消',
+    };
+    for (const o of orders) {
+      const zh = STATUS_ZH[String(o.status || '').trim()];
+      if (zh) o.status = zh;
+    }
     res.json({ status: 'success', data: orders });
   } catch(e) {
     res.json({ status: 'error' });

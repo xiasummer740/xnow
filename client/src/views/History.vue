@@ -58,7 +58,11 @@
                 <span :class="['px-3 py-1 rounded-full text-[10px] font-black tracking-wider border', statusClass(order.status)]">
                   {{ order.status }}
                 </span>
-                <div v-if="order.is_refunded" class="text-[9px] text-emerald-500 mt-1.5 flex justify-end items-center"><svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>已执行智能退款</div>
+                <div v-if="order.is_refunded" class="text-[9px] text-emerald-500 mt-1.5 flex justify-end items-center"><svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>已全额退回余额</div>
+                <!-- 💬 退款原因：只显示「已退款」客户会以为是平台不行，必须说清楚是链接/规则的问题 -->
+                <div v-if="order.refund_reason" class="text-[9px] text-amber-400/90 mt-1 leading-relaxed max-w-[220px] ml-auto text-right">
+                  {{ order.refund_reason }}
+                </div>
               </td>
             </tr>
             <tr v-if="filteredOrders.length === 0">
@@ -99,7 +103,9 @@
             </div>
             <div class="font-mono font-bold text-emerald-400 text-sm">{{ appStore.formatMoney(order.charge) }}</div>
           </div>
-          <div v-if="order.is_refunded" class="text-[10px] text-emerald-500">✅ 已执行智能退款</div>
+          <div v-if="order.is_refunded" class="text-[10px] text-emerald-500">✅ 已全额退回余额</div>
+          <!-- 💬 手机端同样要给出原因，否则客户只看到退款、不知道自己做错了什么 -->
+          <div v-if="order.refund_reason" class="text-[10px] text-amber-400/90 leading-relaxed mt-1">{{ order.refund_reason }}</div>
         </div>
         <div v-if="filteredOrders.length === 0" class="text-center py-14 text-slate-500 rounded-xl border border-slate-700/50 bg-slate-900/40">
           <div class="text-4xl mb-3 opacity-20">📭</div>

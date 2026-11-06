@@ -264,7 +264,27 @@ const fetchDashboard = async (showLoading = true) => {
     } catch (e) { ui.showToast('数据同步失败', 'error'); } finally { if (showLoading) loading.value = false; syncing.value = false; }
 };
 
-const saveConfig = async () => { try { await fetch('/api/admin/config/update', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` }, body: JSON.stringify(form.value) }); ui.showToast('系统全局配置已保存', 'success'); app.fetchConfig(); } catch (e) { ui.showToast('保存失败', 'error'); } };
+// ⚠️ 以前不看响应就弹「已保存」：后端校验不过（400）、令牌过期（401）、网断（连 catch 都不进）
+// 全都是绿色的成功提示，管理员以为配置生效了，其实一个字都没写进库。
+const saveConfig = async () => {
+  try {
+    const res = await fetch('/api/admin/config/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+      body: JSON.stringify(form.value)
+    });
+    let json = null;
+    try { json = await res.json(); } catch (e) { json = null; }
+    if (!res.ok || !json || json.status !== 'success') {
+      ui.showToast((json && json.message) || `保存失败（HTTP ${res.status}）`, 'error');
+      return;
+    }
+    ui.showToast('系统全局配置已保存', 'success');
+    app.fetchConfig();
+  } catch (e) {
+    ui.showToast('保存失败：网络异常', 'error');
+  }
+};
 
 const syncUpstreamAnnouncement = async () => {
   announceSyncing.value = true;
@@ -495,6 +515,43 @@ watch(activeTab, (v) => { if (v === 'finance' && !financeData.value) fetchFinanc
 
 // ====== 访问流量统计看板（SEO 埋点数据）======
 const trafficDays = ref(7); const traffic = ref(null); const trafficLoading = ref(false);
+
+// 📄 热门落地页：路由路径 → 中文名
+//   祥哥看不懂 /order /mass-order 这些英文路径（2026-11-06：「这个能中文吗」）。
+//     · 表里有的直接给中文，路径用灰色小字附在后面（排查时还要用）
+//     · 表里没有的不瞎编，原样显示路径 —— 编错比不编更容易误导
+const PAGE_LABELS = {
+  '/': '首页',
+  '/en': '英文首页',
+  '/login': '登录页',
+  '/order': '开始下单',
+  '/boost': '千川流量',
+  '/mass-order': '批量下单',
+  '/history': '历史订单',
+  '/recharge': '资金充值',
+  '/vip': '至尊代理',
+  '/admin': '管理密室',
+  '/admin/boost': '千川订单管理',
+  '/admin/backup': '灾备中心',
+  '/admin/payments': '补单管理',
+  '/admin/sites': '分站管理',
+  '/admin/site-customers': '分站客户',
+  '/admin/site-withdrawals': '分站提现',
+  '/api-doc': '开发者 API',
+  '/affiliate': '推广联盟',
+  '/showcase': '分站风格陈列',
+  '/vpn': 'VPN 商城',
+  '/vpn/clients': 'VPN 我的节点',
+  '/vpn/admin': 'VPN 管理',
+};
+function pageLabel(path) {
+  const p = String(path || '').trim().toLowerCase();
+  if (PAGE_LABELS[p]) return PAGE_LABELS[p];
+  if (p.startsWith('/c/')) return '分站落地页';
+  if (p.startsWith('/my-site')) return '我的分站';
+  if (p.startsWith('/admin')) return '管理密室（子页面）';
+  return '';
+}
 const fetchTraffic = async () => {
   trafficLoading.value = true;
   try {
@@ -731,7 +788,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-3">📄 热门落地页</div><div v-if="traffic.pages?.length" class="space-y-2"><div v-for="p in traffic.pages" :key="p.path" class="flex items-center justify-between text-sm"><span class="text-slate-300 font-mono text-xs truncate mr-3">{{ p.path }}</span><span class="text-sky-400 font-mono font-bold whitespace-nowrap">{{ p.pv }} PV</span></div></div><div v-else class="text-slate-500 text-xs py-8 text-center">暂无页面数据</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-3">📄 热门落地页</div><div v-if="traffic.pages?.length" class="space-y-2"><div v-for="p in traffic.pages" :key="p.path" class="flex items-center justify-between text-sm"><span class="text-slate-200 text-xs truncate mr-3"><span class="font-sans">{{ pageLabel(p.path) || p.path }}</span><span v-if="pageLabel(p.path)" class="text-slate-500 font-mono text-[10px] ml-1.5">{{ p.path }}</span></span><span class="text-sky-400 font-mono font-bold whitespace-nowrap">{{ p.pv }} PV</span></div></div><div v-else class="text-slate-500 text-xs py-8 text-center">暂无页面数据</div></div>
               <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-3">🔗 来源分布 (外链效果)</div><div v-if="traffic.sources?.length" class="space-y-2"><div v-for="s in traffic.sources" :key="s.source" class="flex items-center justify-between text-sm"><span class="text-slate-300 text-xs truncate mr-3">{{ s.source }}</span><span class="text-emerald-400 font-mono font-bold whitespace-nowrap">{{ s.pv }}</span></div></div><div v-else class="text-slate-500 text-xs py-8 text-center">暂无来源数据</div></div>
             </div>
           </div>
@@ -757,7 +814,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                     <div class="flex justify-between items-end mb-2"><span class="text-sm text-slate-400">全局基础销售倍率 (1-10x)</span><span class="text-2xl font-black text-amber-400">{{ form.global_multiplier }}x</span></div>
                     <input type="range" min="1" max="10" step="0.1" v-model="form.global_multiplier" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400 mb-6">
                     <div class="flex justify-between items-end mb-2"><span class="text-sm text-slate-400">至尊代理专属折扣 (折上折比例)</span><span class="text-xl font-black text-emerald-400">{{ Math.round(form.agent_discount * 100) }}% ({{ form.agent_discount * 10 }} 折)</span></div>
-                    <input type="range" min="0.1" max="1.0" step="0.05" v-model="form.agent_discount" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400 mb-8">
+                    <input type="range" min="0.5" max="1.0" step="0.05" v-model="form.agent_discount" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400 mb-8">
                     <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 space-y-3">
                         <div class="flex justify-between items-center"><span class="badge-agent px-2 py-0.5 text-[10px]">至尊代理 ({{ Math.round(form.agent_discount * 100) }}%)</span><span class="font-mono font-bold text-emerald-400">x {{ (form.global_multiplier * form.agent_discount).toFixed(2) }}</span></div>
                         <div class="flex justify-between items-center"><span class="badge-gold px-2 py-0.5 text-[10px]">黄金用户</span><span class="font-mono font-bold text-slate-300">x {{ parseFloat(form.global_multiplier).toFixed(2) }}</span></div>
