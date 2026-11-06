@@ -77,8 +77,10 @@
         <router-link v-if="hero.btn2Url" :to="hero.btn2Url" class="w-full sm:w-auto site-btn px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
           {{ hero.btn2Text }}
         </router-link>
-        <router-link v-else to="/vpn" class="w-full sm:w-auto site-btn px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
-          {{ appStore.lang === 'zh' ? '🛡️ 安全节点' : '🛡️ VPN' }}
+        <!-- 🏬 分站的兜底按钮必须回到自己的下单页；以前不管主站分站一律指向 /vpn，
+             等于把站长的顾客带去平台另一条业务线（品牌穿帮） -->
+        <router-link v-else :to="appStore.isSubsite ? '/order' : '/vpn'" class="w-full sm:w-auto site-btn px-8 py-4 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 font-bold text-base transition flex items-center justify-center">
+          {{ appStore.isSubsite ? (appStore.lang === 'zh' ? '🛒 立即下单' : '🛒 Order Now') : (appStore.lang === 'zh' ? '🛡️ 安全节点' : '🛡️ VPN') }}
         </router-link>
       </div>
     </main>
@@ -230,6 +232,8 @@ import SiteEditor from '../components/site/SiteEditor.vue';
 import SubsiteHero from '../components/site/SubsiteHero.vue';
 import SubsiteServices from '../components/site/SubsiteServices.vue';
 import { useUserStore } from '../stores/user';
+// 首页热门服务也要超时：这个接口 2809 条 / 714KB，挂住时首页会一直空着
+import { fetchWithTimeout } from '../utils/fetchTimeout';
 
 const appStore = useAppStore();
 const userStore = useUserStore();
@@ -302,7 +306,8 @@ const toggleLangRoute = () => router.push(route.path === '/en' ? '/' : '/en');
 // 加载公开服务预览
 const loadPreview = async () => {
   try {
-    const r = await fetch('/api/services/public');
+    // 公开清单接口 2809 条 / 714KB：15 秒上限 + 一次重试，避免首页热门服务永远空着
+    const r = await fetchWithTimeout('/api/services/public', {}, 15000, 1);
     const d = await r.json();
     if (d.status === 'success' && Array.isArray(d.data)) {
       // 筛选热门平台 + 低价服务（过滤天价指南类）

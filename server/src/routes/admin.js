@@ -4,6 +4,7 @@ import https from 'https';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { Config, User, Order, Transaction, Service, AuditLog, Notification, PageView, Site, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
 import { authenticate } from '../middleware/auth.js';
@@ -12,6 +13,7 @@ import { sendTgMessage } from '../utils/tgBot.js';
 import { createBackup, restoreBackup, isBackupFile } from '../utils/backupEngine.js';
 import { sanitizeAnnouncement, announcementToText } from '../utils/sanitize.js';
 import refundSiteCost from '../utils/siteRefund.js';
+import { creditUser, applyDelta } from '../utils/balance.js';
 import { expiryMs } from '../utils/agentStatus.js';
 
 const router = express.Router();
@@ -39,11 +41,51 @@ async function logAudit(req, action, targetType, targetId, details = {}) {
   } catch (e) { /* 审计日志失败不影响主流程 */ }
 }
 
+// 🔴 备份上传的三个硬约束（以前全都没有，任意注册用户就能往备份目录写文件）：
+//    ① 大小上限 512MB + 单文件 —— 否则任何登录用户都能拿它把磁盘写满，MySQL 一死全站挂
+//    ② 文件名由**服务端**生成，只用 originalname 判断「归档格式」，绝不让它参与拼路径
+//    ③ 只收 .tar.gz / .sql.gz —— 别的东西进了备份目录，就会被列进「灾备中心」被管理员误点恢复
+const BACKUP_UPLOAD_MAX = 512 * 1024 * 1024;
+const backupUploadExt = (originalname) =>
+  String(originalname || '').toLowerCase().endsWith('.sql.gz') ? '.sql.gz' : '.tar.gz';
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, BACKUP_DIR),
-  filename: (req, file, cb) => cb(null, `uploaded_${Date.now()}_${file.originalname}`)
+  filename: (req, file, cb) =>
+    cb(null, `uploaded_${Date.now()}_${crypto.randomBytes(6).toString('hex')}${backupUploadExt(file.originalname)}`)
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: BACKUP_UPLOAD_MAX, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const n = String(file.originalname || '').toLowerCase();
+    if (n.endsWith('.tar.gz') || n.endsWith('.sql.gz')) return cb(null, true);
+    const err = new Error('只接受 .tar.gz 或 .sql.gz 备份包');
+    err.code = 'BAD_BACKUP_TYPE';
+    cb(err);
+  },
+});
+
+// multer 的错误翻成人话，别让它冒到 500（也不再泄漏内部栈）
+const uploadBackup = (field) => (req, res, next) =>
+  upload.single(field)(req, res, (err) => {
+    if (!err) return next();
+    const msg =
+      err.code === 'LIMIT_FILE_SIZE' ? '备份包超过 512MB，请分卷或改用服务器上的快照'
+        : err.code === 'BAD_BACKUP_TYPE' ? err.message
+        : '上传失败，请重试';
+    return res.status(400).json({ status: 'error', message: msg });
+  });
+
+// 🔒 角色判断必须在 multer **之前**：multer 是链上的第二个中间件，
+//    原来的写法是「先落盘、再在 handler 里判 403」—— 落盘那一步已经发生了，
+//    普通用户虽然拿到 403，文件却已经躺在备份目录里，还会出现在灾备列表里。
+const requireAdmin = (req, res, next) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) {
+    return res.status(403).json({ status: 'error', message: '权限不足' });
+  }
+  next();
+};
 
 // 🔒 密钥类配置不回传明文（见 /dashboard）。前端会把整个表单原样提交回来，
 // 所以 update 必须识别这个掩码并跳过，否则一次保存就把所有密钥覆盖成星号。
@@ -60,6 +102,9 @@ router.post('/config/update', authenticate, async (req, res) => {
     'tg_bot_token', 'tg_chat_id', 'tg_bot_link',
     'cryptomus_id', 'cryptomus_key', 'bufpay_id', 'bufpay_key',
     'smtp_host', 'smtp_port', 'smtp_email', 'smtp_pass', 'usdt_image_url', 'ip_blacklist',
+    // ⏱ 自动备份间隔（小时，0 = 关闭）。**以前漏在白名单外**：容灾页提交了它、后端直接 continue
+    //    跳过，前端还弹「已更新」—— 这个开关等于永久失效（换机后自动备份根本不会跑）。
+    'auto_backup_interval',
     // 🧩 订单页显示哪些平台按钮（逗号分隔）。白名单外的平台统一收进「其他」。
     //    新增平台时只改这一个配置，不用改代码/重新部署。
     'display_platforms'];
@@ -73,6 +118,16 @@ router.post('/config/update', authenticate, async (req, res) => {
       if (key === 'global_multiplier' || key === 'agent_discount') {
         const num = parseFloat(value);
         if (!isFinite(num) || num <= 0) return res.status(400).json({ status: 'error', message: (key === 'global_multiplier' ? '全局倍率' : '代理折扣') + '必须为大于 0 的数字' });
+        // 🔒 下界：折扣滑杆以前 min=0.1，拖一下就变成「1×0.1」→ 全站代理一折成交，
+        //    而那时后端只校验 >0，等于放行。这里加地板 0.5（= 进货价最多打五折）。
+        if (key === 'agent_discount' && num < 0.5) {
+          return res.status(400).json({ status: 'error', message: '代理折扣不能低于 0.5（否则代理进货价会低于半价，直接亏本）' });
+        }
+      }
+      // ⏱ 自动备份间隔：只接受 0（关闭）或 1~720 小时，别让一个笔误变成「每分钟备份一次」
+      if (key === 'auto_backup_interval') {
+        const h = parseFloat(value);
+        if (!isFinite(h) || h < 0 || h > 720) return res.status(400).json({ status: 'error', message: '自动备份间隔必须是 0（关闭）或 1~720 小时' });
       }
       // 🔒 公告为 HTML 富文本：入库前白名单净化，剥掉 script/事件等危险内容，前端才能安全 v-html
       const cleanValue = key === 'announcement' ? sanitizeAnnouncement(String(value)) : String(value);
@@ -219,10 +274,14 @@ router.post('/sync-announcement', authenticate, async (req, res) => {
     // 替换上游域名
     const siteNameConf = await Config.findOne({ where: { key: 'site_name' } });
     const currentDomain = siteNameConf ? siteNameConf.value : 'XNOW';
+    // 🔒 预览也必须净化：这段 HTML 会被「填入编辑器」原样 v-html 进密室页面。
+    //    保存到库里那一步有 sanitizeAnnouncement，预览这一步以前**没有** ——
+    //    上游（或中间人）投毒一个 <img onerror> 就能在超管会话里执行脚本。
+    const safePreview = sanitizeAnnouncement(announcementHtml);
 
-    res.json({ status: 'success', data: { announcement: announcementHtml }, message: '公告同步成功' });
+    res.json({ status: 'success', data: { announcement: safePreview }, message: '公告同步成功' });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: '同步失败: ' + e.message });
+    res.status(500).json({ status: 'error', message: '同步失败，请稍后重试' });
   }
 });
 
@@ -272,16 +331,18 @@ router.post('/user/update', authenticate, async (req, res) => {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ status: 'error' });
     if (type === 'fund') {
-      user.balance = (parseFloat(user.balance) + parseFloat(amount)).toFixed(6);
-      await user.save();
+      const delta = parseFloat(amount);
+      if (!isFinite(delta) || delta === 0) return res.status(400).json({ status: 'error', message: '调账金额必须是非 0 数字' });
+      // 🔒 原子调账：以前是「读余额 → 加 → save()」，与用户同时下单/充值会互相覆盖
+      const newBalance = await applyDelta(user.id, delta, { transaction: null });
       // 📝 原因必记：以前只写"管理员手动调账 +100"，过一个月谁也说不清为什么调（测试？补偿？退款？）
       const why = String(reason || '').trim().slice(0, 40);
       await Transaction.create({
-        user_id: user.id, phone: user.phone, amount: parseFloat(amount), balance: user.balance,
+        user_id: user.id, phone: user.phone, amount: delta, balance: newBalance,
         type: '后台调账',
-        description: '管理员手动调账: ' + (amount > 0 ? '+' : '') + amount + (why ? '（' + why + '）' : ''),
+        description: '管理员手动调账: ' + (delta > 0 ? '+' : '') + delta + (why ? '（' + why + '）' : ''),
       });
-      await logAudit(req, 'user_fund', 'user', userId, { amount, newBalance: user.balance });
+      await logAudit(req, 'user_fund', 'user', userId, { amount: delta, newBalance });
     } else if (type === 'multiplier') {
       // 🔒 倍率只允许正有限数（'default'/空=重置），负数/0/NaN 直接拒，防下单价格被写坏
       if (multiplier !== 'default' && multiplier !== '' && multiplier !== null && multiplier !== undefined) {
@@ -522,15 +583,22 @@ router.post('/backup/create', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: '数据库备份失败' }); }
 });
 
-router.post('/backup/upload', authenticate, upload.single('file'), async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+router.post('/backup/upload', authenticate, requireAdmin, uploadBackup('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ status: 'error', message: '请选择文件' });
+  // 原始文件名只用来记账/告警，真实落盘名由服务端生成（见 storage.filename）
+  const original = req.file.originalname;
   try {
     await restoreBackup(req.file.path);
-    await logAudit(req, 'backup_restore', 'backup', req.file.originalname, { method: 'upload' });
-    sendTgMessage('🚨 [灾难级数据恢复] 上传还原成功\n执行官: <code>UID ' + req.user.id + '</code>\n数据包: <code>' + req.file.originalname + '</code>');
+    await logAudit(req, 'backup_restore', 'backup', original, { method: 'upload' });
+    sendTgMessage('🚨 [灾难级数据恢复] 上传还原成功\n执行官: <code>UID ' + req.user.id + '</code>\n数据包: <code>' + original + '</code>');
     res.json({ status: 'success', message: '上传数据已成功覆盖并唤醒全站！' });
-  } catch (e) { res.status(500).json({ status: 'error', message: '数据包损坏或恢复失败' }); }
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: '数据包损坏或恢复失败' });
+  } finally {
+    // 🧹 恢复完（成功或失败）就把上传件删掉：它已经不再是「快照」，
+    //    留着只会占磁盘，还会混进灾备列表里被误当成可恢复的历史快照。
+    try { fs.unlinkSync(req.file.path); } catch (e2) { /* 尽力而为 */ }
+  }
 });
 
 router.post('/backup/restore', authenticate, async (req, res) => {
@@ -546,12 +614,65 @@ router.post('/backup/restore', authenticate, async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: '快照恢复失败' }); }
 });
 
-router.get('/backup/download', authenticate, async (req, res) => {
-  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).send('Forbidden');
-  const { filename } = req.query;
+// 🎫 一次性下载票据：给「备份文件下载」这种必须走浏览器原生下载（大文件不能塞进内存）
+//    的接口用，代替过去的 `?token=<登录令牌>`。
+//    为什么不能再用登录令牌：
+//      · URL 会进 nginx access.log / Cloudflare 日志 / 浏览器历史 / Referer；
+//      · 一把登录令牌 7 天有效，散一次就等于长期泄露管理员权限。
+//    票据规则：随机 32 字节、5 分钟过期、绑定 uid+filename、**用一次即作废**、只存内存。
+const downloadTickets = new Map(); // ticket -> { uid, filename, exp }
+const TICKET_TTL_MS = 5 * 60 * 1000;
+
+const issueDownloadTicket = (uid, filename) => {
+  // 顺手清掉过期票据，避免长期驻留
+  const now = Date.now();
+  for (const [k, v] of downloadTickets) if (v.exp < now) downloadTickets.delete(k);
+  const ticket = crypto.randomBytes(32).toString('hex');
+  downloadTickets.set(ticket, { uid: Number(uid), filename: String(filename), exp: now + TICKET_TTL_MS });
+  return ticket;
+};
+
+const takeDownloadTicket = (ticket) => {
+  const v = downloadTickets.get(String(ticket || ''));
+  if (!v) return null;
+  downloadTickets.delete(String(ticket)); // 一次性：取走即作废，重放无效
+  if (v.exp < Date.now()) return null;
+  return v;
+};
+
+// 签发票据（需登录）
+router.post('/backup/download-ticket', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error', message: '权限不足' });
+  const { filename } = req.body || {};
   const filepath = safeBackupPath(filename);
-  if (filepath && fs.existsSync(filepath)) res.download(filepath);
-  else res.status(404).send('File not found');
+  if (!filepath || !fs.existsSync(filepath)) return res.status(404).json({ status: 'error', message: '文件不存在' });
+  res.json({ status: 'success', data: { ticket: issueDownloadTicket(req.user.id, filename) } });
+});
+
+// 下载：既支持 Authorization 头（fetch），也支持一次性票据（浏览器原生下载）
+router.get('/backup/download', async (req, res, next) => {
+  let filename = req.query.filename;
+  let allowed = false;
+
+  if (req.query.ticket) {
+    const v = takeDownloadTicket(req.query.ticket);
+    // 票据里绑定了 filename：拿 A 文件的票据下 B 文件不认
+    if (v && String(v.filename) === String(filename)) allowed = true;
+  }
+  if (!allowed && req.headers.authorization) {
+    // 走标准鉴权：交给 authenticate，并且还要过角色判断
+    return authenticate(req, res, async () => {
+      if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).send('Forbidden');
+      const filepath = safeBackupPath(req.query.filename);
+      if (filepath && fs.existsSync(filepath)) return res.download(filepath);
+      return res.status(404).send('File not found');
+    });
+  }
+  if (!allowed) return res.status(401).send('Unauthorized');
+  filename = req.query.filename;
+  const filepath = safeBackupPath(filename);
+  if (filepath && fs.existsSync(filepath)) return res.download(filepath);
+  return res.status(404).send('File not found');
 });
 
 router.post('/backup/delete', authenticate, async (req, res) => {
@@ -839,17 +960,21 @@ router.post('/orders/refund', authenticate, async (req, res) => {
     if (!user) { await t.rollback(); return res.status(404).json({ status: 'error', message: '用户不存在' }); }
 
     // 计算退款金额（按剩余比例或全额）
+    // 手工退款保留「管理员显式决定」的语义：剩余为 0（已全部交付）时默认整单退，
+    // 只有明确「还剩一部分没交付」（0 < remains < qty）才按比例。
+    // ⚠️ 自动链路（orderSync）用的是 refundRatioOf（remains=0 → 退 0），两者**故意**不同：
+    //    自动链路是机器判定，宁可少退也不能白退；手工退款是人拍板，允许全额。
     const qty = parseInt(order.quantity) || 1;
     const remains = parseInt(order.remains) || 0;
     const refundRatio = remains > 0 && remains < qty ? remains / qty : 1;
-    const refundAmount = parseFloat((parseFloat(order.charge) * refundRatio).toFixed(4));
+    const refundAmount = parseFloat((parseFloat(order.charge) * refundRatio).toFixed(6));
+    if (!(refundAmount > 0)) { await t.rollback(); return res.json({ status: 'error', message: '该订单金额为 0，无需退款' }); }
 
-    // 执行退款
-    user.balance = (parseFloat(user.balance) + refundAmount).toFixed(6);
-    await user.save({ transaction: t });
+    // 执行退款（🔒 原子加余额，不再用快照 save()）
+    const newBalance = await creditUser(user.id, refundAmount, { transaction: t });
 
     await Transaction.create({
-      user_id: user.id, phone: user.phone, amount: refundAmount, balance: user.balance,
+      user_id: user.id, phone: user.phone, amount: refundAmount, balance: newBalance,
       type: '退款入账', description: `管理员退款: 订单 ${order.order_no} 退还 ¥${refundAmount}`,
       site_id: parseInt(order.site_id || 0)   // 分站订单的退款不能冲减平台营收
     }, { transaction: t });

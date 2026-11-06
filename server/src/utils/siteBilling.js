@@ -13,8 +13,10 @@
 
 import path from 'path';
 import { Site, User, Config, Transaction } from '../models/index.js';
+import { Op } from 'sequelize';
 import { sendTgMessage } from './tgBot.js';
 import { clearSiteCache } from '../middleware/site.js';
+import { debitUser, getBalance } from './balance.js';
 import { parkDomain, unparkDomain, writeVhost, removeVhost, reloadNginx, ensureCert, domainVhostOwner, resolveDistRoot } from './siteDomain.js';
 
 export const DEFAULTS = {
@@ -70,24 +72,34 @@ export const genSubdomain = async () => {
 };
 
 // 扣款并写流水（主站余额）。返回 { ok, balance } 或 { ok:false, message }
+// 🔒 走 debitUser（单条 `balance = balance - n WHERE balance >= n`）：
+//    以前是「读快照 → 算 → save()」，与另一笔资金动作并发时会互相覆盖。
+//    注意**不要**再用 `user.balance = …` 赋值 —— 调用方随后可能 `save()` 整个实例，
+//    会把内存里的旧余额写回去。这里用 setDataValue 只同步内存显示、不标脏。
 export const chargeBalance = async (user, amount, type, description, transaction) => {
-  const bal = parseFloat(user.balance || 0);
-  if (!Number.isFinite(bal) || bal < amount) {
-    return { ok: false, message: `余额不足：需要 ¥${amount.toFixed(2)}，当前余额 ¥${bal.toFixed(2)}。请先充值。` };
+  let balance;
+  try {
+    balance = await debitUser(user.id, amount, { transaction });
+  } catch (e) {
+    if (e && e.code === 'INSUFFICIENT_BALANCE') {
+      const now = await getBalance(user.id, { transaction });
+      const cur = Number(now === null ? 0 : now);
+      return { ok: false, message: `余额不足：需要 ¥${Number(amount).toFixed(2)}，当前余额 ¥${cur.toFixed(2)}。请先充值。` };
+    }
+    throw e;
   }
-  const before = bal;
-  user.balance = (bal - amount).toFixed(6);
-  await user.save({ transaction });
+  const before = Number((Number(balance) + Number(amount)).toFixed(6));
+  try { user.setDataValue('balance', balance); } catch (e) { /* 非模型实例则忽略 */ }
   await Transaction.create({
     user_id: user.id,
     phone: user.phone,
     amount: -amount,
-    balance: user.balance,
+    balance,
     type,
     description,
     site_id: 0, // 平台收入，不属于任何分站
   }, { transaction });
-  return { ok: true, balance: user.balance, before };
+  return { ok: true, balance, before };
 };
 
 const fmtDate = (ms) => {
@@ -127,6 +139,25 @@ export const runSiteBillingCheck = async () => {
 
       if (now >= exp) {
         if (site.status !== 'expired') {
+          // 🔒 先做**条件式原子更新**，再动 nginx。
+          //    以前的写法是无条件 `site.save()`（整行回写），而 `sites` 是遍历开始时的一次性快照：
+          //    站长在这个窗口里付钱续费（expire_at 推到 30 天后、status='active'），
+          //    随后这次 save() 会把 expire_at/status 又写回过期 → 「钱付了、站被停，
+          //    域名还进了 410 墓碑」。代价是毫秒级窗口，但它正好落在「过期后点续费」的主流程上。
+          const [stopped] = await Site.update(
+            { status: 'expired', stop_reason: 'plan', domain_status: 'none' },
+            { where: { id: site.id, expire_at: { [Op.lte]: now }, status: { [Op.ne]: 'expired' } } }
+          );
+          if (!stopped) continue;      // 这一瞬间已被续费 / 已被别的轮次停过 → 完全不碰 vhost
+
+          // 二次确认：更新之后再看一眼最新行，防止「刚续费」被我们抢在前面写成了过期
+          const fresh = await Site.findByPk(site.id);
+          if (!fresh || Number(fresh.expire_at || 0) > now) {
+            await Site.update({ status: 'active', stop_reason: null }, { where: { id: site.id } }).catch(() => {});
+            report.reverted = (report.reverted || 0) + 1;
+            continue;
+          }
+
           // 停站 = 先拆掉真实 vhost（否则同名 server 会和墓碑打架、谁先加载谁生效），
           //        再立 410 墓碑（域名仍归他，别人抢不走，访客看到「站点已下线」而不是平台首页）
           for (const d of [site.domain, site.custom_domain].filter(Boolean)) {
@@ -134,10 +165,6 @@ export const runSiteBillingCheck = async () => {
             try { parkDomain(d); } catch (e) {}
           }
           try { reloadNginx(); } catch (e) {}
-          site.status = 'expired';
-          site.stop_reason = 'plan';   // 本站月费到期：给这个站续费才能恢复
-          site.domain_status = 'none';
-          await site.save();
           // 96 期：停站同样要清缓存，否则这 60 秒内域名还能按分站解析到后端
           try { clearSiteCache(); } catch (e) {}
           report.expiredSites++;
@@ -186,18 +213,20 @@ export const runSiteBillingCheck = async () => {
           // 💰 110 期（祥哥定调）：**代理到期不停站**，分站照常运营。
           //    代理资格只值"进货价 8 折"，到期就把名下各站的进货折扣调回原价（1.0），
           //    站长继续卖、继续赚，只是每单成本高 25%。想回到 8 折续费代理即可。
-          u.role = 'user';
-          await u.save();
+          // 🔒 条件式原子降级：同一理由（快照 + 无条件 save 会覆盖并发续费）。
+          //    只有「此刻仍是 agent 且确实到期」的行才会被改成 user。
+          const [downgraded] = await User.update(
+            { role: 'user' },
+            { where: { id: u.id, role: 'agent', agent_expire_at: { [Op.lte]: now } } }
+          );
+          if (!downgraded) continue;      // 刚刚续费了 → 别动他的折扣
+
           report.expiredAgents++;
           const mine = await Site.findAll({ where: { owner_id: u.id } });
+          // 折扣一次性改回原价，只更新这一列（公式化，不会碰其他字段）
+          await Site.update({ agent_discount: 1 }, { where: { owner_id: u.id, agent_discount: { [Op.ne]: 1 } } });
           let changed = 0;
-          for (const s of mine) {
-            if (Number(s.agent_discount) !== 1) {
-              s.agent_discount = 1;          // 原价进货
-              await s.save();
-              changed++;
-            }
-          }
+          for (const s of mine) { if (Number(s.agent_discount) !== 1) changed++; }
           await sendTgMessage(
             `⏰ <b>至尊代理已到期</b>\n👤 ${u.phone}\n` +
             `💡 名下 ${mine.length} 个分站<b>继续正常运营</b>，进货价已回到原价（${changed} 个站受影响）；续费代理即恢复 8 折`
@@ -218,7 +247,7 @@ export const runSiteBillingCheck = async () => {
         report.reminded++;
         await sendTgMessage(
           `🔔 <b>至尊代理即将到期（剩 ${b} 天）</b>\n👤 ${u.phone}\n⏳ ${fmtDate(exp)}\n` +
-          `⚠️ 到期后代理资格与名下分站都会暂停`
+          `⚠️ 到期后进货价回到原价（分站照常运营，不受影响）`
         );
         break;
       }

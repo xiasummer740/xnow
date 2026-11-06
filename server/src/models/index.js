@@ -15,5 +15,6 @@ import SiteCustomerGroup from './SiteCustomerGroup.js';
 import PageView from './PageView.js';
 import SiteCollection from './SiteCollection.js';
 import SiteWithdrawal from './SiteWithdrawal.js';
+import BoostProduct from './BoostProduct.js';
 
-export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon, PageView, SiteCollection, SiteWithdrawal, SiteServicePrice, SiteCustomerGroup };
+export { sequelize, User, Config, Service, Order, Transaction, Site, VpnProduct, VpnClient, AuditLog, Notification, Coupon, PageView, SiteCollection, SiteWithdrawal, SiteServicePrice, SiteCustomerGroup, BoostProduct };

@@ -12,9 +12,10 @@ global.profileCodes = global.profileCodes || {};
 router.get('/status', authenticate, async (req, res) => {
   const user = await User.findByPk(req.user.id);
   if (!user) return res.status(404).json({ status: 'error', message: '用户不存在' });
-  if (user.role === 'super_admin') {
-    return res.json({ status: 'success', balance: '999999.00', role: 'super_admin', api_key: 'super_admin_key', phone: user.phone, email: user.email });
-  }
+  // ⚠️ 这里以前对 super_admin 返回写死的 `balance:'999999.00'` 和 `api_key:'super_admin_key'`：
+  //    超管在界面上看到的余额**不是库里的数**，跟财务对账永远差一截（祥哥问过「UID 1 余额对不上」，
+  //    根因就在这），而且 regenerate-key 返回的 'super_admin_key_fixed' 是常量、永远不落库。
+  //    现在一律回真实值：余额读库、api_key 读库。
   res.json({
     status: 'success',
     balance: user.balance,
@@ -27,9 +28,9 @@ router.get('/status', authenticate, async (req, res) => {
 });
 
 router.post('/regenerate-key', authenticate, async (req, res) => {
-  if (req.user.role === 'super_admin') return res.json({ status: 'success', api_key: 'super_admin_key_fixed' });
   const user = await User.findByPk(req.user.id);
   if (!user) return res.status(404).json({ status: 'error' });
+  // 超管同样走真随机并落库（以前返回常量 'super_admin_key_fixed'，等于「点一次换了个寂寞」）
   user.api_key = 'xnow_' + crypto.randomBytes(16).toString('hex');
   await user.save();
   res.json({ status: 'success', api_key: user.api_key });

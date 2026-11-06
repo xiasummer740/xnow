@@ -135,7 +135,8 @@ router.post('/agent/subscribe', authenticate, async (req, res) => {
     });
   } catch (e) {
     try { await t.rollback(); } catch (_) {}
-    res.status(500).json({ status: 'error', message: '开通失败: ' + e.message });
+    console.error(`[billing] 开通失败 uid=${req.user && req.user.id}:`, e);
+    res.status(500).json({ status: 'error', message: '开通失败，请刷新后重试（未扣费）' });
   }
 });
 
@@ -188,7 +189,9 @@ router.post('/site/:id/renew', authenticate, async (req, res) => {
     });
   } catch (e) {
     try { await t.rollback(); } catch (_) {}
-    res.status(500).json({ status: 'error', message: '续费失败: ' + e.message });
+    // 客户可见文案不带 e.message（SQL/约束原文会暴露表结构，也不是客户该看的东西）；真实错因落日志
+    console.error(`[billing] 续费失败 site=${req.params.id} uid=${req.user && req.user.id}:`, e);
+    res.status(500).json({ status: 'error', message: '续费失败，请刷新后重试（未扣费）' });
   }
 });
 

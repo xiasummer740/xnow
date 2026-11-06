@@ -26,12 +26,22 @@ const fetchBackups = async () => {
 
 const saveAutoInterval = async () => {
     try {
-        await fetch('/api/admin/config/update', { 
+        const res = await fetch('/api/admin/config/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
             body: JSON.stringify({ auto_backup_interval: autoInterval.value })
         });
-        ui.showToast('自动化容灾频率已更新', 'success');
-    } catch(e) {}
+        // ⚠️ 以前这里不看响应、catch 还是空的 —— 后端把 auto_backup_interval 拒在白名单外，
+        //    前端照样弹「已更新」，于是这个开关静默失效了整整一段时间（换机后自动备份不会跑）。
+        let json = null;
+        try { json = await res.json(); } catch (e) { json = null; }
+        if (!res.ok || !json || json.status !== 'success') {
+            ui.showToast((json && json.message) || `更新失败（HTTP ${res.status}）`, 'error');
+            return;
+        }
+        ui.showToast(autoInterval.value > 0
+            ? `已开启：每 ${autoInterval.value} 小时自动备份一次`
+            : '已关闭自动备份（仍可手动创建快照）', 'success');
+    } catch (e) { ui.showToast('更新失败：网络异常', 'error'); }
 };
 
 const createManualBackup = async () => {
@@ -44,8 +54,29 @@ const createManualBackup = async () => {
     } catch(e) { ui.showToast('网络异常', 'error'); } finally { loading.value = false; }
 };
 
-const downloadFile = (filename) => {
-    window.location.href = `/api/admin/backup/download?filename=${filename}&token=${userStore.token}`;
+const downloadFile = async (filename) => {
+    // 🔴 2026-11-03：不再把**登录令牌**拼进 URL。
+    //    `/api/admin/backup/download?filename=…&token=<JWT>` 会把这个 7 天有效的管理员令牌
+    //    写进 nginx access.log、Cloudflare 日志、浏览器历史、Referer —— 散一次等于长期泄露。
+    //    但备份包可能几百 MB，不能用 fetch+blob 塞进内存。
+    //    所以：先换一张「一次性、5 分钟、绑定文件名」的下载票据，再用浏览器原生下载。
+    try {
+        loading.value = true;
+        const r = await fetch('/api/admin/backup/download-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+            body: JSON.stringify({ filename }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || j.status !== 'success' || !j.data || !j.data.ticket) {
+            ui.showToast((j && j.message) || `获取下载票据失败 (HTTP ${r.status})`, 'error');
+            return;
+        }
+        window.location.href =
+            `/api/admin/backup/download?filename=${encodeURIComponent(filename)}&ticket=${j.data.ticket}`;
+    } catch (e) {
+        ui.showToast('网络异常，下载失败', 'error');
+    } finally { loading.value = false; }
 };
 
 const restoreFromHistory = async (filename) => {

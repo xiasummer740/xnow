@@ -49,22 +49,22 @@ const recheck = async (it) => {
 };
 
 const dismiss = async (it) => {
-    const ok = await ui.showConfirm(`确认把 ${it.order_id} 判死？\n判死后这笔不再自动查证（钱不会退，也不会入账）`);
+    const ok = await ui.showConfirm(`确认关闭这笔单：${it.order_id}？\n\n关闭后不再自动查证 —— 钱不会退，也不会入账。\n只有确认用户根本没付款时才关。`);
     if (!ok) return;
     busyId.value = it.order_id;
     try {
         const res = await fetch('/api/admin/payments/dismiss', {
             method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ order_id: it.order_id, reason: '管理员手动判死' }),
+            body: JSON.stringify({ order_id: it.order_id, reason: '管理员手动关闭' }),
         });
         const json = await res.json();
-        ui.showToast(json.message || '已判死', json.status === 'success' ? 'success' : 'error');
+        ui.showToast(json.message || '已关闭', json.status === 'success' ? 'success' : 'error');
         await load(true);
-    } catch (e) { ui.showToast('判死失败', 'error'); } finally { busyId.value = ''; }
+    } catch (e) { ui.showToast('关闭失败，请重试', 'error'); } finally { busyId.value = ''; }
 };
 
 const cleanOld = async () => {
-    const ok = await ui.showConfirm('把队列里 7 天前的老单统一判死，并清掉过期记录？\n（7 天前的支付订单在网关侧早已过期，不可能再付款成功）');
+    const ok = await ui.showConfirm('把队列里 7 天前的老单统一关闭，并清掉过期记录？\n（7 天前的支付订单在网关侧早已过期，不可能再付款成功）');
     if (!ok) return;
     loading.value = true;
     try {
@@ -138,7 +138,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
           <div class="text-2xl font-black font-mono text-emerald-300">{{ summary.completed }}</div>
         </div>
         <div class="bg-slate-800/70 border border-slate-600 rounded-2xl p-4">
-          <div class="text-[11px] text-slate-400 mb-1">已判死</div>
+          <div class="text-[11px] text-slate-400 mb-1">已关闭</div>
           <div class="text-2xl font-black font-mono text-slate-300">{{ summary.failed }}</div>
         </div>
       </div>
@@ -207,7 +207,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
                     {{ busyId === it.order_id ? '查证中…' : (isOpen(it.status) ? '🔍 立即重查' : '🔍 重新查证') }}
                   </button>
                   <button v-if="isOpen(it.status)" @click="dismiss(it)" :disabled="busyId === it.order_id"
-                    class="text-xs bg-slate-700/40 hover:bg-red-500/30 text-slate-300 hover:text-red-300 border border-slate-600 px-3 py-1.5 rounded transition font-bold disabled:opacity-40">判死</button>
+                    class="text-xs bg-slate-700/40 hover:bg-red-500/30 text-slate-300 hover:text-red-300 border border-slate-600 px-3 py-1.5 rounded transition font-bold disabled:opacity-40">关闭</button>
                 </template>
                 <span v-else class="text-[11px] text-slate-500">—</span>
               </td>
@@ -221,7 +221,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
         </table>
       </div>
       <div class="px-6 py-4 border-t border-slate-700/60 text-[11px] text-slate-500 leading-relaxed">
-        说明：队列里的单子由后台每 2 分钟自动查一次（BufPay 30 分钟 / USDT 65 分钟后仍未付款即判死）。
+        说明：队列里的单子由后台每 2 分钟自动查一次（BufPay 30 分钟 / USDT 65 分钟后仍未付款即关闭）。
         「立即重查」走的是补单引擎同一份逻辑，<b class="text-slate-400">网关确认已付就会直接入账</b>；
         这里不提供手动入账 —— 真要补钱请走「用户管理 → 后台调账」并写明原因。
       </div>

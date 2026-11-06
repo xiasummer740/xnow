@@ -15,6 +15,9 @@ import express from 'express';
 import { sequelize, Transaction, User, AuditLog } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { getPendingPayments, markFailed, markProcessing, cleanOldPayments } from '../utils/paymentTracker.js';
+// 单号幂等匹配统一走 payOrder.js：`_` 在 LIKE 里是通配符，裸拼会串单（详见该文件注释）
+import { payOrderDescriptionLike } from '../utils/payOrder.js';
+import { sendTgMessage } from '../utils/tgBot.js';
 import { reconcileOne } from './pay.js';
 
 const router = express.Router();
@@ -43,15 +46,37 @@ const STATUS_TEXT = {
   pending: '待查证',
   processing: '查证中',
   completed: '已入账',
-  failed: '已判死',
+  failed: '已关闭',
 };
+
+// 历史记录里存的是英文原始状态码（callback timeout 之类），给前端翻成中文。
+// 新单从 2026-11-04 起直接写中文失败原因，这一段只是兜住旧数据。
+const LEGACY_REASON_ZH = {
+  'callback timeout': '用户未付款（超时未完成支付）',
+  'cryptomus:cancel': '用户在支付页取消了付款',
+  'cryptomus:fail': '支付失败（用户银行卡/余额不足或被拒绝）',
+  'cryptomus:system_fail': '支付系统故障，交易未完成（网关侧问题）',
+  'cryptomus:refund_fail': '退款失败，需人工处理',
+  'cryptomus 1h 未支付': '用户未付款（USDT 发票 1 小时过期）',
+  'too old (7d)': '超过 7 天未付款，自动关闭',
+  'over max retry': '多次查证均未确认付款，已关闭',
+};
+
+export function reasonZh(raw) {
+  if (!raw) return '';
+  if (LEGACY_REASON_ZH[raw]) return LEGACY_REASON_ZH[raw];
+  if (raw.startsWith('cryptomus:')) return '支付未完成（' + raw.slice(10) + '）';
+  return raw;
+}
 
 // 这笔单号的流水是否已经存在（有流水 = 钱其实到账了，只是记录没标完成）
 async function isCredited(orderId) {
   try {
     const row = await Transaction.findOne({
       attributes: ['id'],
-      where: { description: { [sequelize.Sequelize.Op.like]: '%' + orderId + '%' } },
+      // 转义 LIKE 通配符：`BUF_1723_9.9_x` 里的 `_` 会匹配任意字符 → 误判"已入账"，
+      // 这笔就永远被标完成、再也不会补单（等于吞掉用户已付的钱）。
+      where: { description: payOrderDescriptionLike(orderId) },
     });
     return !!row;
   } catch (e) { return false; }
@@ -88,7 +113,7 @@ router.get('/', authenticate, async (req, res) => {
         last_check: p.last_check || null,
         last_min: last ? Math.floor((now - last) / 60000) : null,
         retry_count: Number(p.retry_count || 0),
-        fail_reason: p.fail_reason || '',
+        fail_reason: reasonZh(p.fail_reason || ''),
         // 队列说没完成，但流水里已经有这单 → 其实就是到账了
         credited: await isCredited(p.order_id),
       });
@@ -134,21 +159,42 @@ router.post('/recheck', authenticate, async (req, res) => {
     try {
       result = await reconcileOne(pay);
     } catch (e) {
-      return res.json({ status: 'error', message: '查证失败: ' + e.message });
+      return res.json({ status: 'error', message: '查证失败：' + (e.message || '未知错误') });
+    }
+    // 🔴 对「已关闭」的单点重新查证，如果还是查不到付款，必须退回「已关闭」。
+    //    否则 markProcessing 会把它拖回队列，30 分钟后被自动判死一次 ——
+    //    白折腾一轮，还会把原来的失败原因冲掉。
+    const wasClosed = pay.status === 'failed';
+    if (wasClosed && result.state !== 'done' && result.state !== 'error') {
+      markFailed(orderId, pay.fail_reason || '用户未付款（超时未完成支付）');
     }
     await audit(req, 'payment_recheck', orderId, { result: result.state, paid: !!result.paid });
-    // 只回必要字段：AxiosError 整条塞进响应又长又难看，前端只要一句人话
+
+    // 点「重新查证」后要给一句人话，说清楚到底查出了什么
+    let msg = result.note;
+    if (!msg) {
+      if (result.noAoid) msg = '这单没有留下支付平台单号，无法向网关查证。请到 BufPay / Cryptomus 后台按时间金额核对。';
+      else if (result.queryErr) msg = '向支付网关查证时出错（网关无响应），暂时无法确认。稍后再试或去网关后台核对。';
+      else if (result.state === 'done') msg = '已确认付款并完成入账。';
+      else if (result.queryStatus === 'payed') msg = '网关显示已付款但尚未回调，正在补账。';
+      else if (result.queryStatus === 'fee_error') msg = '网关显示我方手续费余额不足，订单被卡住。请先充值手续费再重查。';
+      else if (result.queryStatus === 'expire') msg = '支付码已过期，用户没有完成付款。';
+      else if (result.queryStatus === 'not_exist') msg = '网关查不到这个订单号，可能是废弃记录。';
+      else msg = '网关仍未显示已付款 —— 用户还在支付中，或最终没有付款。';
+    }
+
     res.json({
       status: 'success',
-      message: result.note || (result.state === 'done' ? '已处理' : '网关未显示已支付'),
+      message: msg,
       result: {
         state: result.state,
         paid: !!result.paid,
+        // 网关原始报错只给短摘要，完整堆栈不进响应
         gateway_error: result.queryErr ? String(result.queryErr.message || result.queryErr).slice(0, 120) : '',
       },
     });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: '重查失败: ' + e.message });
+    res.status(500).json({ status: 'error', message: '重查失败：' + (e.message || '未知错误') });
   }
 });
 
@@ -156,16 +202,25 @@ router.post('/recheck', authenticate, async (req, res) => {
 router.post('/dismiss', authenticate, async (req, res) => {
   if (!guard(req, res)) return;
   const orderId = String(req.body?.order_id || '').trim();
-  const reason = String(req.body?.reason || '').trim().slice(0, 60) || '人工判死';
+  const reason = String(req.body?.reason || '').trim().slice(0, 60) || '人工关闭';
   if (!orderId) return res.json({ status: 'error', message: '缺少单号' });
   try {
     const pay = getPendingPayments().find((p) => p.order_id === orderId);
     if (!pay) return res.json({ status: 'error', message: '队列里没有这个单号（可能已被清理）' });
     markFailed(orderId, reason);
     await audit(req, 'payment_dismiss', orderId, { reason });
-    res.json({ status: 'success', message: '已判死：' + reason });
+    // 📣 人工关单留痕：谁在什么时候把一单关掉了，事后要有据可查
+    sendTgMessage(
+      `🚫 <b>补单已人工关闭</b>\n` +
+      `单号：<code>${orderId}</code>\n` +
+      `用户：${pay.user_id}\n` +
+      `金额：¥${Number(pay.amount || 0).toFixed(2)}（${pay.pay_type || '充值'}）\n` +
+      `原因：${reason}\n` +
+      `操作人：${req.user?.phone || req.user?.id || 'admin'}`
+    ).catch(() => {});
+    res.json({ status: 'success', message: '已关闭：' + reason });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: '判死失败: ' + e.message });
+    res.status(500).json({ status: 'error', message: '关闭失败：' + (e.message || '未知错误') });
   }
 });
 
@@ -178,16 +233,20 @@ router.post('/clean', authenticate, async (req, res) => {
     for (const p of getPendingPayments()) {
       if (p.status !== 'pending' && p.status !== 'processing') continue;
       if (now - new Date(p.created_at).getTime() > 7 * 24 * 60 * 60 * 1000) {
-        markFailed(p.order_id, 'too old (7d)');
+        markFailed(p.order_id, '超过 7 天未付款，自动关闭');
         aged++;
       }
     }
     cleanOldPayments();
     const left = getPendingPayments().length;
     await audit(req, 'payment_clean', 'queue', { aged, left });
-    res.json({ status: 'success', message: `已判死 ${aged} 条老单，队列剩 ${left} 条`, data: { aged, left } });
+    // 📣 批量清理也要留痕，否则队列里的老单「怎么没了」没人说得清
+    if (aged > 0) {
+      sendTgMessage(`🧹 <b>补单队列批量清理</b>\n关闭 ${aged} 条超过 7 天的未付款单\n队列剩余：${left} 条\n操作人：${req.user?.phone || req.user?.id || 'admin'}`).catch(() => {});
+    }
+    res.json({ status: 'success', message: `已关闭 ${aged} 条超过 7 天的老单，队列剩余 ${left} 条`, data: { aged, left } });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: '清理失败: ' + e.message });
+    res.status(500).json({ status: 'error', message: '清理失败：' + (e.message || '未知错误') });
   }
 });
 

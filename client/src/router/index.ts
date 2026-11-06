@@ -16,11 +16,14 @@ const routes = [
   { path: '/c/:slug', component: () => import('../views/Landing.vue') },
   { path: '/', component: DashboardLayout, children: [
       { path: 'order', component: Order },
+      // 🎯 千川流量业务（独立业务线：本地商品表 + 人工派单，不走上游 API）
+      { path: 'boost', component: () => import('../views/BoostShop.vue') },
       { path: 'mass-order', component: () => import('../views/MassOrder.vue') },
       { path: 'history', component: () => import('../views/History.vue') },
       { path: 'recharge', component: Recharge },
       { path: 'vip', component: () => import('../views/Vip.vue') },
       { path: 'admin', component: () => import('../views/Admin.vue') },
+      { path: 'admin/boost', component: () => import('../views/BoostAdmin.vue') },
       { path: 'admin/backup', component: () => import('../views/AdminBackup.vue') },
       // 💳 补单队列：支付回调丢了也不丢钱 —— 客户说"付了没到账"时在这里当场查/判死
       { path: 'admin/payments', component: () => import('../views/AdminPayments.vue') },
@@ -69,8 +72,13 @@ router.beforeEach((to, from, next) => {
   //    侧边栏本来就不显示，但手输 /my-site 还能打开（我给他开的标签就是这么来的）。
   //    站长管分站应该去主站账号里管；分站域名上留这个页面等于告诉客户「这家店背后有一套系统」。
   //    所以分站域名下 /my-site 一律踢回首页，连 UI 都不渲染。
+  // 🔴 分站上同样不许出现 /vpn —— 那是**平台自己**的节点商城（「XNOW 全球安全节点」）。
+  //    站长没填按钮链接时，首页与分站 Hero 的兜底都指向它，等于把涨粉店的顾客
+  //    直接带到平台另一条业务线上（客户一眼就看出这家店背后有平台）。
+  //    nginx 侧只挡整页刷新，SPA 内部跳转必须在这里拦。
   if (localStorage.getItem('xnow_is_subsite') === '1'
-      && (to.path.startsWith('/admin') || to.path === '/api-doc' || to.path.startsWith('/my-site'))) {
+      && (to.path.startsWith('/admin') || to.path === '/api-doc' || to.path.startsWith('/my-site')
+          || to.path === '/vpn' || to.path.startsWith('/vpn/'))) {
     return next('/');
   }
 

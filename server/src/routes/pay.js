@@ -4,8 +4,10 @@ import { Config, Transaction, sequelize, User, Site, SiteCollection } from '../m
 import { authenticate } from '../middleware/auth.js';
 import axios from 'axios';
 import { sendTgMessage } from '../utils/tgBot.js';
-import { addPendingPayment, markCompleted, markFailed, getPendingPayments, markProcessing, cleanOldPayments } from '../utils/paymentTracker.js';
+import { addPendingPayment, markCompleted, markFailed, getPendingPayments, markProcessing, cleanOldPayments, setAoid } from '../utils/paymentTracker.js';
 import { resolveChannel, offMessage } from '../utils/payChannel.js';
+import { creditUser, creditCommission } from '../utils/balance.js';
+import { payOrderMatch, payOrderDescriptionLike } from '../utils/payOrder.js';
 
 const router = express.Router();
 const md5 = (str) => crypto.createHash('md5').update(str).digest('hex');
@@ -208,7 +210,8 @@ router.get('/status', authenticate, async (req, res) => {
     if (!order_id) return res.json({ status: 'wait' });
     try {
         // 该用户该单已入账 → 成功
-        const exist = await Transaction.findOne({ where: { user_id: req.user.id, description: { [sequelize.Sequelize.Op.like]: `%${order_id}%` } } });
+        // （同样要转义 LIKE 通配符：`BUF_1723_9.9_x` 里的 `_` 会命中别人的单号，见 utils/payOrder.js）
+        const exist = await Transaction.findOne({ where: payOrderMatch(order_id, req.user.id) });
         if (exist) return res.json({ status: 'success' });
 
         // 只允许补查本站登记过、且归属当前用户的待支付单（补单金额以后端登记额为准）
@@ -248,6 +251,9 @@ const resolveBufpayKey = async (orderUid) => {
 
 router.get('/return/bufpay', async (req, res) => {
     const { aoid, order_id, order_uid, price, pay_price, sign } = req.query;
+    // 🔴 先把平台单号存下来 —— 这是补单引擎唯一能查证的钥匙，
+    //    放过这一处，以后这单回调丢了就再也查不回来了。
+    if (aoid && order_id) setAoid(order_id, aoid);
     try {
         const key = await resolveBufpayKey(order_uid);
         if (key) {
@@ -263,6 +269,8 @@ router.get('/return/bufpay', async (req, res) => {
 
 router.post('/notify/bufpay', express.urlencoded({ extended: true }), async (req, res) => {
     const { aoid, order_id, order_uid, price, pay_price, sign } = req.body;
+    // 回调里带了 aoid，落盘备查（即使后面签名校验不过，单号本身是网关给的，先留着）
+    if (aoid && order_id) setAoid(order_id, aoid);
     try {
         // 🔒 先做参数完整性检查：这是公开端点，任何人（含扫描器）都能打。
         //    缺字段时若直接往下走，会在解析 order_uid / 查商户配置时抛异常，
@@ -292,9 +300,15 @@ router.post('/notify/cryptomus', async (req, res) => {
     const pending = orderId && getPendingPayments().find(p => p.order_id === orderId && p.pay_type === 'USDT');
     // 未知/非本站单 → 一律 200 停掉网关重试（该停的停，别让网关连环轰炸）
     if (!pending) return res.status(200).send('OK');
-    // 失败终态 → 标记失败，交由人工/补单审视
+    // 失败终态 → 标记失败，交由人工/补单审视。文案必须让看表的人一眼知道是谁的原因。
+    const CRYPTO_FAIL_ZH = {
+        fail: '支付失败（用户银行卡/余额不足或被拒绝）',
+        cancel: '用户在支付页取消了付款',
+        system_fail: '支付系统故障，交易未完成（网关侧问题）',
+        refund_fail: '退款失败，需人工处理',
+    };
     if (['fail', 'cancel', 'system_fail', 'refund_fail'].includes(status)) {
-        markFailed(orderId, 'cryptomus:' + status);
+        markFailed(orderId, CRYPTO_FAIL_ZH[status] || ('支付未完成（' + status + '）'));
         return res.status(200).send('OK');
     }
     // 仅对「付款成功」态入账
@@ -327,7 +341,13 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
     creditLock.add(orderId);
     const t = await sequelize.transaction();
     try {
-        const exist = await Transaction.findOne({ where: { description: { [sequelize.Sequelize.Op.like]: `%${orderId}%` } }, transaction: t });
+        // 🔴 2026-11-03 重写幂等判定（详见 utils/payOrder.js 的注释）：
+        //    原来 `description LIKE '%${orderId}%'` 里的 `_` 是 LIKE 通配符，
+        //    会命中**别的单号** → 把该入账的充值判成"已处理"直接吞掉；而且没带 user_id。
+        const exist = await Transaction.findOne({
+          where: payOrderMatch(orderId, userId),
+          transaction: t,
+        });
         if (exist) { await t.commit(); return true; }
 
         let prefix = '在线充值';
@@ -349,11 +369,12 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
         const user = await User.findByPk(userId, { transaction: t });
         if (user) {
           const paySiteId = parseInt(user.site_id || 0);
-          user.balance = (parseFloat(user.balance) + realAddAmount).toFixed(6);
-          await user.save({ transaction: t });
-          
+          // 🔒 原子入账：以前是「读到 balance → 加 → save()」，
+          //    与下单事务（持行锁）并发时，这条 UPDATE 会拿旧快照覆盖掉刚扣的钱
+          const newBalance = await creditUser(user.id, realAddAmount, { transaction: t });
+
           await Transaction.create({
-            user_id: user.id, phone: user.phone, amount: realAddAmount, balance: user.balance,
+            user_id: user.id, phone: user.phone, amount: realAddAmount, balance: newBalance,
             type: prefix, description: `${prefix} - ${sourceDesc} [单号:${orderId}]`,
             site_id: paySiteId
           }, { transaction: t });
@@ -378,25 +399,41 @@ async function handleSuccessPay(orderId, userId, bufPayPrice, sourceDesc) {
             }
 
             const roleName = user.role === 'super_admin' ? '至尊管理员' : user.role === 'admin' ? '管理员' : user.role === 'agent' ? '👑 至尊代理' : '黄金用户';
-            sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(user.balance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);
+            sendTgMessage(`💰 <b>充值成功入账</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n📱 <b>账号:</b> <code>${user.phone}</code>\n💵 <b>金额:</b> ￥${realAddAmount.toFixed(2)}\n🏦 <b>渠道:</b> ${prefix}\n💳 <b>当前余额:</b> ￥${parseFloat(newBalance).toFixed(2)}\n🔗 <b>追踪单号:</b> <code>${orderId}</code>`);
 
             // 💡 裂变引擎：阶梯式全自动提成计算
             // 🏬 分站客户的充值**不发平台返佣**：那笔钱进的是站长自己的商户账户，
             //    平台一分没收到。照发等于平台凭空掏钱补贴站长的客户 —— 充得越多亏得越多。
-            if (user.inviter_id && paySiteId === 0) {
+            // 🔒 自己邀自己不发：`inviter_id` 是注册时请求体自填的，不判就成了
+            //    「每次充值白拿 5~10% 余额」的无限套利口子（付 500 得 500 + 25）。
+            if (user.inviter_id && paySiteId === 0 && Number(user.inviter_id) !== Number(user.id)) {
                 const inviter = await User.findByPk(user.inviter_id, { transaction: t });
                 if (inviter) {
                     // 判断上级身份，agent/admin 享受 10%，否则 5%
                     const rate = ['agent', 'admin', 'super_admin'].includes(inviter.role) ? 0.10 : 0.05;
-                    const commission = parseFloat((realAddAmount * rate).toFixed(2));
-                    
+                    let commission = parseFloat((realAddAmount * rate).toFixed(2));
+
+                    // 🔒 单笔返佣封顶（2026-11-03）：配置项 `commission_cap_per_tx`，单位元。
+                    //    不配 = 0 = 不封顶（保持原有行为，不擅自改业务规则）。
+                    //    为什么要这个开关：返佣是按**充值**发的，而退款不会冲回。
+                    //    有人可以「充值 → 拿返佣 → 申请退款/走提现」把返佣套出来，
+                    //    一次充 10 万就是白拿 5 千~1 万。有了这个上限，单笔最多亏到上限为止。
+                    //    真正的根治是「按消费返佣」或「退款时冲回返佣」—— 那是产品决策，需要祥哥拍板。
+                    try {
+                        const capConf = await Config.findOne({ where: { key: 'commission_cap_per_tx' }, transaction: t });
+                        const cap = parseFloat(capConf && capConf.value);
+                        if (isFinite(cap) && cap > 0 && commission > cap) {
+                            console.warn(`[commission] 单笔返佣被封顶：原 ${commission} → ${cap} (上级 ${inviter.id}，下级 ${user.id})`);
+                            commission = cap;
+                        }
+                    } catch (_) { /* 读配置失败不影响正常发放 */ }
+
                     if (commission > 0) {
-                        inviter.balance = (parseFloat(inviter.balance) + commission).toFixed(6);
-                        inviter.total_commission = (parseFloat(inviter.total_commission || 0) + commission).toFixed(6);
-                        await inviter.save({ transaction: t });
-                        
+                        // 🔒 余额与累计返佣一起原子累加（并发充值不会丢更新）
+                        const got = await creditCommission(inviter.id, commission, { transaction: t });
+
                         await Transaction.create({
-                            user_id: inviter.id, phone: inviter.phone, amount: commission, balance: inviter.balance,
+                            user_id: inviter.id, phone: inviter.phone, amount: commission, balance: got.balance,
                             type: '推广返佣', description: `下级(UID:${user.id})充值返佣`
                         }, { transaction: t });
 
@@ -431,21 +468,34 @@ export default router;
 export async function reconcileOne(pay) {
   const isUsdt = pay.pay_type === 'USDT'
   // ① 流水里已经有这单 → 说明回调/补单已经入过账，只是记录没标完成
-  const exist = await Transaction.findOne({
-    where: { description: { [sequelize.Sequelize.Op.like]: '%' + pay.order_id + '%' } }
-  })
+  //    ⚠️ 这里必须带 user_id：待补单记录里有 user_id（addPendingPayment 写入的），
+  //    少了它就会去全表比，`_` 又会当通配符 —— 一旦误命中，这笔就永远标完成、再也不补了。
+  const exist = await Transaction.findOne({ where: payOrderMatch(pay.order_id, pay.user_id) })
   if (exist) { markCompleted(pay.order_id); return { state: 'done', paid: true, note: '流水里已有这单，标记完成' } }
 
   // ② 问网关
   let paid = false
   let queryErr = null
+  let queryStatus = ''      // BufPay 原始状态，用于中文归因
   try {
     if (isUsdt) {
       // USDT：服务端签名向 Cryptomus 查证，不信回调明文
       paid = await cryptomusCheckPaid(pay.order_id)
     } else {
-      const res = await axios.get('https://bufpay.com/api/query?order_id=' + pay.order_id, { timeout: 5000 })
-      paid = !!(res.data && (res.data.status === 'success' || res.data.status === 'payed'))
+      // 🔴 2026-11-04 修：BufPay 只支持按 aoid（平台单号）查，没有按 order_id 查的接口。
+      //    官方文档：GET https://bufpay.com/api/query/{aoid}
+      //    以前这里写的是 `/api/query?order_id=xxx` —— 实测返回 404，
+      //    等于**从来没有成功查证过任何一笔 BufPay 单**，30 分钟后一律判死。
+      //    后果：用户真付了钱、只是回调没到（收款手机没电/App 被杀），也会被当成没付，等于吞钱。
+      const aoid = pay.aoid
+      if (!aoid) {
+        // 没有平台单号 = 无从查证。绝不能当"用户没付"处理。
+        return { state: 'pending', paid: false, noAoid: true, queryStatus: 'no_aoid' }
+      }
+      const url = 'https://bufpay.com/api/query/' + encodeURIComponent(aoid)
+      const resp = await axios.get(url, { timeout: 8000 })
+      queryStatus = String((resp.data && resp.data.status) || '')
+      paid = (queryStatus === 'success' || queryStatus === 'payed')
     }
   } catch (e) { queryErr = e }
 
@@ -456,12 +506,15 @@ export async function reconcileOne(pay) {
     // 入账失败：不标完成，下一轮自动重试
     return { state: 'error', paid: true, note: '网关说已付，但入账失败（下一轮会重试）' }
   }
-  return { state: 'pending', paid: false, queryErr }
+  return { state: 'pending', paid: false, queryErr, queryStatus }
 }
 
 export async function reconcilePayments() {
   const list = getPendingPayments()
   const now = Date.now()
+  // 🛒 本轮「确认是用户自己没付」而关掉的单，收集起来最后汇总一条推 TG。
+  //    逐条推会刷屏（一天几十笔放弃支付很正常），但完全不推又看不出"下单不付款"的比例。
+  const gaveUp = []
   for (const pay of list) {
     // 🔴 2026-10-30 修：卡在 processing 的单子以前永远不会再被检查 ——
     //    补单引擎把状态改成 processing 后如果进程重启/查证中途抛错，这条单就
@@ -478,10 +531,15 @@ export async function reconcilePayments() {
     // 🧹 太老的单直接静默判死：BufPay 订单 5 分钟过期、Cryptomus 发票 1 小时，
     //    放了 7 天还没人付款的单不可能再付款成功。以前这类单会一直重试、并在
     //    每轮把 "Payment callback missing" 推给祥哥 —— 真出事的告警就被淹掉了。
-    if (age > 7 * 24 * 60 * 60 * 1000) { markFailed(pay.order_id, 'too old (7d)'); continue }
+    if (age > 7 * 24 * 60 * 60 * 1000) { markFailed(pay.order_id, '超过 7 天未付款，自动关闭'); continue }
     const isUsdt = pay.pay_type === 'USDT'
     // 🔒 BufPay 约 5 次重试(≈10分钟)判死重来；USDT 发票 1 小时有效，绝不能提前判死，否则用户正付款就被杀单
-    if (!isUsdt && pay.retry_count >= 5) { markFailed(pay.order_id, 'over max retry'); continue }
+    if (!isUsdt && pay.retry_count >= 5) {
+      markFailed(pay.order_id, '多次查证均未确认付款，已关闭');
+      // 查了 5 次（≈10 分钟）都没付 —— 用户放弃了
+      if (!pay.noAoid) gaveUp.push({ ...pay, reason: '查证 5 次未付款（约 10 分钟）' });
+      continue;
+    }
     markProcessing(pay.order_id)
     try {
       const r = await reconcileOne(pay)
@@ -489,17 +547,60 @@ export async function reconcilePayments() {
       // 还没付：按年龄判死（BufPay 约 30 分钟，USDT 发票 1 小时 + 缓冲）
       const failAge = isUsdt ? 3900000 : 1800000
       if (age > failAge) {
-        markFailed(pay.order_id, isUsdt ? 'cryptomus 1h 未支付' : 'callback timeout')
+        // 🔴 失败原因一律写中文，并且必须说清楚「是谁的问题」——
+        //    以前统一写 callback timeout，看表的人根本分不清是用户没付还是我们漏单。
         if (isUsdt) {
-          // 查证抛错 = 无法确认是否真付了，资金可能悬空 → TG 告警人工核对；干净未付(用户放弃)则不打扰
-          if (r.queryErr) sendTgMessage('⚠️ <b>USDT 支付单无法向 Cryptomus 确认，已置失败待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + (r.queryErr.message || r.queryErr))
+          const reason = r.queryErr
+            ? '查证失败（Cryptomus 无响应），需人工核对'
+            : '用户未付款（USDT 发票 1 小时过期）'
+          markFailed(pay.order_id, reason)
+          // 查证抛错 = 无法确认是否真付了，资金可能悬空 → TG 告警人工核对；干净未付(用户放弃)则汇总播报
+          if (r.queryErr) {
+            sendTgMessage('⚠️ <b>USDT 支付单无法向 Cryptomus 确认，已置失败待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + (r.queryErr.message || r.queryErr))
+          } else {
+            gaveUp.push({ ...pay, reason })
+          }
         } else {
-          sendTgMessage('Payment callback missing: ' + pay.order_id + ' user:' + pay.user_id + ' amount:' + pay.amount)
+          // BufPay：按查证结果给出准确的中文归因
+          let reason
+          if (r.noAoid || !pay.aoid) {
+            reason = '无法自动查证（缺支付平台单号），需人工核对'
+          } else if (r.queryErr) {
+            reason = '查证失败（支付网关无响应），需人工核对'
+          } else if (r.queryStatus === 'fee_error') {
+            reason = '我方手续费余额不足，订单未入账，需充值后补单'
+          } else if (r.queryStatus === 'expire' || r.queryStatus === 'new' || r.queryStatus === 'not_exist') {
+            reason = '用户未付款（支付码超时关闭）'
+          } else {
+            reason = '用户未付款（超时未完成支付）'
+          }
+          markFailed(pay.order_id, reason)
+          // 只有「确实确认用户没付」才归到放弃支付汇总；查不了 / 我们这边出问题的，必须单独叫人
+          if (r.noAoid || r.queryErr || r.queryStatus === 'fee_error') {
+            sendTgMessage('⚠️ <b>BufPay 单无法确认已付款，已挂起待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + reason)
+          } else {
+            gaveUp.push({ ...pay, reason })
+          }
         }
       }
     } catch(e) {
       console.error('reconcile error', pay.order_id, e.message)
     }
+  }
+
+  // 🛒 放弃支付汇总：一轮扫下来关掉了几笔，合并成一条，不逐条刷屏
+  if (gaveUp.length) {
+    const total = gaveUp.reduce((s, p) => s + Number(p.amount || 0), 0)
+    const lines = gaveUp.slice(0, 10).map((p) =>
+      `· ¥${Number(p.amount || 0).toFixed(2)} · ${p.pay_type || '充值'} · 用户 ${p.user_id} · ${p.reason}`
+    )
+    if (gaveUp.length > 10) lines.push(`· …另有 ${gaveUp.length - 10} 笔`)
+    sendTgMessage(
+      `🛒 <b>${gaveUp.length} 笔充值单未付款，已自动关闭</b>\n` +
+      `合计：<b>¥${total.toFixed(2)}</b>（这笔钱没进账）\n` +
+      lines.join('\n') +
+      `\n💡 客户下了单但没付钱 —— 可能是嫌麻烦、不会用支付方式，或者只是比价`
+    )
   }
   cleanOldPayments()
 }

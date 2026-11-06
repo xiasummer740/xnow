@@ -18,7 +18,11 @@ const uploadRaw = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, QR_DIR),
     filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || '').toLowerCase() || '.png';
+      // 🔴 扩展名**只能**由服务端按 mimetype 决定，绝不能取 file.originalname ——
+      //    客户端可以传 `x.html` 并谎报 Content-Type: image/png，落盘成 .html 后
+      //    `/api/qr/*` 静态托管会按扩展名以 text/html 返回，等于在**主站源**执行任意 JS，
+      //    同源读走管理员 localStorage 里的 xnow_token（站长 → 主站管理员提权）。
+      const ext = ({ 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' })[file.mimetype] || '.png';
       // 随机文件名：收款码是要扫码付钱的图，不能让外人靠自增规律猜别人的
       cb(null, `qr-s${req.params.id}-${crypto.randomBytes(9).toString('hex')}${ext}`);
     },
@@ -65,20 +69,19 @@ const ownerSite = async (req) => {
 };
 
 // 未结算金额 = 台账总额 - 已结算掉的部分 - 正在申请中的提现
-const summaryOf = async (siteId) => {
+// `transaction` 可选：提现申请要在事务内算，才能和「插入 pending 行」保持一致
+const summaryOf = async (siteId, transaction = null) => {
+  const opt = transaction ? { replacements: [siteId], transaction } : { replacements: [siteId] };
   const [[row]] = await sequelize.query(
     `SELECT COALESCE(SUM(amount - used_amount),0) AS total,
             SUM(CASE WHEN amount - used_amount > 0.000001 THEN 1 ELSE 0 END) AS cnt
-       FROM site_collections WHERE site_id = ?`, { replacements: [siteId] });
+       FROM site_collections WHERE site_id = ?`, opt);
   const [[used]] = await sequelize.query(
-    `SELECT COALESCE(SUM(used_amount),0) AS amount FROM site_collections WHERE site_id = ?`,
-    { replacements: [siteId] });
+    `SELECT COALESCE(SUM(used_amount),0) AS amount FROM site_collections WHERE site_id = ?`, opt);
   const [[pending]] = await sequelize.query(
-    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'pending'`,
-    { replacements: [siteId] });
+    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'pending'`, opt);
   const [[paid]] = await sequelize.query(
-    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'paid'`,
-    { replacements: [siteId] });
+    `SELECT COALESCE(SUM(amount),0) AS amount FROM site_withdrawals WHERE site_id = ? AND status = 'paid'`, opt);
   const left = Number(row.total || 0);
   const pendingAmt = Number(pending.amount || 0);
   return {
@@ -210,32 +213,53 @@ router.post('/sites/:id/withdraw', authenticate, upload.single('qr'), async (req
     if (!(amount > 0)) { dropUpload(req.file); return res.status(400).json({ status: 'error', message: '金额不对' }); }
     if (amount < MIN_WITHDRAW) { dropUpload(req.file); return res.status(400).json({ status: 'error', message: `最低提现 ¥${MIN_WITHDRAW}` }); }
 
-    // 一周一次优先判：否则额度被上次申请占满时，站长只会看到「可提现只有 ¥0」，
-    // 根本不知道真正的限制是"下周才能再申请"。
-    const lastW = await SiteWithdrawal.findOne({ where: { site_id: site.id }, order: [['id', 'DESC']] });
-    if (lastW && Date.now() < new Date(lastW.created_at).getTime() + WEEK) {
-      dropUpload(req.file);
-      const nextAt = new Date(new Date(lastW.created_at).getTime() + WEEK);
-      return res.status(429).json({
-        status: 'error',
-        message: "一周只能申请一次，下次可申请时间：" + nextAt.toLocaleString('zh-CN', { hour12: false }),
+    // 🔒 事务 + 站点行锁：同一站点的提现申请必须串行。
+    //    以前是「查上一条 → 算可提现额度 → 插入」，三步之间没有锁：
+    //    站长并发发两个申请（上传两张收款码即可），两个都能通过额度检查 →
+    //    待审提现总额超过真实代收池 → 管理员照单转账 = 平台真金白银超付。
+    //    这里用 Site 行当互斥量（同一站点同一时刻只有一个申请在算额度）。
+    const t = await sequelize.transaction();
+    let row;
+    try {
+      const lockSite = await Site.findByPk(site.id, { transaction: t, lock: t.LOCK.UPDATE });
+      if (!lockSite) { await t.rollback(); dropUpload(req.file); return res.status(404).json({ status: 'error', message: '站点不存在' }); }
+
+      // 一周一次优先判：否则额度被上次申请占满时，站长只会看到「可提现只有 ¥0」，
+      // 根本不知道真正的限制是"下周才能再申请"。
+      const lastW = await SiteWithdrawal.findOne({
+        where: { site_id: site.id }, order: [['id', 'DESC']], transaction: t,
       });
-    }
+      if (lastW && Date.now() < new Date(lastW.created_at).getTime() + WEEK) {
+        await t.rollback();
+        dropUpload(req.file);
+        const nextAt = new Date(new Date(lastW.created_at).getTime() + WEEK);
+        return res.status(429).json({
+          status: 'error',
+          message: "一周只能申请一次，下次可申请时间：" + nextAt.toLocaleString('zh-CN', { hour12: false }),
+        });
+      }
 
-    const sum = await summaryOf(site.id);
-    if (amount > sum.available + 1e-6) {
+      const sum = await summaryOf(site.id, t);
+      if (amount > sum.available + 1e-6) {
+        await t.rollback();
+        dropUpload(req.file);
+        return res.status(400).json({ status: 'error', message: `可提现只有 ¥${sum.available}` });
+      }
+
+      row = await SiteWithdrawal.create({
+        site_id: site.id,
+        owner_id: Number(req.user.id),
+        amount,
+        qr_path: req.file.filename,
+        note: (req.body?.note || '').slice(0, 200) || null,
+        status: 'pending',
+      }, { transaction: t });
+      await t.commit();
+    } catch (e) {
+      try { await t.rollback(); } catch (e2) { /* 已回滚 */ }
       dropUpload(req.file);
-      return res.status(400).json({ status: 'error', message: `可提现只有 ¥${sum.available}` });
+      throw e;
     }
-
-    const row = await SiteWithdrawal.create({
-      site_id: site.id,
-      owner_id: Number(req.user.id),
-      amount,
-      qr_path: req.file.filename,
-      note: (req.body?.note || '').slice(0, 200) || null,
-      status: 'pending',
-    });
 
     try {
       await sendTgMessage(
@@ -246,7 +270,7 @@ router.post('/sites/:id/withdraw', authenticate, upload.single('qr'), async (req
     } catch (e) { /* TG 挂了不影响申请 */ }
 
     res.json({ status: 'success', message: '提现申请已提交，主站管理员核实后会扫码转账', data: { id: row.id } });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: '提交失败，请稍后重试' }); }
 });
 
 // ── 主站管理员：提现列表 ──
@@ -316,16 +340,21 @@ router.get('/admin/site-withdrawals/badge', authenticate, async (req, res) => {
 // ── 主站管理员：确认已转账（清账） ──
 router.post('/admin/site-withdrawals/:id/confirm', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  // 🔒 事务 + 双锁（提现单 + 台账行）：管理员双击「已转账」、或两个管理员同时点，
+  //    以前会各自读到 pending → 各自把 used_amount 加一遍 → 台账被提前核销光，
+  //    站长后续真实提现显示 ¥0（平台吞钱）。中途抛错也不会留下「加了一半」的台账。
+  const t = await sequelize.transaction();
+  let row, shortfall;
   try {
-    const row = await SiteWithdrawal.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ status: 'error', message: '申请不存在' });
-    if (row.status !== 'pending') return res.status(400).json({ status: 'error', message: '这条已经处理过了' });
+    row = await SiteWithdrawal.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!row) { await t.rollback(); return res.status(404).json({ status: 'error', message: '申请不存在' }); }
+    if (row.status !== 'pending') { await t.rollback(); return res.status(400).json({ status: 'error', message: '这条已经处理过了' }); }
 
     // 按时间顺序扣最早的代收记录，**按金额精确扣**（一行可能只被扣掉一部分）
     const [rows] = await sequelize.query(
       `SELECT id, amount, used_amount FROM site_collections
-        WHERE site_id = ? AND amount - used_amount > 0.000001 ORDER BY id ASC`,
-      { replacements: [row.site_id] });
+        WHERE site_id = ? AND amount - used_amount > 0.000001 ORDER BY id ASC FOR UPDATE`,
+      { replacements: [row.site_id], transaction: t });
     let left = Number(row.amount);
     const touched = [];
     for (const c of rows) {
@@ -335,19 +364,19 @@ router.post('/admin/site-withdrawals/:id/confirm', authenticate, async (req, res
       const take = Math.min(rest, left);
       await sequelize.query(
         `UPDATE site_collections SET used_amount = used_amount + ?, withdrawal_id = ? WHERE id = ?`,
-        { replacements: [Number(take.toFixed(6)), row.id, c.id] });
+        { replacements: [Number(take.toFixed(6)), row.id, c.id], transaction: t });
       touched.push(c.id);
       left = Number((left - take).toFixed(6));
     }
     // 台账不够时不能装作没事：钱已经按 receipt 转出去了，但账对不上要让人知道
-    const shortfall = Number(left.toFixed(6));
-    const used = touched;
+    shortfall = Number(left.toFixed(6));
 
     row.status = 'paid';
     row.admin_id = Number(req.user.id);
     row.admin_note = (req.body?.note || '').slice(0, 200) || null;
     row.paid_at = new Date();
-    await row.save();
+    await row.save({ transaction: t });
+    await t.commit();
 
     const site = await Site.findByPk(row.site_id).catch(() => null);
     try {
@@ -362,9 +391,12 @@ router.post('/admin/site-withdrawals/:id/confirm', authenticate, async (req, res
         ? `已确认转账 ¥${fmt(row.amount).toFixed(2)}，但台账只对得上 ¥${fmt(row.amount - shortfall).toFixed(2)}（差 ¥${fmt(shortfall).toFixed(2)}，请查代收记录）`
         : `已确认转账 ¥${fmt(row.amount).toFixed(2)}，台账已清`,
       warning: shortfall > 1e-6 ? `台账差 ¥${fmt(shortfall).toFixed(2)}` : null,
-      data: { settled_rows: used.length, shortfall },
+      data: { settled_rows: touched.length, shortfall },
     });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) {
+    try { await t.rollback(); } catch (e2) { /* 已回滚 */ }
+    res.status(500).json({ status: 'error', message: '确认失败，请刷新后重试' });
+  }
 });
 
 // ── 主站管理员：驳回 ──

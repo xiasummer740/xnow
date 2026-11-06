@@ -17,7 +17,10 @@ if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 // 什么算一份快照：新格式是**归档包**（`.tar.gz`，里面装着数据库 + 补单记录），
 // 老的 `.sql.gz`（只有数据库）**继续认** —— 历史快照库里还躺着 24 份，不能一改格式就还原不了。
 // 「列表接口（admin.js）／保留策略（本文件）」两处都走这一个判断，免得各写一遍然后漂移。
-export const isBackupFile = (f) => f.endsWith('.tar.gz') || f.endsWith('.sql.gz');
+// 🔒 `uploaded_` 前缀是「管理员手工上传、用完即删」的临时件，**不算快照**：
+//    以前任意登录用户都能往备份目录写这种文件，它会被列进灾备中心、被当成可恢复的历史备份。
+export const isBackupFile = (f) =>
+  !String(f).startsWith('uploaded_') && (f.endsWith('.tar.gz') || f.endsWith('.sql.gz'));
 
 // 📎 数据库之外还有一处数据：**支付补单队列**（`paymentTracker.js` 读写的这个 JSON 文件，
 //    记录"客户点了付款但还没跟渠道确认完"的单子，用于回调失败时自动补单）。

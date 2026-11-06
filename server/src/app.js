@@ -9,6 +9,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { sequelize, User, Config } from './models/index.js';
 import { autoSyncServices } from './utils/sync.js';
+import { seedBoostProducts } from './utils/seedBoost.js';
 import { autoSyncOrders } from './utils/orderSync.js';
 import { autoSyncAnnouncement } from './utils/announceSync.js';
 import billingRoutes from './routes/billing.js';
@@ -30,6 +31,8 @@ import sitesRoutes from './routes/sites.js';
 import seoRoutes from './routes/seo.js';
 import siteSettlementRoutes from './routes/siteSettlement.js';
 import vpnRoutes from './routes/vpn.js';
+import boostRoutes from './routes/boost.js';
+import boostAdminRoutes from './routes/boostAdmin.js';
 import analyticsRoutes from './routes/analytics.js';
 import { reconcilePayments } from './routes/pay.js';
 
@@ -78,10 +81,40 @@ const globalLimiter = rateLimit({
 // ⚠️ 别挂 /qr 或 /uploads/：生产主站的 nginx 只转发 /api/ 和 /assets/，
 //    其余全落 SPA 兜底 —— 返回 index.html 且 HTTP 200，图片是破的但状态码看不出来。
 const QR_DIR = process.env.SITE_QR_DIR || path.join(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', 'qr');
-app.use('/api/qr', express.static(QR_DIR, { index: false, dotfiles: 'deny', maxAge: '1h' }));
+// 🔒 纵深防御：万一目录里混进非图片文件（历史遗留的 .html/.svg），也绝不能让浏览器当页面执行。
+//    nosniff 防 MIME 嗅探，非图片扩展名一律降级成附件下载（Content-Disposition: attachment）。
+app.use('/api/qr', express.static(QR_DIR, {
+  index: false,
+  dotfiles: 'deny',
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!/\.(png|jpe?g|webp)$/i.test(filePath)) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  },
+}));
 
 // 🧹 收款码图片每天清一次（留 180 天；审核中的绝不删）
 import('./utils/qrCleanup.js').then((m) => m.startQrCleanup(QR_DIR)).catch(() => {});
+
+// 🎯 千川业务客服二维码 / 商品图：后台直接粘贴截图上传，存这里
+//    走 /api/ 前缀的理由同上 —— 生产 nginx 只转发 /api/ 和 /assets/，
+//    挂 /uploads 会落到 SPA 兜底，图片看着是破的但 HTTP 还是 200。
+const BOOST_IMG_DIR = path.join(process.env.SITE_UPLOAD_DIR || '/var/www/xnow-uploads', 'boost');
+app.use('/api/boost-img', express.static(BOOST_IMG_DIR, {
+  index: false,
+  dotfiles: 'deny',
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!/\.(png|jpe?g|webp)$/i.test(filePath)) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  },
+}));
 
 app.use('/api/', globalLimiter);
 
@@ -120,6 +153,8 @@ app.use('/api/public', publicRoutes);
 app.use('/api/sites', sitesRoutes);
 app.use('/api', siteSettlementRoutes);   // 💰 平台代收台账 / 站长提现（110 期）
 app.use('/api/vpn', vpnRoutes);
+app.use('/api/boost', boostRoutes);              // 🎯 千川流量业务（独立业务线，人工派单）
+app.use('/api/boost-admin', boostAdminRoutes);   // 🎯 千川后台（商品管理 + 待派单队列）
 app.use('/api/track', analyticsRoutes);
 
 const initDatabase = async () => {
@@ -127,6 +162,24 @@ const initDatabase = async () => {
     await sequelize.sync({ alter: false });
     // 数据库迁移：新增字段（产品 protocols）
     try { await sequelize.query("ALTER TABLE vpn_products ADD COLUMN protocols TEXT"); } catch (e) { /* 字段已存在则忽略 */ }
+
+    // 🎯 千川流量业务（2026-11-04）：订单表扩 4 列，给人工派单单用。
+    //    `sync({alter:false})` 只建缺失的表、不给已有表加列，所以必须显式 ALTER（幂等）。
+    //    默认值 'upstream' 保证历史订单语义不变，所有现有查询不用改。
+    try { await sequelize.query("ALTER TABLE orders ADD COLUMN biz_type VARCHAR(20) NOT NULL DEFAULT 'upstream'"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE orders ADD COLUMN boost_product_id INT DEFAULT NULL"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE orders ADD COLUMN ext_fields TEXT"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE orders ADD COLUMN contact_channel VARCHAR(20) DEFAULT NULL"); } catch (e) {}
+    try { await sequelize.query("CREATE INDEX idx_orders_biz_status ON orders (biz_type, status)"); } catch (e) { /* 已存在 */ }
+
+    // 🎯 千川业务成本/售价分离：上线录的是进货成本，售价由管理员在后台调
+    try { await sequelize.query("ALTER TABLE boost_products ADD COLUMN cost_flat_price DECIMAL(14,4) NOT NULL DEFAULT 0"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE boost_products ADD COLUMN cost_tiers TEXT"); } catch (e) {}
+    // 首次回填：把当前价格当作成本存一份（幂等：只在 cost 还是 0 时写）
+    try {
+      await sequelize.query("UPDATE boost_products SET cost_flat_price = flat_price WHERE cost_flat_price = 0 AND flat_price > 0");
+      await sequelize.query("UPDATE boost_products SET cost_tiers = tiers WHERE (cost_tiers IS NULL OR cost_tiers = '') AND tiers IS NOT NULL");
+    } catch (e) {}
     // 🎫 分站折扣促销（老库补列；sync({alter:false}) 只建表、不给已有表加列）
     try { await sequelize.query("ALTER TABLE sites ADD COLUMN discount_rate FLOAT NOT NULL DEFAULT 1"); } catch (e) {}
 
@@ -215,6 +268,9 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, "127.0.0.1", async () => {
   console.log(`🚀 XNOW API Server running on port ${PORT}`);
   await initDatabase();
+
+  // 🎯 千川流量商品初始化（幂等：只插不存在的 code，绝不动后台改过的价格）
+  try { await seedBoostProducts(); } catch (e) { console.error('🎯 [Boost] 初始化失败:', e && e.message); }
   
   setTimeout(autoSyncServices, 3000);
   setInterval(autoSyncServices, 1000 * 60 * 10);

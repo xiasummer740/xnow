@@ -8,6 +8,7 @@ import { sendTgMessage } from '../utils/tgBot.js';
 import { sanitizeAnnouncement } from '../utils/sanitize.js';
 import { isValidDomain, isDomainForbidden, isBindForbidden, isFreeSubdomain, verifyDomainOwnership, ensureCert, ensureSelfSignedCert, writeVhost, reloadNginx, removeVhost, vhostPath, parkDomain, unparkDomain, getPublicIp, domainVhostOwner, resolveDistRoot } from '../utils/siteDomain.js';
 import { sendSiteSmtpTest } from '../utils/email.js';
+import { creditUser, debitUser } from '../utils/balance.js';
 import multer from 'multer';
 import fs from 'fs';
 import { clearSiteCache } from '../middleware/site.js';
@@ -566,6 +567,17 @@ router.post('/', authenticate, async (req, res) => {
         // 建站本身不能因为"域名没发出去"而失败 —— 站长可稍后点「修复域名」
         publishNote = '（域名尚未生效，可稍后点「修复域名」重试）';
         console.error(`[site] vhost 生成失败 ${cleanDomain}: ${e.message}`);
+        // ⚠️ 这一步是收过钱的（¥99/月已在上面事务里扣了），不能再"静默失败"：
+        //    站长只会看到「创建成功」+ 一句括号提示，站点其实打不开。
+        //    必须让有人看得见（TG 群），否则就是典型的「付了钱、站是死的、没人知道」。
+        try {
+          await sendTgMessage(
+            `🚨 <b>分站已收费但域名没配上</b>\n🏬 ${name}（#${site.id}）\n🌐 <code>${cleanDomain}</code>\n` +
+            `👤 站长: <code>UID ${ownerId}</code>\n💳 已扣: ¥${paidAmount}\n` +
+            `❌ 原因: ${String(e.message || e).slice(0, 300)}\n` +
+            `👉 处理：站长改好 DNS 后到「我的分站」点「修复域名」，或先手动退款`
+          );
+        } catch (e2) { /* TG 挂了也不能影响建站 */ }
       }
     }
 
@@ -1831,23 +1843,24 @@ router.post('/:id/customers/:uid/balance', authenticate, async (req, res) => {
     }
     const note = String(req.body?.note || '').trim().slice(0, 60);
 
-    const before = parseFloat(u.balance || 0);
-    const after = Math.round((before + amount) * 1000000) / 1000000;
     // 🔒 余额与流水必须同时成功 —— 以前分两步写，流水一旦抛错就成了「钱到账、没凭据」，
     //    对账时查无此事（实测踩过：Transaction 未导入 → 余额改了、流水没落）。
+    //    🔒 且余额改用原子累加：`before` 是事务外读的快照，不能再拿它算完写回去
+    //    （客户同时下单/别人同时调账时，这条 UPDATE 会把那些变动覆盖掉）。
+    let after = 0;
     await sequelize.transaction(async (t) => {
-      u.balance = after.toFixed(6);
-      await u.save({ transaction: t });
+      after = Number(await creditUser(u.id, amount, { transaction: t }));
       await Transaction.create({
         user_id: u.id,
         phone: u.phone,
         amount: amount,
-        balance: u.balance,
+        balance: after,
         type: '管理员手动充值',
         description: note ? `站长手动加余额（${note}）` : '站长手动加余额',
         site_id: Number(site.id),   // 🔴 必须记分站，否则平台营收会被算多
       }, { transaction: t });
     });
+    const before = Number((after - amount).toFixed(6));
 
     // 站长看得到痕迹，客户对账也有据可查（不含任何平台信息）
     res.json({
@@ -1872,24 +1885,29 @@ router.post('/:id/customers/:uid/balance/deduct', authenticate, async (req, res)
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ status: 'error', message: '请填写大于 0 的金额' });
     }
-    const before = parseFloat(u.balance || 0);
-    if (amount > before) {
-      return res.status(400).json({ status: 'error', message: `扣减不能超过客户余额 ¥${before.toFixed(2)}` });
-    }
-    const after = Math.round((before - amount) * 1000000) / 1000000;
+    let after = 0;
     await sequelize.transaction(async (t) => {
-      u.balance = after.toFixed(6);
-      await u.save({ transaction: t });
+      try {
+        after = Number(await debitUser(u.id, amount, { transaction: t }));
+      } catch (e) {
+        if (e && e.code === 'INSUFFICIENT_BALANCE') {
+          const err = new Error('INSUFFICIENT_BALANCE');
+          err.friendly = true;
+          throw err;
+        }
+        throw e;
+      }
       await Transaction.create({
         user_id: u.id,
         phone: u.phone,
         amount: -amount,
-        balance: u.balance,
+        balance: after,
         type: '管理员手动扣款',
         description: String(req.body?.note || '').trim().slice(0, 60) || '站长手动扣减余额',
         site_id: Number(site.id),
       }, { transaction: t });
     });
+    const before = Number((after + amount).toFixed(6));
 
     res.json({
       status: 'success',
@@ -1897,7 +1915,10 @@ router.post('/:id/customers/:uid/balance/deduct', authenticate, async (req, res)
       data: { user_id: u.id, balance: after, before },
     });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: '扣减失败：' + (e.message || e) });
+    if (e && e.friendly) {
+      return res.status(400).json({ status: 'error', message: '扣减金额超过客户当前余额，请先刷新客户列表' });
+    }
+    res.status(500).json({ status: 'error', message: '扣减失败，请稍后重试' });
   }
 });
 

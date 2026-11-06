@@ -238,17 +238,38 @@ export const ensureCert = async (domain, webroot) => {
 };
 
 // 写 vhost：HTTP 跳 HTTPS + HTTPS 反代到分站后端端口，静态根指向分站 dist
+//
+// 🔴 2026-11-03 的事故教训必须写进**生成器**，否则补丁只活在那一台机器上：
+//    CF 被切成 Flexible 时，`location / { return 301 https://... }` 会与
+//    「浏览器→CF 走 https」形成无限跳转（当天全站打不开 8 小时，301 还被 CF 缓存）。
+//    修法是把 :80 的跳转换成「CF 回源（X-Forwarded-Proto: https）就本地转发到 443，
+//    直连 http 才 301」—— 这段逻辑现在由 install.sh 写进 /etc/nginx/snippets/，
+//    这里**按存在性** include（新机器上文件还没生成时自动退回老的单行 301，不至于 nginx -t 失败）。
+//
+// 🔴 同时给分站 :443 补上 CF 真实 IP 还原：以前分站的 443 块里**一行 set_real_ip_from 都没有**，
+//    于是分站上 req.ip 全是 CF 边缘地址 —— 防爆破限流变成「整站共用 30 次/15 分钟」，
+//    用户莫名被锁，WAF 黑名单/注册 IP/Geo 全部失真。
+const SNIPPET_DIR = '/etc/nginx/snippets';
+const CF_REALIP_SNIPPET = `${SNIPPET_DIR}/xnow-cf-realip.conf`;
+const CF_FLEX_SNIPPET = `${SNIPPET_DIR}/xnow-flex-80.conf`;
+const hasFile = (p) => { try { return fs.existsSync(p); } catch (e) { return false; } };
+
 export const writeVhost = ({ siteId, domain, backendPort, distRoot, cert }) => {
   // 写真实 vhost 前先拆掉该域名的墓碑（410），否则同域名出现两份配置
   try { unparkDomain(domain); } catch (e) {}
   const safe = String(domain).replace(/[^a-z0-9.-]/gi, '');
   const file = vhostPath(siteId, safe);
+  const realIp = hasFile(CF_REALIP_SNIPPET) ? `    include ${CF_REALIP_SNIPPET};\n` : '';
+  // 有 snippet 用 snippet（含 CF Flexible 兜底）；没有就退回老的 301 —— 两种都能过 nginx -t
+  const httpLocation = hasFile(CF_FLEX_SNIPPET)
+    ? `    include ${CF_FLEX_SNIPPET};\n`
+    : '    location / {\n        return 301 https://$host$request_uri;\n    }\n';
   const conf = `# 自动生成：分站 ${siteId} 自有域名 ${safe}
 # 由 server/src/utils/siteDomain.js 写入，请勿手工编辑
 server {
     listen 80;
     server_name ${safe};
-
+${realIp}
     # 🔑 证书挑战优先于跳转。注意 nginx 的坑：写在 server 层的 return 在 rewrite
     #    阶段就执行了，location 里的例外根本轮不到 —— 所以跳转必须放进 location /。
     location ^~ /.well-known/acme-challenge/ {
@@ -256,10 +277,7 @@ server {
         try_files $uri =404;
     }
 
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
+${httpLocation}}
 
 server {
     listen 443 ssl http2;
@@ -269,6 +287,7 @@ server {
     ssl_certificate_key ${cert.key};
     ssl_protocols       TLSv1.2 TLSv1.3;
 
+${realIp}
     root ${distRoot};
     # ⚠️ 分站的默认首页必须是 site.html（构建时生成的中性入口）。
     #    用 index.html 的话，首页源码里带着平台的 title / description / og 图，
@@ -309,7 +328,7 @@ server {
     #    五十九期实测：这几个文件与主站 sha256 完全相同 —— 站长域名下能直接
     #    下载到平台的 logo 和 og 分享图，等于把进货来源挂在门牌上。
     #    分站自己的图标由站长上传（favicon_url），前端已确保不回落平台 logo。
-    location ~* ^/(og-image|apple-touch-icon|favicon-32|favicon|logo)\.(png|ico|jpg|svg)$ {
+    location ~* ^/(og-image|og|apple-touch-icon|favicon-32|favicon|logo)\.(png|ico|jpg|svg)$ {
         return 404;
     }
 
@@ -367,11 +386,33 @@ server {
 }
 `;
   fs.writeFileSync(file, conf, 'utf8');
+
+  // 🔒 写完立刻验语法，验不过就删掉自己这份、保持原状。
+  //    为什么必须在这里做：错的 vhost 一进 sites-enabled，**以后每一次** reload 都会失败
+  //    （包括别的站点重建、也包括收尾的 reloadNginx），而现场只剩一行 nginx 报错，
+  //    新站永远上不去且没人知道原因。以前这一步完全没有 —— 建站失败还会照样收费。
+  try {
+    execSync('nginx -t', { stdio: 'pipe', timeout: 30000 });
+  } catch (e) {
+    try { fs.unlinkSync(file); } catch (e2) { /* 尽力而为 */ }
+    const raw = e && e.stderr ? e.stderr.toString() : (e && e.message) || '';
+    throw new Error('nginx 配置校验失败，已回滚该 vhost：' + String(raw).trim().slice(-600));
+  }
   return file;
 };
 
 export const reloadNginx = () => {
-  // -s reload 是原子的：配置有错时保留旧进程继续服务，不会像 restart 那样中断
+  // -s reload 是原子的：配置有错时保留旧进程继续服务，不会像 restart 那样中断。
+  // 但"保留旧进程"意味着新配置**静默不生效** —— 所以先测一遍语法，把失败变成显式错误，
+  // 让调用方/日志里看得见（而不是三天后才发现某个站一直是旧配置）。
+  try {
+    execSync('nginx -t', { stdio: 'pipe', timeout: 30000 });
+  } catch (e) {
+    const raw = e && e.stderr ? e.stderr.toString() : (e && e.message) || '';
+    const err = new Error('nginx 配置校验失败，已保持原状（未 reload）：' + String(raw).trim().slice(-600));
+    err.nginxTest = true;
+    throw err;
+  }
   execSync('nginx -s reload', { stdio: 'pipe', timeout: 30000 });
 };
 

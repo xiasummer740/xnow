@@ -22,13 +22,35 @@ export function getPendingPayments() {
     if (!fs.existsSync(DB_PATH)) return []
     const raw = fs.readFileSync(DB_PATH, 'utf-8')
     return JSON.parse(raw) || []
-  } catch { return [] }
+  } catch (e) {
+    // 🔴 2026-11-03：原来这里只 `catch { return [] }`。
+    //    文件一旦损坏（进程被杀时正写到一半、磁盘满、手工编辑出错），
+    //    就会被当成"没有待补单" — 紧接着第一次 save 又会把损坏内容整个覆盖掉，
+    //    于是**本来还能靠它补回来的已付款订单彻底消失**，等于吞钱。
+    //    现在：发现解析失败先另存一份坏文件，再返回空数组。
+    try {
+      if (fs.existsSync(DB_PATH)) {
+        const bad = `${DB_PATH}.corrupt-${Date.now()}`
+        fs.copyFileSync(DB_PATH, bad)
+        console.error(`❌ [payTracker] pending_payments.json 解析失败，已备份到 ${bad}：`, e && e.message)
+      }
+    } catch (e2) {
+      console.error('❌ [payTracker] 损坏文件备份失败：', e2 && e2.message)
+    }
+    return []
+  }
 }
 
 // 写入待处理支付列表
 function savePendingPayments(list) {
   ensureDir()
-  fs.writeFileSync(DB_PATH, JSON.stringify(list, null, 2))
+  // 🔴 原子写：先写同目录临时文件再 rename（POSIX 下 rename 是原子的）。
+  //    原来是直接 writeFileSync 覆盖目标文件 —— 进程在写入中途退出 / 磁盘写满，
+  //    留下的就是半截 JSON（正好被上面的 catch 当成"空队列"）。
+  const body = JSON.stringify(list, null, 2)
+  const tmp = `${DB_PATH}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, body)
+  fs.renameSync(tmp, DB_PATH)
 }
 
 // 记录一笔新支付
@@ -44,8 +66,23 @@ export function addPendingPayment({ order_id, user_id, amount, pay_type }) {
     created_at: new Date().toISOString(),
     status: 'pending',  // pending | processing | completed | failed
     retry_count: 0,
-    last_check: null
+    last_check: null,
+    // 🔴 BufPay 的平台单号。查证接口 GET /api/query/{aoid} 只认它，不认我们的 order_id。
+    //    创建订单时还拿不到（是 BufPay 回给浏览器的），只能在「回调」或「支付成功跳回」时补写。
+    //    没有 aoid 就永远查不了这单 —— 这时不能判死，必须挂人工核对。
+    aoid: null,
   })
+  savePendingPayments(list)
+}
+
+/** 记下 BufPay 平台单号（回调 / 支付成功跳回时才有机会拿到） */
+export function setAoid(order_id, aoid) {
+  if (!order_id || !aoid) return
+  const list = getPendingPayments()
+  const item = list.find(p => p.order_id === order_id)
+  if (!item) return
+  if (item.aoid === String(aoid)) return
+  item.aoid = String(aoid)
   savePendingPayments(list)
 }
 

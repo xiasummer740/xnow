@@ -2,8 +2,12 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
 
 export const authenticate = async (req, res, next) => {
-  // 💡 核心修复：同时支持 Header 鉴权与 URL Query 鉴权
-  const token = req.headers.authorization?.split(' ')[1] || req.query.token;
+  // 🔒 2026-11-03：**不再接受 ?token= 传令牌**。
+  //    URL 里的令牌会被 nginx access.log、Cloudflare 日志、浏览器历史、Referer 头
+  //    原样记录下来 —— 一把 7 天有效的令牌就这么散到所有日志里，而且没人会去清。
+  //    唯一的合法用途（备份文件下载，浏览器需要走原生下载）已改成 fetch + Blob。
+  //    如果以后真需要"链接式下载"，用一次性短时令牌换，不要复用登录令牌。
+  const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ status: 'error', message: '未授权的访问' });
@@ -29,10 +33,14 @@ export const authenticate = async (req, res, next) => {
   // 若把数据库抖动当成 401，一次抖动就会把全体在线用户踢下线。
   let user;
   try {
-    // balance / agent_expire_at 也要带：计费相关路由（开站、续费）要在这一层就能判断
-    // 「代理是否到期」，否则 req.user.agent_expire_at 是 undefined，判断会静默跳过
-    // —— 87 期实测：代理已过期的人仍能开新站并成功扣费。
-    user = await User.findByPk(decoded.id, { attributes: ['id', 'phone', 'role', 'is_banned', 'ban_reason', 'balance', 'agent_expire_at'] });
+    // balance / agent_expire_at / site_id 都要带：
+    //   · 计费相关路由（开站、续费）要在这一层就能判断「代理是否到期」，
+    //     否则 req.user.agent_expire_at 是 undefined，判断会静默跳过
+    //     —— 87 期实测：代理已过期的人仍能开新站并成功扣费。
+    //   · site_id 是「分站客户不能用分站管理功能」这道闸门的判据（sites.js 里那条 if）。
+    //     ⚠️ 历史的坑：注释写了要带、attributes 里也查了，但下面 req.user 只赋了三个字段，
+    //     site_id/balance/agent_expire_at 全被丢掉 → 那道闸门永远不触发（分站客户能自己开站）。
+    user = await User.findByPk(decoded.id, { attributes: ['id', 'phone', 'role', 'is_banned', 'ban_reason', 'balance', 'agent_expire_at', 'site_id'] });
   } catch (e) {
     console.error('❌ [Auth] 回查用户失败:', e.message);
     return res.status(503).json({ status: 'error', message: '服务暂时不可用，请稍后重试' });
@@ -49,7 +57,15 @@ export const authenticate = async (req, res, next) => {
 
   // 权限一律以数据库为准，不采信 Token 里可能已过期的角色
   // （顺带补上 phone：审计日志 logAudit 一直读 req.user.phone，而 JWT 里从来没有这个字段）
-  req.user = { id: user.id, phone: user.phone, role: user.role };
+  // 另外把 balance / agent_expire_at / site_id 一并挂上：查询已经取了，丢掉只会让下游静默误判
+  req.user = {
+    id: user.id,
+    phone: user.phone,
+    role: user.role,
+    balance: user.balance,
+    agent_expire_at: Number(user.agent_expire_at || 0),
+    site_id: Number(user.site_id || 0),
+  };
 
   // 💡 核心加法：滑动窗口静默续签逻辑
   const now = Math.floor(Date.now() / 1000);

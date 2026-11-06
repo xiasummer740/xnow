@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import { VpnProduct, VpnClient, Config, Transaction, User, Coupon, sequelize } from '../models/index.js';
 import { createXXUIClient, newClientEmail, newClientUUID, getXXUIClient, updateXXUIClient } from '../utils/xxui.js';
 import { sendTgMessage } from '../utils/tgBot.js';
+import { debitUser } from '../utils/balance.js';
 import crypto from 'crypto';
 import axios from 'axios';
 
@@ -253,11 +254,18 @@ router.post('/buy', authenticate, buyLimiter, async (req, res) => {
     }
 
     // Deduct
-    user.balance = (userBalance - finalPrice).toFixed(6);
-    await user.save({ transaction: t });
+    // 🔒 原子扣款：以前的「读余额 → 减 → save()」在并发下会把别的资金动作覆盖掉
+    let paidBalance;
+    try {
+      paidBalance = await debitUser(user.id, finalPrice, { transaction: t });
+    } catch (e) {
+      await t.rollback();
+      return res.json({ status: 'error', message: e && e.code === 'INSUFFICIENT_BALANCE' ? '余额不足，请先充值' : '扣款失败，请稍后重试' });
+    }
+    user.setDataValue('balance', paidBalance);
 
     await Transaction.create({
-      user_id: user.id, phone: user.phone, amount: -finalPrice, balance: user.balance,
+      user_id: user.id, phone: user.phone, amount: -finalPrice, balance: paidBalance,
       type: 'VPN购买',
       description: `VPN: ${product.name} ${traffic_gb}GB/${dur.label}`
     }, { transaction: t });
@@ -403,9 +411,16 @@ router.post("/client/:id/renew", authenticate, renewLimiter, async (req, res) =>
   }
   const t = await sequelize.transaction();
   try {
-    user.balance = (userBalance - totalPrice).toFixed(6);
-    await user.save({ transaction: t });
-    await Transaction.create({ user_id: user.id, phone: user.phone, amount: -totalPrice, balance: user.balance, type: "VPN续费", description: "VPN续费: " + client.email }, { transaction: t });
+    // 🔒 原子扣款（同上）：并发续费/下单不会互相覆盖余额
+    let paidBalance;
+    try {
+      paidBalance = await debitUser(user.id, totalPrice, { transaction: t });
+    } catch (e) {
+      await t.rollback();
+      return res.json({ status: 'error', message: e && e.code === 'INSUFFICIENT_BALANCE' ? '余额不足' : '扣款失败，请稍后重试' });
+    }
+    user.setDataValue('balance', paidBalance);
+    await Transaction.create({ user_id: user.id, phone: user.phone, amount: -totalPrice, balance: paidBalance, type: "VPN续费", description: "VPN续费: " + client.email }, { transaction: t });
     if (addTraffic > 0) client.traffic_gb = (client.traffic_gb || 0) + addTraffic;
     if (addDays > 0) client.expiry_time = Math.max(client.expiry_time || Date.now(), Date.now()) + addDays * 86400 * 1000;
     let xxuiWarning = false;
