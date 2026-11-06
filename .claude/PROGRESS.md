@@ -1979,3 +1979,32 @@ SeoGuard 报 `7h2d5u.taikon.top` 的 GPTBot/ClaudeBot 抓首页 404。一查不�
 （`laozhang` / `demostore` / `2srjev`，site 11/25/45 已删）。SeoGuard 只查 `.indexnow-hosts`
 里的真域名，孤儿不引起误报；但 `post-deploy-verify.sh` 里还检查着 `demostore`，
 清 vhost 时要同步改。清理涉及 `nginx -t` + reload（共享层），**动之前单独确认**。
+
+### 追加（同日 22:20）：工作区全部落盘，6 个提交
+
+此前 10-26 之后的工作一直挂在工作区没提交（38 改 + 22 新增，2070 行）。
+按主题拆成 6 个 commit：
+
+| 提交 | 内容 |
+|---|---|
+| `2c2c2654` chore(deploy) | 部署守卫 + `quick-deploy.sh` + nginx 模板 + install.sh |
+| `27ac721d` feat(sites) | 分站结算/支付对账/VPN 收尾（10-26~11-03 累积） |
+| `a2d083a0` feat(boost) | 千川流量业务线（人工派单） |
+| `6626db53` fix(orders) | 服务描述同步 + 退款原因 + 下单拦截 + 取消归因 |
+| `1cfb5258` docs | 交接文档（boost 业务线 + 11-06 批次） |
+| `6df1c797` fix(build) | 补交 `balance.js` / `payOrder.js` |
+
+**踩到的坑**：按文件清单分批提交时漏了两个被 import 的模块 ——
+`utils/balance.js` 被 8 处引用（admin/boost/boostAdmin/pay/sites/vpn/orderRefund/siteRefund），
+`utils/payOrder.js` 被 2 处引用。补交前中间几个 commit 单独检出是跑不起来的（HEAD 完整）。
+之后补了一次全量依赖检查：遍历所有本地 `import`，确认目标文件都被 git 跟踪；
+`server/src` 与 `client/src` 两侧均通过。
+
+**提交前做的两件事**：
+- 敏感信息扫描：`192.129.210.52` 命中 6 处但**全部在 HEAD 里已有**（历史遗留，非本次引入）；
+  `upstream_charge` 命中是模型字段定义，不是金额。无新增泄露。
+- 确认服务器上的"未提交改动"（59 个）与本地差异**纯粹是 CRLF/LF 行尾符**，
+  内容一致（`git diff --ignore-cr-at-eol` 无输出）—— 所以提交本地工作区不会漏东西。
+
+**未推送到远程**：本地领先 `origin/feat/sites` 6 个提交。
+远程是 `github.com/xiasummer740/xnow.git`（公开仓库），push 属于发布动作，等祥哥确认。
