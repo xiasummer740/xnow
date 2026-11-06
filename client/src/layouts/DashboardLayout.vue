@@ -15,6 +15,9 @@
       <div class="flex flex-col py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         <p class="px-3 pt-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">业务</p>
         <router-link to="/order" @click="handleNav('/order')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span>{{ appStore.t('menu_order') }}</span></router-link>
+        <!-- 🎯 千川流量：独立业务线（本地商品 + 人工派单）。分站暂不开放 ——
+             站长拿到进货价再加价卖，价格体系会乱，先用主站跑通再说。 -->
+        <router-link v-if="!appStore.isSubsite" to="/boost" @click="handleNav('/boost')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg><span>千川流量</span><span class="nav-badges"><span class="nav-badge nav-badge-cn">国内</span><span class="nav-badge">新</span></span></router-link>
         <router-link to="/mass-order" @click="handleNav('/mass-order')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg><span>{{ appStore.t('menu_mass') }}</span></router-link>
         <router-link to="/history" @click="handleNav('/history')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>{{ appStore.t('menu_history') }}</span></router-link>
 
@@ -39,6 +42,7 @@
               class="ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-black leading-none">{{ pendingWithdraws > 99 ? '99+' : pendingWithdraws }}</span></router-link>
           <router-link to="/admin/backup" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/backup')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg><span>{{ appStore.t('menu_backup') || '灾备中心' }}</span></router-link>
           <router-link to="/admin/payments" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/payments')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg><span>{{ appStore.lang === 'zh' ? '补单队列' : 'Payment Queue' }}</span><span v-if="pendingPayments > 0" class="ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-black text-[9px] font-black leading-none">{{ pendingPayments > 99 ? '99+' : pendingPayments }}</span></router-link>
+          <router-link to="/admin/boost" v-if="!appStore.isSubsite && ['admin', 'super_admin'].includes(userStore.userInfo?.role)" @click="handleNav('/admin/boost')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><span>千川业务</span><span v-if="boostPending > 0" class="ml-auto inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-black leading-none">{{ boostPending > 99 ? '99+' : boostPending }}</span></router-link>
           <router-link v-if="!appStore.isSubsite" to="/api-doc" @click="handleNav('/api-doc')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg><span>{{ appStore.t('menu_api') || '开发者 API' }}</span></router-link>
         </template>
 
@@ -266,6 +270,19 @@ const fetchPendingPayments = async () => {
   } catch (e) {}
 };
 
+// 🎯 千川业务待派单角标：客户已经付钱、但运营还没开始处理的单量。
+//    这个数字比补单队列更急 —— 钱在系统里，不处理客户会来催。
+const boostPending = ref(0);
+const fetchBoostPending = async () => {
+  if (!userStore.token) return;
+  if (!['admin', 'super_admin'].includes(userStore.userInfo?.role)) return;
+  try {
+    const res = await fetch(`/api/boost-admin/stats?_t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    const j = await res.json();
+    if (j.status === 'success') boostPending.value = j.data?.pending || 0;
+  } catch (e) {}
+};
+
 // 通知
 const showNotifPanel = ref(false);
 const notifList = ref([]);
@@ -302,6 +319,7 @@ const formatNotifTime = (t) => { if (!t) return ''; try { const d = new Date(t);
 let notifInterval = null;
 let statusInterval = null;
 let pendingPayInterval = null;
+let boostPendingInterval = null;
 onMounted(() => {
   appStore.fetchConfig(); syncUserStatus();
   // 每60秒检查一次新通知
@@ -312,6 +330,9 @@ onMounted(() => {
   // 💳 补单队列角标（只有管理员会真正发请求）
   fetchPendingPayments();
   pendingPayInterval = setInterval(fetchPendingPayments, 60000);
+  // 🎯 千川待派单角标（同样只对管理员发请求）
+  fetchBoostPending();
+  boostPendingInterval = setInterval(fetchBoostPending, 60000);
   // 每30秒同步用户状态（角色/余额等），确保权限变更后自动更新
   statusInterval = setInterval(syncUserStatus, 30000);
 });
@@ -319,6 +340,7 @@ onUnmounted(() => {
   if (notifInterval) clearInterval(notifInterval);
   if (statusInterval) clearInterval(statusInterval);
   if (pendingPayInterval) clearInterval(pendingPayInterval);
+  if (boostPendingInterval) clearInterval(boostPendingInterval);
 });
 </script>
 
@@ -334,6 +356,20 @@ onUnmounted(() => {
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.35);
   white-space: nowrap;
+}
+/* 一个菜单项挂多个 badge 时（千川流量：国内 + 新），由外层负责靠右，内层取消各自顶边距 */
+.nav-badges {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-badges .nav-badge { margin-left: 0; }
+/* 「国内」用青色，和琥珀色的「新」区分开 —— 一个是区域属性，一个是上架状态 */
+.nav-badge-cn {
+  background: rgba(34, 211, 238, 0.14);
+  color: #67e8f9;
+  border-color: rgba(34, 211, 238, 0.35);
 }
 .nav-item {
   @apply flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/70 transition-all duration-200;
