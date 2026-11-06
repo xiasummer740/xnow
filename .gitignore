@@ -98,6 +98,12 @@ client/dist/
 client/dist.tar.gz
 nul
 
+# 应用内自动备份产物（backupEngine.js 每 12 小时往这里写 tar.gz，
+# 里面是用户 / 订单 / 交易 / 服务全量导出）。
+# ⚠️ 这个仓库是 PUBLIC —— 一旦 `git add .` 就会把客户数据推到公网。
+# 2026-11-03 由 deploy/guard/scope-check.sh 抓出来的（线上有 21MB 未被忽略的备份）。
+/backups/
+
 # Claude/Playwright 工具运行时产物（会话自动生成，勿提交）
 .playwright-mcp/
 .claude/merged-checks.md
@@ -122,3 +128,6 @@ ISSUES.md
 
 .tmpbuild/
 .indexnow-hosts
+
+# 本地构建临时目录（2026-11-06）
+.tmp-build/

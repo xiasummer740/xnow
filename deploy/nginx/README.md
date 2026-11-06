@@ -1,5 +1,20 @@
 # xnow 的 Nginx 层：生产实况存档
 
+> ⚠️ **2026-11-03 起，本目录的 `production/*` 三份文件已经过期，不要再拿它们恢复生产。**
+> 那天 CF 被切成 Flexible，全站 301 死循环瘫了 8 小时，应急补丁只打在了**线上那台机器**上
+> （`:80` 遇到 `X-Forwarded-Proto: https` 改为本地转发 `127.0.0.1:443`，443 侧加
+> `set_real_ip_from 127.0.0.1`）。`production/` 里的副本**没有**这些改动。
+> **现在的唯一事实来源：**
+>
+> | 位置 | 内容 |
+> |---|---|
+> | `deploy/nginx/snippets/xnow-cf-realip.conf` | 22 条 CF 网段 + `127.0.0.1` + `real_ip_header`（`:80`/`:443` 共用） |
+> | `deploy/nginx/snippets/xnow-flex-80.conf` | `:80` 的 Flexible 兜底（CF 回源本地转发 443，直连仍 301） |
+> | `install.sh` | 把上面两份拷进 `/etc/nginx/snippets/`，主站 vhost 里 `include` |
+> | `server/src/utils/siteDomain.js` → `writeVhost()` | 新分站 vhost 同样 `include` 这两份，且 443 侧补上了 CF 真实 IP |
+>
+> `production/` 保留原样只为记录「11-03 之前长什么样」，**恢复生产请用 `install.sh`**。
+
 > 为什么这个目录存在：CLAUDE.md 里那条「**服务器上手工改过的配置必须同步回仓库**」。
 > 生产的 nginx 配置**不在仓库里、也没有软链**，机器一挂就丢。
 > 2026-10-14 整机演练时把它们逐字取回来存这里，作为**生产实况的记录**。

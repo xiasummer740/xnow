@@ -64,11 +64,13 @@ OLD = """    location / {
         return 301 https://$host$request_uri;
     }"""
 NEW = """    # 🔴 2026-11-03 应急（CF 切成 Flexible 后 301 死循环）：
-    #    原始访客是 https（CF 会带 X-Forwarded-Proto: https）→ 本地转发到 443 拿真实内容；
-    #    直连 http 的访客 → 仍然 301（行为不变）。
+    #    带 CF-Connecting-IP（= 一定是 CF 回源）→ 本地转发到 443 拿真实内容；
+    #    真·直连 http 的访客 → 仍然 301（行为不变）。
+    #    ⚠️ 判据别写成 X-Forwarded-Proto：CF 有些边缘回源时不发这个头，
+    #       会误判成直连访客又走 301，循环照旧（12:55 日志里那条 301 就是）。
     #    正式修法：Cloudflare → SSL/TLS → Overview → 改回 Full。
     location / {
-        if ($http_x_forwarded_proto != "https") {
+        if ($http_cf_connecting_ip = "") {
             return 418;
         }
         proxy_pass https://127.0.0.1:443;

@@ -17,7 +17,9 @@ warn(){ echo -e "  ${YELLOW}⚠${NC} $1"; }
 fail(){ echo -e "  ${RED}✗${NC} $1"; }
 
 read -p "域名 (如 xnow.example.com): " DOMAIN
-read -p "MySQL 密码: " DB_PASS
+# -s：MySQL 口令不再回显到终端/录屏/日志里（以前是明文输入的，录个屏就泄了）
+read -s -p "MySQL 密码: " DB_PASS
+echo ""
 
 # 🔄 可选参数：备份包路径。**换机灾备**时用 —— 装完直接把数据灌进去。
 #    不传这个参数 = 全新空站，行为和以前完全一样。
@@ -196,6 +198,12 @@ JWT_SECRET=$JWT_VALUE
 PORT=3000
 ENVEOF
 
+# 🔒 立刻收紧权限：默认 umask 下这个文件是 0644 —— 同机任何用户（含 www-data、
+#    以及任何"另一个项目跑飞了"的进程）都能读到 MySQL root 口令和 JWT_SECRET，
+#    拿到 JWT_SECRET 就能伪造任意用户的令牌，包括管理员。
+chmod 600 .env
+ok ".env 权限已设为 600（只有 root 可读）"
+
 # ── 可选：装完即恢复 ──────────────────────────────────
 # 放在这里（.env 已写好、后端还没启动）是有意的：后端第一次起来时
 # `sequelize.sync({ alter: false })` 会补建缺的表/配置项，但它看到表已存在就只做增量，
@@ -239,10 +247,52 @@ npm install
 
 # 启动/重启后端
 pm2 delete xnow-backend 2>/dev/null || true
-pm2 start src/app.js --name xnow-backend
+# max_memory_restart：不设的话一个内存上涨只会把整台机器拖进 OOM，
+# 表现是"数据库/nginx/后端一起失联"，比让后端自己重启一次难查得多。
+pm2 start src/app.js --name xnow-backend --max-memory-restart 700M
 pm2 save
-pm2 startup systemd -u root 2>/dev/null || true
+# 🔴 开机自启：以前是 `pm2 startup ... || true` —— 失败被静默吞掉，
+#    而这正是 2026-10-17 那次"重启后后端没起来、全站躺了 2h47m"的根本原因。
+#    现在打完之后**校验**一次，没启上就明确告警（而不是打印完"后端就绪"完事）。
+pm2 startup systemd -u root 2>/dev/null || warn "pm2 startup 执行失败（开机可能不自启）"
+if systemctl is-enabled pm2-root >/dev/null 2>&1; then
+  ok "已注册开机自启（pm2-root.service）"
+else
+  warn "开机自启未注册成功，请手工执行：pm2 startup systemd -u root && pm2 save"
+fi
 ok "后端就绪"
+
+# ── 日志轮转 ──────────────────────────────────────────
+# PM2 日志默认无限增长：不轮转的话 /root/.pm2/logs 迟早把磁盘写满，
+# 磁盘一满 MySQL 先挂（写不进 binlog），全站 500，且现场只剩一行"磁盘满"。
+if command -v pm2 &>/dev/null; then
+  pm2 install pm2-logrotate >/dev/null 2>&1 \
+    && pm2 set pm2-logrotate:max_size 50M >/dev/null 2>&1 \
+    && pm2 set pm2-logrotate:retain 14 >/dev/null 2>&1 \
+    && pm2 set pm2-logrotate:compress true >/dev/null 2>&1 \
+    && ok "pm2-logrotate 已配置（50M × 14 份，压缩）" \
+    || warn "pm2-logrotate 安装失败，请手工执行：pm2 install pm2-logrotate"
+fi
+
+# 系统级 nginx / 应用日志轮转（nginx 包自带；这里只补 PM2 之外的兜底）
+if [ -d /etc/logrotate.d ]; then
+  cat > /etc/logrotate.d/xnow <<'LOGROTATE'
+/var/log/nginx/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        [ -f /run/nginx.pid ] && kill -USR1 $(cat /run/nginx.pid)
+    endscript
+}
+LOGROTATE
+  ok "nginx 日志轮转已配置（14 天）"
+fi
 
 # ── 前端 ──────────────────────────────────────────────
 echo "[6/6] 构建前端..."
@@ -375,6 +425,38 @@ echo "配置 Nginx..."
 
 mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 
+# ── nginx 片段：CF 真实 IP 还原 + Flexible 兜底 ─────────────────────────────
+# 🔴 这两份片段是 2026-11-03 事故的产物，**必须**由模板安装，否则补丁只活在那一台机器上：
+#    CF 一旦被切成 Flexible，「:80 无条件 301」立刻变成全站无限跳转（那天瘫了 8 小时，
+#    而且 CF 把自指 301 缓存住了，必须 Purge Everything 才恢复）。
+#    分站 vhost 由后端的 server/src/utils/siteDomain.js 生成，它按**文件存在性** include
+#    这两份片段 —— 所以这里没装上，新分站就会退回老行为（死循环体质）。
+# 单一事实来源：片段正文在仓库 deploy/nginx/snippets/，这里只负责拷到位，
+# 免得同一段配置在 install.sh 和仓库里各写一遍然后漂移（这个项目已经栽过两次）。
+SNIPPET_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy/nginx/snippets"
+mkdir -p /etc/nginx/snippets
+if [ -f "$SNIPPET_SRC/xnow-cf-realip.conf" ] && [ -f "$SNIPPET_SRC/xnow-flex-80.conf" ]; then
+  cp -f "$SNIPPET_SRC/xnow-cf-realip.conf" "$SNIPPET_SRC/xnow-flex-80.conf" /etc/nginx/snippets/
+  ok "CF 真实 IP / Flexible 兜底片段已安装"
+else
+  warn "未找到 deploy/nginx/snippets —— 退回老行为（CF 切成 Flexible 时仍会 301 死循环）"
+fi
+
+# ⚠️ include 一个不存在的文件会让 `nginx -t` 直接失败，而后面的模板是硬 include 的。
+#    所以缺什么就补一个等价的最小桩：realip 空桩（不还原 IP，但语法合法）、
+#    flex 桩就是原来那行 301（行为与改造前一致，绝不会比现在更坏）。
+if [ ! -f /etc/nginx/snippets/xnow-cf-realip.conf ]; then
+  echo "# 空桩：CF 真实 IP 还原片段缺失，$remote_addr 会是 CF 边缘地址" > /etc/nginx/snippets/xnow-cf-realip.conf
+fi
+if [ ! -f /etc/nginx/snippets/xnow-flex-80.conf ]; then
+  cat > /etc/nginx/snippets/xnow-flex-80.conf <<'FLEXSTUB'
+# 桩：Flexible 兜底片段缺失 → 保持改造前的无条件 301
+location / {
+    return 301 https://$host$request_uri;
+}
+FLEXSTUB
+fi
+
 # 生成 xnow 站点配置
 cat > /etc/nginx/sites-available/xnow << NGXEOF
 server {
@@ -385,9 +467,13 @@ server {
         root /var/www/xnow/client/dist;
     }
 
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
+    # 🔴 这里原来是无条件的 `return 301 https://\$host\$request_uri`。
+    #    CF 以 Flexible 模式回源（连接走 80）时，它与「浏览器 → CF 走 https」形成死循环：
+    #    浏览器 → CF(https) → 源站(80) → 301 → 浏览器 → CF(https) → …… 全站打不开。
+    #    片段里的逻辑是：CF 回源（带 X-Forwarded-Proto: https）→ 本地转发到 443 拿真实内容；
+    #    直连 http 的访客 → 仍然 301（与改造前完全一致）。
+    include /etc/nginx/snippets/xnow-cf-realip.conf;
+    include /etc/nginx/snippets/xnow-flex-80.conf;
 }
 
 server {
@@ -404,32 +490,12 @@ server {
     # 按 IP 拉黑会误封整片用户、注册/登录 IP 全是机房地址、限流配额被整条边缘共享。
     # set_real_ip_from 是白名单：只有【从 CF 机房来的连接】才采信它给的客户端 IP，
     # 其他人直连源站伪造 CF-Connecting-IP 头不生效（已实测验证）。
-    # 来源 https://www.cloudflare.com/ips-v4 与 /ips-v6，取于 2026-09-20。
-    # CF 网段极稳定；万一漏了新段，后果只是那部分用户退回成 CF 机房 IP，站点不会挂。
-    # 不用 Cloudflare 的部署可以整段删掉，不影响功能。
-    set_real_ip_from 173.245.48.0/20;
-    set_real_ip_from 103.21.244.0/22;
-    set_real_ip_from 103.22.200.0/22;
-    set_real_ip_from 103.31.4.0/22;
-    set_real_ip_from 141.101.64.0/18;
-    set_real_ip_from 108.162.192.0/18;
-    set_real_ip_from 190.93.240.0/20;
-    set_real_ip_from 188.114.96.0/20;
-    set_real_ip_from 197.234.240.0/22;
-    set_real_ip_from 198.41.128.0/17;
-    set_real_ip_from 162.158.0.0/15;
-    set_real_ip_from 104.16.0.0/13;
-    set_real_ip_from 104.24.0.0/14;
-    set_real_ip_from 172.64.0.0/13;
-    set_real_ip_from 131.0.72.0/22;
-    set_real_ip_from 2400:cb00::/32;
-    set_real_ip_from 2606:4700::/32;
-    set_real_ip_from 2803:f800::/32;
-    set_real_ip_from 2405:b500::/32;
-    set_real_ip_from 2405:8100::/32;
-    set_real_ip_from 2a06:98c0::/29;
-    set_real_ip_from 2c0f:f248::/32;
-    real_ip_header CF-Connecting-IP;
+    #
+    # 23 个 CF 网段 + real_ip_header 现在统一在片段里（分站 vhost 也 include 同一份，
+    # 以前分站 443 一行都没有 → 分站限流把整条 CF 边缘当成一个 IP）。
+    # 片段里还多一行 `set_real_ip_from 127.0.0.1`：11-03 的 Flexible 兜底会从 :80
+    # 本地转发到 127.0.0.1:443，443 侧不信任回环地址的话真实 IP 会在那一跳丢掉。
+    include /etc/nginx/snippets/xnow-cf-realip.conf;
     real_ip_recursive on;
 
     root /var/www/xnow/client/dist;
@@ -544,9 +610,56 @@ cat > /etc/nginx/conf.d/00-proxy-buffer.conf << 'EOF'
 proxy_max_temp_file_size 0;
 EOF
 
+# 🗜️ 压缩（http 级，写在这里而不是每个 vhost 里 —— 分站 vhost 是后端动态生成的，
+#    放 conf.d 才能让「主站 + 所有分站 + 以后新建的分站」一次全覆盖，不用改任何 server 块）。
+# 为什么必须有：`/api/services/public` 在生产上是 **2809 条服务 / 714,777 字节**（2026-11-03 实测）。
+# 浏览器经 Cloudflare 拿到的是边缘压过的 53KB，但**源站→CF 这一段一直是 714KB 明文**，
+# 每次回源都白吃一遍，直接抬高 TTFB。这一段只能由源站压。
+# 注意别把 png/jpg/woff 加进 gzip_types：本身已压缩，再压只烧 CPU。
+if [ -f "$SNIPPET_SRC/../conf.d/00-gzip.conf" ]; then
+  cp -f "$SNIPPET_SRC/../conf.d/00-gzip.conf" /etc/nginx/conf.d/00-gzip.conf
+  ok "gzip 压缩配置已安装（http 级，主站与全部分站生效）"
+else
+  cat > /etc/nginx/conf.d/00-gzip.conf <<'GZIPEOF'
+# 由 xnow install.sh 生成（仓库副本缺失时的最小配置）
+# ⚠️ 不写 gzip on：conf.d 被 include 在 http 块里，而 nginx.conf 已有 `gzip on;`，
+#    重复写会让 nginx 报 `"gzip" directive is duplicate` 起不来（2026-11-03 踩过）。
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_types application/json application/javascript application/xml text/css text/javascript text/plain text/xml image/svg+xml;
+GZIPEOF
+  ok "gzip 压缩配置已安装（内置最小版）"
+fi
+
 systemctl enable nginx 2>/dev/null || true
 nginx -t && (systemctl reload nginx 2>/dev/null || systemctl start nginx 2>/dev/null)
 ok "Nginx 已启动"
+
+# ══════════════════════════════════════════════════════
+# 🐕 看门狗（后端掉线自愈 + 双通道告警）
+# ══════════════════════════════════════════════════════
+# 为什么必须由脚本装：2026-10-17 01:44 机器重启后 pm2 没自启，nginx 照常发静态页，
+# 于是**首页 200、所有 /api/* 全是 Connection refused**，全站 API 挂了 2h47m 才被人肉发现。
+# 那时补的看门狗（每 2 分钟探 /api/public/config，探不通按 nginx → mysql → pm2 → 进程 顺序自愈）
+# 一直只靠"手工照 README 装" —— 换机重装就静默消失，等于这层保险从来没进过部署流程。
+SYSD_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy/systemd"
+if [ -f "$SYSD_SRC/xnow-watchdog.sh" ] && [ -f "$SYSD_SRC/xnow-watchdog.timer" ]; then
+  install -m 755 "$SYSD_SRC/xnow-watchdog.sh"     /usr/local/bin/xnow-watchdog.sh
+  [ -f "$SYSD_SRC/xnow-alert-mail.cjs" ] && install -m 755 "$SYSD_SRC/xnow-alert-mail.cjs" /usr/local/bin/xnow-alert-mail.cjs
+  install -m 644 "$SYSD_SRC/xnow-watchdog.service" /etc/systemd/system/ 2>/dev/null || true
+  install -m 644 "$SYSD_SRC/xnow-watchdog.timer"   /etc/systemd/system/ 2>/dev/null || true
+  touch /var/log/xnow-watchdog.log
+  systemctl daemon-reload 2>/dev/null || true
+  if systemctl enable --now xnow-watchdog.timer >/dev/null 2>&1; then
+    ok "看门狗已启用（每 2 分钟探测 /api/public/config，异常自愈 + TG/邮件告警）"
+  else
+    warn "看门狗启用失败，请手工执行：systemctl enable --now xnow-watchdog.timer"
+  fi
+else
+  warn "未找到 deploy/systemd/ 看门狗文件 —— 后端掉线将无人自愈、也不会告警"
+fi
 
 # ══════════════════════════════════════════════════════
 # 健康检查

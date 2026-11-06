@@ -61,8 +61,13 @@ bash install.sh    # 裸机引导部署（环境 + 数据库 + Nginx + SSL）
 - 🔴 **也绝不要改成 Flexible**（2026-11-03 血的教训）：所有 vhost 的 `:80` 都无条件 301 到 https，
   Flexible 下「CF→源站走 80 → 源站 301 → CF 把 301 回给浏览器 → 浏览器再走 https → 又回 80」**无限跳转**，
   全站打不开（那次瘫了 8 小时，还被 CF 把 301 缓存下来，必须 Purge Everything 才好）。
-  正确值**只有一个：Full**。应急脚本 `deploy/sites/fix-cf-flexible-loop.sh`（:80 遇到
-  `X-Forwarded-Proto: https` 就本地转发到 `127.0.0.1:443`，直连 http 仍 301）。细节见 `ACCEPTANCE.md` 八十九。
+  正确值**只有一个：Full**。应急脚本 `deploy/sites/fix-cf-flexible-loop.sh`（:80 只要带
+  `CF-Connecting-IP` 就本地转发到 `127.0.0.1:443`，真·直连 http 仍 301）。细节见 `ACCEPTANCE.md` 八十九。
+  ⚠️ **2026-11-03 二次修正**：判据原本是 `$http_x_forwarded_proto != "https"`，但 **CF 有些边缘节点回源时
+  根本不发这个头**，会被误判成「直连访客」→ 418 → 301 → 循环照旧。当天 12:55 访问日志里那条
+  `GET /api/services 301`（来源 `104.22.193.130` = CF 网段）就是它，表现为「下单页服务列表加载失败」。
+  `CF-Connecting-IP` 是 CF 回源的**必带头**，判它才稳。已同步进 `install.sh`、`deploy/nginx/snippets/xnow-flex-80.conf`、
+  `deploy/sites/fix-cf-flexible-loop.sh`、`server/src/utils/siteDomain.js`。
   🧪 **改完 CF 任何开关，立刻用浏览器开一次主站 + 分站**；只看源站 `curl https://127.0.0.1/` 200 是查不出来的。
 - ⚠️ **`ISSUES.md` 被 gitignore（仓库是 PUBLIC），永远不要 push 它**
 - 🔑 **新装机器会自动创建初始管理员 `admin` / `admin123`**（`install.sh` 收尾，仅在 `users` 表为空时）。
@@ -77,3 +82,50 @@ bash install.sh    # 裸机引导部署（环境 + 数据库 + Nginx + SSL）
   （2026-10-24 祥哥定调；当时 `Order.vue` 的"上游为每条新帖投喂一次"被他当场指出。
   已清理客户侧 8 处，并同步清掉 `dist/assets` 里 144 个含旧文案的历史 bundle。
   代码注释里的"上游"不用删 —— 会被压缩器剥掉，且 `Admin-*.js` 之外的产物已验证 0 命中。）
+
+## 🔴 同机多项目共存（每个新会话开工前必读）
+
+> 完整版：`deploy/guard/README.md`。**这一节存在的唯一原因：2026-11-03 全站瘫了 8 小时。**
+> 根因不是代码 —— 是另一个 AI 会话在同一台机器上，把 `taikon.top` 这个 Cloudflare zone 的
+> SSL 模式从 **Full** 改成了 **Flexible**。它改的是「zone 级全局开关」，动一下，
+> 挂在同一个 zone 下面**所有子域名一起坏**。
+
+**这台机器上还跑着：** `xnow-flow`（`tk7188.com`，uvicorn `:8000`）、`xnow-beta`（`:3001`）、
+`cloudflared`、`xray`、`netdata`、MySQL 单实例（`xnow_db` / `xnow_beta` / `rh89test`）。
+
+### 共享层 = 禁区（改前必须备份 + 验证邻居项目）
+
+| 共享物 | 为什么危险 |
+|---|---|
+| `/etc/nginx/conf.d/` | http 级，**全机所有站点**一起受影响；新增文件必须带项目前缀 |
+| `/etc/nginx/sites-enabled/` | 主站 + 分站 + beta + `tk7188.com` 都在这里，Host 匹配错就串站串库 |
+| `443 default_server` | **全机只允许一个**，现在是 `xnow-catchall` 里的中性 404 兜底块 |
+| pm2（root 的） | 🔴 **永不 `pm2 restart all` / `delete all`**，只重启自己的进程名 |
+| MySQL | 一个项目一个库一个账号，账号只 `GRANT` 自己的库 |
+| CF zone `taikon.top` | SSL/TLS、Speed、Caching、Page Rules **全是 zone 级**，没有「只对这个子域生效」 |
+
+### 每个会话的固定动作
+
+```bash
+bash deploy/guard/scope-check.sh          # 开工前：改动是否越界 / 落在禁区
+ssh xnow-vps 'nginx -t'                   # 部署前：语法
+bash deploy/guard/post-deploy-verify.sh   # 部署后：全机回归（含 tk7188.com / code.taikon.top）
+```
+
+`post-deploy-verify.sh` 里刻意列了**邻居项目的域名** —— 只看自己 200 是不够的。
+11-03 改 nginx 的 `:80` 判据时，受影响最大的恰恰是邻居的 Host 匹配。
+
+### 会话开场就声明作用域
+
+AI 看不到旁边有什么项目，只看到你给的路径。**你不说，它默认整台机器都是你的。**
+每个会话第一句话带上：「这个会话只碰 `F:\summer\vs-code\xnow`，同机的 `xnow-flow` /
+`xnow-beta` 不改；服务器是 `xnow-vps`。」
+
+### 已落地
+
+| 文件 | 作用 |
+|---|---|
+| `deploy/guard/scope-check.sh` | 越界 / 禁区检查 |
+| `deploy/guard/post-deploy-verify.sh` | 部署后全机回归 |
+| `deploy/guard/README.md` | 完整规约 + 排障顺序 |
+| `/usr/local/bin/xnow-db-backup.sh` + cron `10 4 * * *` | 每日 `mysqldump`，留 14 天，落 `/var/backups/xnow-db/` |
