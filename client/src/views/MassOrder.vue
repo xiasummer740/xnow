@@ -14,9 +14,41 @@
       <textarea v-model="massData" rows="14" placeholder="服务ID | 链接 | 数量&#10;如：&#10;30101 | https://www.tiktok.com/@xxx | 1000&#10;28513 | https://www.tiktok.com/@yyy/video/123 | 500"
         class="w-full bg-slate-900/80 border border-slate-600 rounded-xl p-5 text-white outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition font-mono text-sm resize-y"></textarea>
 
-      <div class="flex items-center justify-between mt-4 mb-2">
-        <span class="text-xs text-slate-500">已解析 <span class="text-amber-400 font-bold">{{ parsedOrders.length }}</span> 条有效订单</span>
-        <span v-if="parsedOrders.length > 0" class="text-xs text-slate-500">预估总消费: <span class="text-amber-400 font-bold font-mono">{{ estimatedTotalText }}</span></span>
+      <div class="flex items-center justify-between mt-4 mb-2 flex-wrap gap-2">
+        <span class="text-xs text-slate-500">已解析 <span class="text-amber-400 font-bold">{{ parsedOrders.length }}</span> 条有效订单<template v-if="quote && quote.ok_count !== quote.total">，可下单 <span class="text-green-400 font-bold">{{ quote.ok_count }}</span> 条</template></span>
+        <span v-if="parsedOrders.length > 0" class="text-xs text-slate-500">
+          预估总消费: <span class="text-amber-400 font-bold font-mono">{{ estimatedTotalText }}</span>
+        </span>
+      </div>
+
+      <!-- 预估价明细：提交前就知道要扣多少，以及哪几条下不了 -->
+      <div v-if="quote && parsedOrders.length > 0" class="rounded-xl border p-3 mb-3 space-y-2"
+           :class="quote.enough ? 'bg-slate-900/60 border-slate-700' : 'bg-red-900/20 border-red-500/30'">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">当前余额</span>
+          <span class="font-mono font-bold" :class="quote.enough ? 'text-slate-200' : 'text-red-400'">¥{{ quote.balance.toFixed(4) }}</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">本次扣费</span>
+          <span class="font-mono font-bold text-amber-400">¥{{ quote.total_charge.toFixed(4) }}</span>
+        </div>
+        <div v-if="quote.enough" class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">扣费后余额</span>
+          <span class="font-mono text-green-400">¥{{ (quote.balance - quote.total_charge).toFixed(4) }}</span>
+        </div>
+        <div v-else class="flex items-center justify-between text-xs pt-1 border-t border-red-500/20">
+          <span class="text-red-400 font-bold">⚠️ 余额不足</span>
+          <span class="font-mono text-red-400 font-bold">还差 ¥{{ quote.shortfall.toFixed(4) }}</span>
+        </div>
+        <!-- 逐条问题清单 -->
+        <div v-if="quote.items.some(i => !i.ok)" class="pt-2 border-t border-slate-700/60 space-y-1">
+          <p class="text-xs text-slate-400 font-bold">以下 {{ quote.items.filter(i => !i.ok).length }} 条提交会被拒：</p>
+          <div v-for="(it, i) in quote.items.filter(i => !i.ok)" :key="'e' + i" class="text-xs font-mono">
+            <span class="text-red-400">ID:{{ it.serviceId }}</span>
+            <span class="text-slate-500 ml-1">{{ truncate(it.link, 34) }}</span>
+            <span class="text-red-300 ml-1">→ {{ it.message }}</span>
+          </div>
+        </div>
       </div>
 
       <div v-if="parseErrors.length > 0" class="bg-red-900/20 border border-red-500/30 rounded-xl p-3 mb-3">
@@ -24,9 +56,11 @@
         <p v-for="(err, i) in parseErrors" :key="i" class="text-red-300 text-xs font-mono">{{ err }}</p>
       </div>
 
-      <button @click="submitBatch" :disabled="isSubmitting || parsedOrders.length === 0"
+      <button @click="submitBatch" :disabled="isSubmitting || parsedOrders.length === 0 || (quote && !quote.enough)"
         class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-lg py-4 rounded-xl mt-4 transition transform hover:-translate-y-1 shadow-[0_10px_30px_rgba(37,99,235,0.3)] disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed">
-        {{ isSubmitting ? `提交中... ${submitProgress}` : `提交 ${parsedOrders.length} 条批量订单` }}
+        <template v-if="isSubmitting">提交中... {{ submitProgress }}</template>
+        <template v-else-if="quote && !quote.enough">余额不足，还差 ¥{{ quote.shortfall.toFixed(4) }}</template>
+        <template v-else>提交 {{ parsedOrders.length }} 条批量订单<template v-if="quote && quote.total_charge > 0"> · ¥{{ quote.total_charge.toFixed(4) }}</template></template>
       </button>
 
       <!-- 结果面板 -->
@@ -70,7 +104,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useUiStore } from '../stores/ui';
 import { useAppStore } from '../stores/app';
@@ -121,7 +155,51 @@ const parsedOrders = computed(() => {
   return valid;
 });
 
-const estimatedTotalText = computed(() => '需提交后计算');
+// ── 预估价 ──────────────────────────────────────────────────────────────
+// 以前这里写死 '需提交后计算' —— 客户贴完点一下就已经扣完钱了，扣多少事先一无所知。
+// 现在输入停顿 350ms 就去后端 /batch/quote 算一次（只算钱，不扣款不建单），
+// 计价用的是和真正下单同一份 pricing.js，所以预览和实扣不可能对不上。
+const quote = ref(null);
+const quoteLoading = ref(false);
+let quoteTimer = null;
+
+const fetchQuote = async () => {
+  const list = parsedOrders.value;
+  if (list.length === 0) { quote.value = null; return; }
+  quoteLoading.value = true;
+  try {
+    const res = await fetch('/api/orders/batch/quote', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userStore.token}`,
+      },
+      body: JSON.stringify({ orders: list }),
+    });
+    const d = await res.json();
+    quote.value = d.status === 'success' ? d.data : null;
+  } catch (e) {
+    quote.value = null;
+  }
+  quoteLoading.value = false;
+};
+
+watch(massData, () => {
+  clearTimeout(quoteTimer);
+  quoteTimer = setTimeout(fetchQuote, 350);
+});
+onUnmounted(() => clearTimeout(quoteTimer));
+
+const truncate = (s, n) => {
+  const x = String(s || '');
+  return x.length > n ? x.slice(0, n) + '…' : x;
+};
+
+const estimatedTotalText = computed(() => {
+  if (quoteLoading.value) return '计算中…';
+  if (!quote.value) return '—';
+  return '¥' + quote.value.total_charge.toFixed(4);
+});
 
 const submitBatch = async () => {
   if (parsedOrders.value.length === 0) {
@@ -131,7 +209,31 @@ const submitBatch = async () => {
     return uiStore.showAlert('单次最多50条，请分批提交（当前' + parsedOrders.value.length + '条）', '批量限制');
   }
 
-  const confirmed = await uiStore.showConfirm(`确认提交 ${parsedOrders.value.length} 条批量订单吗？\n系统将逐条处理并扣费。`);
+  // 提交前再拉一次最新价，避免用户挂机十分钟后价格/余额已经变了
+  await fetchQuote();
+
+  const q = quote.value;
+  if (q && !q.enough) {
+    return uiStore.showAlert(
+      `余额不足\n\n本次需要 ¥${q.total_charge.toFixed(4)}\n当前余额 ¥${q.balance.toFixed(4)}\n还差 ¥${q.shortfall.toFixed(4)}`,
+      '余额不足'
+    );
+  }
+  if (q && q.ok_count === 0) {
+    return uiStore.showAlert('这一批没有任何一条能下单，请按下方提示修正后重试', '无法提交');
+  }
+
+  const lines = [
+    `确认提交 ${q ? q.ok_count : parsedOrders.value.length} 条批量订单吗？`,
+    '',
+    `本次扣费：¥${q ? q.total_charge.toFixed(4) : '—'}`,
+    `当前余额：¥${q ? q.balance.toFixed(4) : '—'}`,
+    `扣费后：¥${q ? (q.balance - q.total_charge).toFixed(4) : '—'}`,
+  ];
+  if (q && q.total !== q.ok_count) {
+    lines.push('', `⚠️ 另有 ${q.total - q.ok_count} 条会被跳过（原因见下方清单）`);
+  }
+  const confirmed = await uiStore.showConfirm(lines.join('\n'), '确认批量下单');
   if (!confirmed) return;
 
   isSubmitting.value = true;
@@ -153,6 +255,7 @@ const submitBatch = async () => {
     if (data.status === 'success') {
       batchResult.value = data.data;
       massData.value = '';
+      quote.value = null;
 
       // 刷新余额
       try {

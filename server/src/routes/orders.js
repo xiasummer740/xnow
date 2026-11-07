@@ -5,6 +5,7 @@ import { sequelize, Order, Service, Config, User, Transaction, SiteServicePrice 
 import { customerDiscountMultiplier } from '../utils/customerPrice.js';
 import { refundOrderFully } from '../utils/orderRefund.js';
 import { isAgentActive } from '../utils/agentStatus.js';
+import { computeOrderPrice } from '../utils/pricing.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 
@@ -475,6 +476,112 @@ router.post('/add', authenticate, async (req, res) => {
 });
 
 // 批量下单
+// ============================================================================
+// 💰 批量下单预估价（POST /api/orders/batch/quote）
+//
+// 为什么要有：批量下单一直是「贴进去点提交，直接扣钱，扣多少事先不知道」。
+//   客户填 20 行、点一下，余额少了几十块才发现某条写错了服务 ID。
+//   单笔下单页有价格预览，批量页写的是「需提交后计算」—— 等于没有。
+//
+// 这个端点**只算钱**：不扣款、不建单、不写库。计价用的是 utils/pricing.js，
+// 和 /batch、/add 是同一份代码，所以预估价和实际扣款永远一致。
+// 顺便把「这条为什么下不了」也提前告诉他：服务不存在/已下架/数量超限/
+// 涨粉填了视频链接/同链接重复 —— 全在提交之前暴露，不用等退款。
+// ============================================================================
+router.post('/batch/quote', authenticate, async (req, res) => {
+  const { orders: batchOrders } = req.body;
+  if (!Array.isArray(batchOrders) || batchOrders.length === 0) {
+    return res.json({ status: 'success', data: { total: 0, ok_count: 0, total_charge: 0, balance: 0, enough: true, shortfall: 0, items: [] } });
+  }
+  if (batchOrders.length > 50) {
+    return res.json({ status: 'error', message: '单次批量最多50条，请分批提交' });
+  }
+
+  const configs = await Config.findAll({ where: { key: ['global_multiplier', 'agent_discount'] } });
+  const conf = {}; configs.forEach(c => (conf[c.key] = c.value));
+
+  const me = await User.findByPk(req.user.id);
+  const balance = me ? parseFloat(me.balance) : 0;
+
+  // 预估价也做重复检查：否则预览说「能下」，一提交全被拦，比没有更糟
+  const normT = (x) => String(x || '').trim().toLowerCase()
+    .replace(/^https?:\/\//, '').replace(/^www\./, '').split('?')[0].replace(/\/+$/, '');
+  const FINISHED = ['已完成', '已取消', '已退款', '部分完成', 'Completed', 'Canceled', 'Cancelled', 'Partial'];
+  const activeByTarget = new Map();
+  try {
+    const rows = await Order.findAll({
+      where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED } },
+      attributes: ['order_no', 'link'],
+    });
+    for (const o of rows) {
+      const k = normT(o.link);
+      if (k && !activeByTarget.has(k)) activeByTarget.set(k, o.order_no);
+    }
+  } catch (e) { /* 查不到就不拦 */ }
+  const seenInQuote = new Map();
+
+  const items = [];
+  let total = 0;
+
+  for (const item of batchOrders) {
+    const { serviceId, link, quantity } = item;
+    const qty = parseInt(quantity);
+    const base = { serviceId, link, quantity: Number.isFinite(qty) ? qty : 0 };
+
+    if (!serviceId || !link || !Number.isFinite(qty) || qty <= 0) {
+      items.push({ ...base, ok: false, message: '参数非法' }); continue;
+    }
+
+    const service = await Service.findByPk(serviceId);
+    if (!service) { items.push({ ...base, ok: false, message: '商品不存在' }); continue; }
+    if (Number(service.sort) === 999999) { items.push({ ...base, ok: false, message: '该服务已下架，请刷新后重选' }); continue; }
+
+    const bType = normType(service.type);
+    if (bType !== 'default') {
+      items.push({ ...base, ok: false, message: `该服务类型（${service.type}）不支持批量，请到「开始下单」单个提交` });
+      continue;
+    }
+    if (qty < service.min || qty > service.max) {
+      items.push({ ...base, ok: false, message: `数量限制 ${service.min}-${service.max}` }); continue;
+    }
+    if (/粉|粉丝|followers?|fans?/i.test(String(service.name || '')) &&
+        /tiktok\.com\/(t|video)\/|youtube\.com\/(watch|shorts)|instagram\.com\/(p|reel)\//i.test(String(link))) {
+      items.push({ ...base, ok: false, message: '涨粉服务要填主页链接或用户名，不是视频链接' }); continue;
+    }
+
+    const nt = normT(link);
+    if (nt) {
+      const dupNo = activeByTarget.get(nt);
+      if (dupNo) { items.push({ ...base, ok: false, message: `该链接已有一单在进行中（${dupNo}）` }); continue; }
+      if (seenInQuote.has(nt)) { items.push({ ...base, ok: false, message: `与第 ${seenInQuote.get(nt)} 条链接重复` }); continue; }
+    }
+
+    try {
+      const price = await computeOrderPrice({ service, qty, orderType: bType, user: me, site: req.site, conf });
+      const charge = Number(price.charge.toFixed(4));
+      total += charge;
+      if (nt) seenInQuote.set(nt, items.length + 1);
+      items.push({ ...base, ok: true, service_name: service.name, charge });
+    } catch (e) {
+      items.push({ ...base, ok: false, message: '价格计算失败，请联系管理员' });
+    }
+  }
+
+  const totalCharge = Number(total.toFixed(4));
+  res.json({
+    status: 'success',
+    data: {
+      total: items.length,
+      ok_count: items.filter(i => i.ok).length,
+      total_charge: totalCharge,
+      balance: Number(balance.toFixed(4)),
+      enough: balance >= totalCharge - 1e-9,
+      shortfall: Math.max(0, Number((totalCharge - balance).toFixed(4))),
+      items,
+    },
+  });
+});
+
 router.post('/batch', authenticate, async (req, res) => {
   const { orders: batchOrders } = req.body;
   if (!Array.isArray(batchOrders) || batchOrders.length === 0) {
@@ -490,12 +597,43 @@ router.post('/batch', authenticate, async (req, res) => {
     return res.json({ status: 'error', message: '服务配置异常，请联系管理员' });
   }
 
-  const baseMultiplier = req.site ? parseFloat(req.site.multiplier) : parseFloat(conf.global_multiplier || 2.0);
-  const agentDiscount = req.site ? parseFloat(req.site.agent_discount) : parseFloat(conf.agent_discount || 0.8);
+  // 倍率/折扣不用在这里算了 —— 统一由 utils/pricing.js 按 service+user+site 计算，
+  // 与 /add 和 /batch/quote 同一份代码。这里只要拿到上游地址和密钥。
 
   const results = [];
   let totalCharge = 0;
   let reportUser = null; // 循环外捕获真实下单用户（供末尾 TG 播报），修复块级作用域 bug
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 🔁 批量同样要拦「同一链接重复下单」和「涨粉填视频链接」。
+  //    /add 早就拦了这两类，批量以前一条都没拦 —— 客户一次贴 4 行相同链接
+  //    能全部提交成功、全部扣费，上游判定重复后整批取消退款，客户白等一场，
+  //    还以为是平台不稳定。这是批量订单最高频的踩坑，必须在扣钱之前拦。
+  //    同时拦三种：库里已有进行中的、本批内重复的、涨粉填了视频链接的。
+  // ══════════════════════════════════════════════════════════════════════════
+  const normTarget = (x) => String(x || '')
+    .trim().toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split('?')[0]
+    .replace(/\/+$/, '');
+
+  const FINISHED_STATUSES = ['已完成', '已取消', '已退款', '部分完成', 'Completed', 'Canceled', 'Cancelled', 'Partial'];
+  const dbActiveByTarget = new Map();  // normTarget → 进行中的单号
+  try {
+    const myActive = await Order.findAll({
+      where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED_STATUSES } },
+      attributes: ['order_no', 'link'],
+    });
+    for (const o of myActive) {
+      const k = normTarget(o.link);
+      if (k && !dbActiveByTarget.has(k)) dbActiveByTarget.set(k, o.order_no);
+    }
+  } catch (e) { /* 查不到就不拦，不影响正常下单 */ }
+
+  // 本批内已经**成功提交**的链接 → 第几条。只记成功的：
+  // 第一条因余额不足失败时，第二条同链接不该被连坐。
+  const submittedInBatch = new Map();
 
   for (const item of batchOrders) {
     const { serviceId, link, quantity } = item;
@@ -534,33 +672,62 @@ router.post('/batch', authenticate, async (req, res) => {
         continue;
       }
 
+      // ── 下单前拦截（与 /add 同口径）────────────────────────────────────
+      const targetRaw = String(link || '').trim();
+      const svcName = String(service.name || '');
+
+      // ① 涨粉/粉丝类要的是「主页」或「用户名」，填视频链接上游一定退
+      if (/粉|粉丝|followers?|fans?/i.test(svcName) &&
+          /tiktok\.com\/(t|video)\/|youtube\.com\/(watch|shorts)|instagram\.com\/(p|reel)\//i.test(targetRaw)) {
+        await t.rollback();
+        results.push({
+          serviceId, link, quantity, status: 'error',
+          message: '这是涨粉服务，要填「主页链接」或「用户名」，不是视频链接',
+        });
+        continue;
+      }
+
+      // ② 同一链接重复下单（库里进行中的 / 本批内已成功的）
+      const nt = normTarget(targetRaw);
+      if (nt) {
+        const dupNo = dbActiveByTarget.get(nt);
+        if (dupNo) {
+          await t.rollback();
+          results.push({
+            serviceId, link, quantity, status: 'error',
+            message: `这个链接已有一单在进行中（单号 ${dupNo}），完成前请勿重复下单`,
+          });
+          continue;
+        }
+        if (submittedInBatch.has(nt)) {
+          await t.rollback();
+          results.push({
+            serviceId, link, quantity, status: 'error',
+            message: `与本次批量第 ${submittedInBatch.get(nt)} 条链接重复，同一链接做完一单再下`,
+          });
+          continue;
+        }
+      }
+
       // 🔒 批量下单同样加行锁，防止并发穿透余额校验
       let user = await User.findByPk(req.user.id, { transaction: t, lock: t.LOCK.UPDATE });
       if (!user && req.user.role !== 'super_admin') { await t.rollback(); results.push({ serviceId, link, quantity, status: 'error', message: '账户异常' }); continue; }
       if (user) reportUser = user;
 
       const actualRole = user ? user.role : req.user.role;
-      let finalMultiplier = baseMultiplier;
-      // 🏬 分站定价权归站长（与 /add 同口径）：买家自己的专属折扣/代理折扣不适用于别人的店
-      if (req.site) {
-        finalMultiplier = (actualRole === 'super_admin' || actualRole === 'admin') ? 1.0 : baseMultiplier;
-      } else if (actualRole === 'super_admin' || actualRole === 'admin') {
-        finalMultiplier = 1.0;
-      } else if (user && user.custom_multiplier !== null && user.custom_multiplier !== undefined) {
-        finalMultiplier = parseFloat(user.custom_multiplier);
-      } else if (isAgentActive(actualRole, user && user.agent_expire_at)) {
-        // 👑 批量下单同口径：代理 8 折也必须在有效期内
-        finalMultiplier = baseMultiplier * agentDiscount;
-      }
 
-      // 🔑 与单笔下单同口径：管理员按上游原价，不套零售加价
-      const isStaff = actualRole === 'super_admin' || actualRole === 'admin';
-      const baseRate = (!isStaff && service.custom_rate !== null && service.custom_rate !== undefined)
-        ? parseFloat(service.custom_rate)
-        : parseFloat(service.rate);
-      const sellRate = baseRate * finalMultiplier;
-      let charge = parseFloat(((qty / 1000) * sellRate).toFixed(4));
-      const upstream_charge = parseFloat(((qty / 1000) * parseFloat(service.rate)).toFixed(4));
+      // 💰 计价统一走 utils/pricing.js —— 与 /add 是**同一份**逻辑。
+      //    以前这里内联了一份精简版，比 /add 少了站点单服务定价、活动折扣、
+      //    客户分组价、订阅计费单位，导致同一服务「单笔」和「批量」价格不同，
+      //    而且分站客户批量下比单笔更贵。现在两头共用，不可能再漂移。
+      const price = await computeOrderPrice({
+        service, qty, postsQty: undefined, orderType: bType,
+        user, site: req.site, conf, transaction: t,
+      });
+      let charge = price.charge;
+      const upstream_charge = price.upstream_charge;
+      let siteCost = price.siteCost;
+      let siteOwner = null;
 
       // 🔒 价格护栏：charge 非正/非法直接拒该条（防负数倍率刷余额）
       if (!isFinite(charge) || charge <= 0) {
@@ -569,29 +736,8 @@ router.post('/batch', authenticate, async (req, res) => {
         continue;
       }
 
-      // 🏬 分站结算（批量同口径）：客户按站主售价付，站主按代理价付成本
-      let siteCost = 0;
-      let siteOwner = null;
+      // 🏬 分站：站主必须有余钱付这次成本
       if (req.site) {
-        // 🔴 2026-11-03 修：这里原来写死 `conf.global_multiplier * conf.agent_discount`（全局 0.8），
-        //    而 /add 用的是**这个站**的 agent_discount。代理站 0.8 / 非代理站 1（原价），
-        //    于是非代理站在批量里被当成代理价算成本 —— 每单少收 20%，
-        //    等于"没买代理资格也享受代理进货价"，代理资格白卖。
-        const siteAd = parseFloat(req.site.agent_discount);
-        const useAd = (isFinite(siteAd) && siteAd > 0) ? siteAd : parseFloat(conf.agent_discount || 0.8);
-        const platformMult = parseFloat(conf.global_multiplier || 2.0) * useAd;
-        siteCost = parseFloat(((qty / 1000) * parseFloat(baseRate) * platformMult).toFixed(6));
-        if (!isFinite(siteCost) || siteCost < 0) {
-          await t.rollback();
-          results.push({ serviceId, link, quantity, status: 'error', message: '价格异常，请联系站长' });
-          continue;
-        }
-        // 🛡 兜底护栏：售价不得低于站长成本（与 /add 同口径）
-        if (charge < siteCost) {
-          console.warn(`[batch] 售价低于分站成本，已抬平：charge=${charge} siteCost=${siteCost} site=${req.site.id}`);
-          charge = siteCost;
-        }
-        // 🔒 站长余额加行锁（批量下单同 /add）
         siteOwner = await User.findByPk(req.site.owner_id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!siteOwner) {
           await t.rollback();
@@ -602,14 +748,6 @@ router.post('/batch', authenticate, async (req, res) => {
           await t.rollback();
           results.push({ serviceId, link, quantity, status: 'error', message: '本站当前无法接单，请联系客服补充库存' });
           continue;
-        }
-      } else {
-        // 🔴 主站批量同样要成本地板（/add 已加，批量以前完全裸奔）：
-        //    客户倍率被设成 0.4 时批量卖一单亏一单，且批量是最高频的下单方式。
-        const floorMain = parseFloat(upstream_charge);
-        if (isFinite(floorMain) && charge < floorMain) {
-          console.warn(`[batch] 主站售价低于上游成本，已抬平：charge=${charge} cost=${floorMain} uid=${req.user.id} service=${serviceId}`);
-          charge = floorMain;
         }
       }
 
@@ -688,6 +826,8 @@ router.post('/batch', authenticate, async (req, res) => {
           { upstream_order_id: String(upRes.data.order), status: '排队中' },
           { where: { id: pendingOrder.id } }
         );
+        // 记下这条链接，本批后面的同链接行会被拦（只记成功的）
+        if (nt) submittedInBatch.set(nt, results.length + 1);
         results.push({ serviceId, link, quantity: qty, status: 'success', order_no: orderNo, charge });
       } else {
         const rf = await refundOrderFully(pendingOrder.id, { reason: '订单未能提交，已全额退款' });

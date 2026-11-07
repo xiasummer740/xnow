@@ -73,14 +73,26 @@ export const autoSyncOrders = async () => {
             let rawStatus = upStatus.status;
 
             // 状态汉化映射
+            // ⚠️ 上游的状态词比想象中多，这张表漏一个，客户界面就露一个英文单词。
+            //    2026-11-07 生产库里抓到 status='Active' 直接展示给了客户（订单 47），
+            //    因为表里只有 In progress / Processing，没有 Active。补上。
             const statusMap = {
               'Pending': '排队中', 'In progress': '进行中', 'Processing': '处理中',
-              'Completed': '已完成', 'Partial': '部分完成',
+              'Active': '进行中', 'Running': '进行中', 'Queued': '排队中', 'In Progress': '进行中',
+              'Completed': '已完成', 'Complete': '已完成', 'Partial': '部分完成',
               // 上游两种拼法都出现过（Canceled / Cancelled），漏一个客户界面就会露英文
               'Canceled': '已取消', 'Cancelled': '已取消', 'Canceled ': '已取消',
-              'Fail': '已取消', 'Failed': '已取消'
+              'Fail': '已取消', 'Failed': '已取消', 'Refunded': '已退款'
             };
             let transStatus = statusMap[rawStatus] || rawStatus;
+
+            // ⚠️ 未识别状态**必须原样保留**，绝不能压成「处理中」：
+            //    万一上游冒出个新的完成类状态（比如 Finished），压成「处理中」会让订单
+            //    永远停在未完结状态，客户的钱一直被占着 —— 那比界面上露个英文单词严重得多。
+            //    所以这里的策略是：能映射就映射，映射不了就存原文 + 打日志等人补表。
+            if (!statusMap[rawStatus]) {
+              console.warn(`[OrderSync] 未识别的上游状态 "${rawStatus}"（order=${order.order_no}），已按原文保存，请补 statusMap`);
+            }
 
             const isCancel = transStatus === '已取消';
             const isPartial = transStatus === '部分完成';
