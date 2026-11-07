@@ -23,7 +23,8 @@
               <th class="px-5 py-4">系统单号 / 时间</th>
               <th class="px-5 py-4">目标链接 (Link)</th>
               <th class="px-5 py-4">服务名称 (Service)</th>
-              <th class="px-5 py-4 text-center">初始 / 数量 / 剩余</th>
+              <!-- 「进度」而不是「初始 / 数量 / 剩余」：订阅型显示的是「已投喂 N/M 次」，不是数量进度 -->
+              <th class="px-5 py-4 text-center">进度</th>
               <th class="px-5 py-4 text-right">消费金额</th>
               <th class="px-5 py-4 text-right">当前状态</th>
             </tr>
@@ -43,7 +44,18 @@
                 </div>
               </td>
               <td class="px-5 py-4 text-center">
-                <div class="flex items-center justify-center space-x-2 text-xs font-mono">
+                <!-- 📡 订阅型：没有「初始/剩余」概念。
+                     它买的是「以后每发一条新视频，自动投喂 N 个播放」，
+                     上游也不返回 remains，套普通模板会显示成「0 / 400 / 0」，
+                     看着像「啥也没干、也没剩」，客户会以为订单卡住了。 -->
+                <div v-if="isSubscription(order)" class="text-xs font-mono leading-relaxed">
+                  <div class="text-blue-400 font-bold">监听中</div>
+                  <div class="text-slate-300 mt-0.5">
+                    已投喂 <span class="text-amber-400 font-bold">{{ subFed(order) }}</span><template v-if="subTotal(order)">/{{ subTotal(order) }}</template> 次
+                  </div>
+                  <div class="text-slate-500 text-[10px] mt-0.5">每次 {{ order.quantity }}</div>
+                </div>
+                <div v-else class="flex items-center justify-center space-x-2 text-xs font-mono">
                   <span class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400 tooltip" title="初试计数">{{ order.start_count }}</span>
                   <span class="text-slate-500">/</span>
                   <span class="font-bold text-white tooltip" title="下单数量">{{ order.quantity }}</span>
@@ -94,7 +106,15 @@
           <a v-if="order.link && order.link !== 'audit-check'" :href="order.link" target="_blank"
              class="block text-[11px] text-blue-400 truncate">{{ order.link }}</a>
           <div class="flex items-center justify-between pt-1 border-t border-slate-800">
-            <div class="flex items-center gap-1.5 text-[11px] font-mono">
+            <!-- 📡 订阅型（手机端）：显示投喂进度，不显示「初始/数量/剩余」 -->
+            <div v-if="isSubscription(order)" class="text-[11px] font-mono">
+              <span class="text-blue-400 font-bold">监听中</span>
+              <span class="text-slate-600 mx-1">·</span>
+              <span class="text-slate-300">已投喂 <span class="text-amber-400 font-bold">{{ subFed(order) }}</span><template v-if="subTotal(order)">/{{ subTotal(order) }}</template> 次</span>
+              <span class="text-slate-600 mx-1">·</span>
+              <span class="text-slate-500">每次 {{ order.quantity }}</span>
+            </div>
+            <div v-else class="flex items-center gap-1.5 text-[11px] font-mono">
               <span class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">{{ order.start_count }}</span>
               <span class="text-slate-600">/</span>
               <span class="font-bold text-white">{{ order.quantity }}</span>
@@ -139,6 +159,33 @@ const page = ref(1);
 const itemsPerPage = 20;
 
 // 💡 核心注入：搬运自管理后台的鲁棒性极强的时间格式化函数
+// 📡 订阅型（Subscriptions）在界面上不能按「初始 / 数量 / 剩余」渲染。
+//    它买的不是「立即给你 N 个播放」，而是「以后每发一条新视频，自动投喂 N 个播放」，
+//    上游也根本不返回 remains —— 套普通模板会显示成「0 / 400 / 0」，
+//    看着像「啥也没干、也没剩」，客户会以为订单卡住了。
+const parseExt = (o) => {
+  if (!o || !o.ext_fields) return null;
+  try { return JSON.parse(o.ext_fields); } catch (e) { return null; }
+};
+const isSubscription = (o) => {
+  const ext = parseExt(o);
+  if (ext && ext.type) return String(ext.type).toLowerCase() === 'subscriptions';
+  // 老订单没存 ext_fields，用后端补的 service_type 兜底
+  return String((o && o.service_type) || '').toLowerCase() === 'subscriptions';
+};
+// 已投喂几次：上游的 posts 由 orderSync 回填到 ext_fields.fed
+const subFed = (o) => {
+  const ext = parseExt(o);
+  const n = Number(ext && ext.fed);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+// 一共买了几次投喂：ext_fields.posts。老订单没存就返回 null，界面不显示分母。
+const subTotal = (o) => {
+  const ext = parseExt(o);
+  const n = Number(ext && ext.posts);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 const formatTime = (isoString) => {
     if (!isoString) return '--';
     try {

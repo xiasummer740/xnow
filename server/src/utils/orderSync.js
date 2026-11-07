@@ -208,6 +208,24 @@ export const autoSyncOrders = async () => {
               order.status = transStatus;
               order.start_count = upStatus.start_count || order.start_count;
               order.remains = nextRemains(upStatus.remains, order.remains);
+
+              // 📡 订阅型进度：上游的 `posts` 是「已投喂几条新帖」，不是数量进度。
+              //    订阅型根本没有 remains 概念（上游不返回这个字段），所以 remains 恒为 0，
+              //    界面上的「0 / 400 / 0」看着像「啥也没干、也没剩」。
+              //    把 posts 记进 ext_fields.fed，前端才能显示「已投喂 3/30 次」。
+              if (order.ext_fields) {
+                try {
+                  const ext = JSON.parse(order.ext_fields);
+                  if (ext && String(ext.type || '').toLowerCase() === 'subscriptions') {
+                    const fed = Number(upStatus.posts);
+                    if (Number.isFinite(fed) && fed >= 0 && fed !== Number(ext.fed)) {
+                      ext.fed = fed;
+                      order.ext_fields = JSON.stringify(ext);
+                    }
+                  }
+                } catch (e) { /* ext_fields 不是合法 JSON 就跳过，不能影响状态同步 */ }
+              }
+
               await order.save();
             }
           }

@@ -361,6 +361,33 @@ router.post('/add', authenticate, async (req, res) => {
     // 🏬 订单号前缀：主站沿用 XN；分站不带平台首字母 —— 这个号会出现在客户的历史订单、
     //    邮件和客服对话里，'XN' 三个字母等于在每张单子上盖平台的章。
     orderNo = (req.site ? '' : 'XN') + Date.now() + Math.floor(Math.random()*100);
+    // 📦 特殊类型的下单参数必须留痕。
+    //    以前 Order.create 只写 link/quantity，订阅型填的「投喂几条新帖」「到期日」
+    //    全部丢掉。客户来问「我明明填了 50 条」，系统里查不到任何证据，
+    //    只能靠订单金额倒推 —— 服务一旦改价就倒推错了。
+    //    现在原样存进 ext_fields，客服对账和订单详情都有据可查。
+    const buildExtFields = () => {
+      const ext = { type: service.type };
+      if (orderType === 'subscriptions') {
+        if (username) ext.username = String(username).trim();
+        if (postsQty) ext.posts = postsQty;             // 买了几次投喂
+        if (expiry) ext.expiry = String(expiry).trim();
+        if (delay !== undefined && delay !== null && delay !== '') ext.delay = Number(delay) || 0;
+        ext.fed = 0;                                     // 已投喂次数，由 orderSync 更新
+      } else if (orderType === 'custom comments') {
+        ext.comments = String(comments || custom_comments || '').slice(0, 5000);
+      } else if (orderType === 'mentions hashtag') {
+        if (hashtag) ext.hashtag = String(hashtag).trim();
+      } else if (orderType === 'poll') {
+        if (answerNumber !== undefined && answerNumber !== null && answerNumber !== '') ext.answer_number = answerNumber;
+      } else if (orderType === 'package') {
+        if (runs !== undefined && runs !== '') ext.runs = runs;
+        if (interval !== undefined && interval !== '') ext.interval = interval;
+      }
+      // 只有 type 一项说明是普通服务，没必要占字段
+      return Object.keys(ext).length > 1 ? JSON.stringify(ext) : null;
+    };
+
     const pendingOrder = await Order.create({
       order_no: orderNo, user_id: req.user.id, phone: user ? user.phone : 'SuperAdmin',
       site_id: req.site ? Number(req.site.id) : 0,
@@ -369,6 +396,7 @@ router.post('/add', authenticate, async (req, res) => {
       service_name: service.name,
       // 🔌 订阅型/邀请型没有 link，用 username 落到 link 列：历史订单里才看得出"下给谁"
       link: link || username, quantity: qty, charge: chargeFinal, upstream_charge,
+      ext_fields: buildExtFields(),
       status: '提交中'   // ← 上游单号回来之前停在这里；超时残留由 utils/orderSync.js 清扫退款
     }, { transaction: t });
 
@@ -877,9 +905,31 @@ router.get('/', authenticate, async (req, res) => {
         'id', 'order_no', 'service_id', 'service_name', 'link', 'quantity',
         'charge', 'status', 'remains', 'start_count', 'is_refunded', 'created_at',
         // 💬 退款原因：客户看到「已退款」却没有原因，会默认是平台不行
-        'refund_reason'
+        'refund_reason',
+        // 📦 特殊类型的下单参数（订阅型的投喂次数/到期日/已投喂数）。
+        //    这里放的都是客户自己填的东西，不涉及成本，可以下发。
+        'ext_fields'
       ]
     });
+
+    // 🏷 服务类型：orders 表本身不存 type，历史订单也没有 ext_fields，
+    //    界面要区分「订阅型」和普通服务就得补这一层，否则老订单一律按普通单渲染。
+    const svcIds = [...new Set(orders.map(o => o.service_id).filter(Boolean))];
+    if (svcIds.length) {
+      try {
+        const svcs = await Service.findAll({
+          where: { service_id: svcIds },
+          attributes: ['service_id', 'type'],
+        });
+        const typeMap = new Map(svcs.map(s => [String(s.service_id), s.type]));
+        for (const o of orders) {
+          o.dataValues.service_type = typeMap.get(String(o.service_id)) || null;
+        }
+      } catch (e) {
+        // 查不到就靠 ext_fields.type 兜底，不影响订单列表
+        console.warn('[orders] 补充服务类型失败:', (e && e.message) || e);
+      }
+    }
     // 🌐 状态兜底汉化：上游偶尔回 Canceled / Cancelled / Fail 这类原文，
     //    orderSync 那边映射漏一个，客户界面就会直接露出英文（2026-11-06 截图里的
     //    「Cancelled」就是这么来的）。这里出库前统一过滤一遍。
