@@ -1,279 +1,277 @@
 <template>
-  <div class="vx-root">
-    <!-- ═══ 背景层：深空 + 网格 + 扫描线 ═══ -->
-    <div class="vx-aurora" aria-hidden="true"></div>
-    <div class="vx-grid" aria-hidden="true"></div>
-    <div class="vx-scanline" aria-hidden="true"></div>
+  <div class="lc-root" :data-theme="theme" @mousemove="onMove" @mouseleave="onLeave">
+    <div class="lc-grain" aria-hidden="true"></div>
 
-    <div class="relative max-w-5xl mx-auto px-4 pb-20">
+    <!-- ═══ 顶栏 + 主题切换 ═══ -->
+    <header class="lc-top">
+      <div class="lc-top-l">
+        <span class="lc-mark">XNOW</span>
+        <span class="lc-top-slash">/</span>
+        <span class="lc-top-t">NODES</span>
+      </div>
+      <div class="lc-themes">
+        <span class="lc-themes-l">STYLE</span>
+        <button v-for="t in THEMES" :key="t.v" @click="setTheme(t.v)"
+          :class="['lc-theme-btn', theme === t.v && 'is-on']" :title="t.d">{{ t.t }}</button>
+      </div>
+      <div class="lc-top-r">
+        <span class="lc-top-t">{{ nodes.length || '00' }} LOC</span>
+        <span class="lc-top-dot"></span>
+        <span class="lc-top-t">{{ bestLatency }}</span>
+      </div>
+    </header>
 
-      <!-- ═══ HUD 状态条 ═══ -->
-      <div class="vx-hud">
-        <span class="vx-ping"><i></i></span>
-        <span class="vx-hud-txt">SYSTEM ONLINE</span>
-        <span class="vx-hud-dim">/</span>
-        <span class="vx-hud-txt">{{ nodes.length || '00' }} NODES</span>
-        <span class="vx-hud-dim">/</span>
-        <span class="vx-hud-txt">{{ bestLatency }}</span>
-        <span class="vx-hud-dim vx-hide-sm">/</span>
-        <span class="vx-hud-dim vx-hide-sm">VLESS · VMESS · TROJAN · SS · HY2</span>
+    <!-- ═══ 首屏 ═══ -->
+    <section class="lc-hero">
+      <div class="lc-vtext" aria-hidden="true">
+        <span>安全节点</span>
+        <span class="lc-vtext-en">SECURE / ROUTE</span>
       </div>
 
-      <!-- ═══ HERO ═══ -->
-      <header class="vx-hero">
-        <div class="vx-badge">
-          <span class="vx-badge-dot"></span>
-          {{ appStore.lang === 'zh' ? '跨境创作者专属线路' : 'BUILT FOR CREATORS' }}
+      <div class="lc-orb-wrap" :style="orbStyle" aria-hidden="true">
+        <div class="lc-orb">
+          <div class="lc-orb-sheen"></div>
+          <div class="lc-orb-ring"></div>
+          <div class="lc-orb-grid"></div>
         </div>
+        <div class="lc-orb-shadow"></div>
+        <div class="lc-orb-orbit"><span class="lc-orbit-dot"></span></div>
+      </div>
 
-        <h1 class="vx-h1">
-          <span class="vx-grad">{{ appStore.lang === 'zh' ? '账号在哪' : 'YOUR IP,' }}</span>
-          <span class="vx-slash">/</span>
-          <span class="vx-h1-plain">{{ appStore.lang === 'zh' ? 'IP 就在哪' : 'WHERE YOU ARE' }}</span>
-        </h1>
-
-        <p class="vx-sub">
-          {{ appStore.lang === 'zh'
-            ? 'TikTok 限流、账号被标记、直播掉帧 —— 跨境自媒体里，IP 纯净度直接决定账号生死。原生住宅 IP + TLS/Reality 伪装，让你的流量真正「像当地人」。'
-            : 'Shadow banned? IP flagged? Laggy streams? Residential IPs with TLS+Reality obfuscation — make your traffic look 100% local.' }}
+      <div class="lc-head">
+        <p class="lc-eyebrow">
+          <span class="lc-eyebrow-line"></span>
+          {{ appStore.lang === 'zh' ? '为跨境创作者而建' : 'BUILT FOR CREATORS' }}
         </p>
 
-        <!-- 数据 HUD 卡 -->
-        <div class="vx-stats">
-          <div class="vx-stat">
-            <div class="vx-stat-n vx-grad-n">{{ nodes.length || '00' }}</div>
-            <div class="vx-stat-l">{{ appStore.lang === 'zh' ? '全球节点' : 'NODES' }}</div>
-          </div>
-          <div class="vx-stat">
-            <div class="vx-stat-n">99.9<span class="vx-unit">%</span></div>
-            <div class="vx-stat-l">{{ appStore.lang === 'zh' ? '在线率' : 'UPTIME' }}</div>
-          </div>
-          <div class="vx-stat">
-            <div class="vx-stat-n">Reality</div>
-            <div class="vx-stat-l">{{ appStore.lang === 'zh' ? '协议伪装' : 'STEALTH' }}</div>
-          </div>
-          <div class="vx-stat">
-            <div class="vx-stat-n vx-grad-n">{{ bestLatency }}</div>
-            <div class="vx-stat-l">{{ appStore.lang === 'zh' ? '最优延迟' : 'BEST PING' }}</div>
-          </div>
-        </div>
+        <h1 class="lc-title">
+          <span class="lc-title-a">{{ appStore.lang === 'zh' ? '账号在哪' : 'YOUR IP' }}</span>
+          <span class="lc-title-b">{{ appStore.lang === 'zh' ? 'IP 就在哪' : 'LIVES HERE' }}</span>
+        </h1>
 
-        <!-- 免费试用 -->
-        <div v-if="trialEnabled" class="vx-trial-wrap">
-          <button @click="startTrial" :disabled="trialBusy" class="vx-trial">
-            <span class="vx-trial-ico">◈</span>
-            {{ trialBusy ? '···' : (appStore.lang === 'zh' ? '免费试用 100MB' : 'FREE TRIAL 100MB') }}
+        <p class="lc-lede">
+          {{ appStore.lang === 'zh'
+            ? 'TikTok 限流、账号被标记、直播掉帧 —— 跨境自媒体里，IP 纯净度直接决定账号生死。原生住宅 IP + TLS/Reality 伪装，让你的流量真正「像当地人」。'
+            : 'Shadow banned? IP flagged? Laggy streams? Residential IPs with TLS+Reality obfuscation.' }}
+        </p>
+
+        <div class="lc-cta-row">
+          <button v-if="trialEnabled" @click="startTrial" :disabled="trialBusy" class="lc-btn lc-btn-acid">
+            {{ trialBusy ? '···' : (appStore.lang === 'zh' ? '免费试用 100MB' : 'FREE TRIAL') }}
+            <span class="lc-btn-arrow">↗</span>
           </button>
-          <p class="vx-trial-hint">{{ appStore.lang === 'zh' ? '新用户专享 · 无需付费 · 注册即用' : 'New users · No payment required' }}</p>
-        </div>
-      </header>
-
-      <!-- ═══ 能力卡 ═══ -->
-      <div class="vx-feats">
-        <div class="vx-feat">
-          <div class="vx-feat-ico">◎</div>
-          <h4>{{ appStore.lang === 'zh' ? '精准定位' : 'GEO-TARGET' }}</h4>
-          <p>{{ appStore.lang === 'zh' ? '原生住宅 IP，算法识别为本地用户，推流权重翻倍' : 'Residential IPs. Algorithm sees you as local.' }}</p>
-        </div>
-        <div class="vx-feat">
-          <div class="vx-feat-ico">⬡</div>
-          <h4>{{ appStore.lang === 'zh' ? '防封防标记' : 'ANTI-BAN' }}</h4>
-          <p>{{ appStore.lang === 'zh' ? 'TLS 指纹伪装成普通浏览器流量，平台无法识别' : 'TLS fingerprinting masks traffic as browsing.' }}</p>
-        </div>
-        <div class="vx-feat">
-          <div class="vx-feat-ico">⚡</div>
-          <h4>{{ appStore.lang === 'zh' ? '直播不卡顿' : 'ZERO LAG' }}</h4>
-          <p>{{ appStore.lang === 'zh' ? 'CN2 GIA / CMIN2 优化线路，跨国直播稳 60 帧' : 'Premium routes. Smooth streaming, no frame drops.' }}</p>
+          <a href="#pick" class="lc-btn lc-btn-ghost">
+            {{ appStore.lang === 'zh' ? '选择节点' : 'SELECT NODE' }}
+            <span class="lc-btn-arrow">↓</span>
+          </a>
         </div>
       </div>
+    </section>
 
-      <!-- ═══ 空态：没配节点时 ═══ -->
-      <div v-if="!loading && nodes.length === 0" class="vx-empty">
-        <div class="vx-empty-ring"></div>
-        <div class="vx-empty-t">NODE DEPLOYING</div>
-        <p class="vx-empty-p">{{ appStore.lang === 'zh'
-          ? '节点正在部署中。开通后本页会自动列出全部地区、价格与实时延迟。'
-          : 'Nodes are being deployed. Regions, pricing and live latency will appear here.' }}</p>
+    <!-- ═══ 数据条 ═══ -->
+    <div class="lc-ticker">
+      <div class="lc-ticker-item">
+        <span class="lc-ticker-n">{{ nodes.length || '00' }}</span>
+        <span class="lc-ticker-l">{{ appStore.lang === 'zh' ? '全球节点' : 'LOCATIONS' }}</span>
+      </div>
+      <div class="lc-ticker-item">
+        <span class="lc-ticker-n">99.9<i>%</i></span>
+        <span class="lc-ticker-l">{{ appStore.lang === 'zh' ? '在线率' : 'UPTIME' }}</span>
+      </div>
+      <div class="lc-ticker-item">
+        <span class="lc-ticker-n">{{ bestLatency }}</span>
+        <span class="lc-ticker-l">{{ appStore.lang === 'zh' ? '最优延迟' : 'BEST PING' }}</span>
+      </div>
+      <div class="lc-ticker-item">
+        <span class="lc-ticker-n lc-ticker-word">Reality</span>
+        <span class="lc-ticker-l">{{ appStore.lang === 'zh' ? '协议伪装' : 'STEALTH' }}</span>
+      </div>
+    </div>
+
+    <main class="lc-main">
+      <div v-if="!loading && nodes.length === 0" class="lc-empty">
+        <div class="lc-empty-orb"></div>
+        <p class="lc-empty-t">NODE DEPLOYING</p>
+        <p class="lc-empty-p">{{ appStore.lang === 'zh'
+          ? '节点正在部署。开通后这里会自动列出全部地区、价格与实时延迟。'
+          : 'Nodes are being deployed.' }}</p>
       </div>
 
-      <!-- ═══ 加载 ═══ -->
-      <div v-if="loading" class="vx-loading">
-        <div class="vx-loading-bar"><i></i></div>
-        <p>INITIALIZING ···</p>
+      <div v-if="loading" class="lc-loading">
+        <span class="lc-loading-t">LOADING</span>
+        <span class="lc-loading-dots"><i></i><i></i><i></i></span>
       </div>
 
       <template v-else-if="nodes.length > 0">
-        <!-- ═══ 步骤 ①  选节点 ═══ -->
-        <section class="vx-sec">
-          <div class="vx-sec-head">
-            <span class="vx-sec-num">01</span>
-            <h2 class="vx-sec-t">{{ appStore.lang === 'zh' ? '选择节点' : 'SELECT NODE' }}</h2>
-            <div class="vx-sec-line"></div>
-          </div>
-
-          <div class="vx-tools">
-            <div class="vx-search">
-              <span class="vx-search-ico">⌕</span>
-              <input v-model="searchQuery" type="text"
-                :placeholder="appStore.lang === 'zh' ? '搜索地区或机房…' : 'Search region…'" />
-            </div>
-            <div class="vx-chips">
+        <!-- ① -->
+        <section id="pick" class="lc-sec">
+          <div class="lc-sec-head">
+            <span class="lc-idx">01</span>
+            <h2 class="lc-sec-t">{{ appStore.lang === 'zh' ? '选择地区' : 'LOCATION' }}</h2>
+            <div class="lc-sec-fill"></div>
+            <div class="lc-filter">
               <button v-for="r in regionOptions" :key="r.v" @click="regionFilter = r.v"
-                :class="['vx-chip', regionFilter === r.v && 'is-on']">{{ r.t }}</button>
+                :class="['lc-filter-btn', regionFilter === r.v && 'is-on']">{{ r.t }}</button>
             </div>
           </div>
 
-          <div class="vx-nodes">
-            <button v-for="n in filteredNodes" :key="n.id" @click="selectNode(n)"
-              :class="['vx-node', selectedNode?.id === n.id && 'is-on', n._demo && 'is-demo']">
-              <div class="vx-node-top">
-                <img v-if="getFlagUrl(n)" :src="getFlagUrl(n)" class="vx-flag"
-                  @error="e => e.target.style.display = 'none'" />
-                <span v-else class="vx-flag vx-flag-ph">{{ (n.flag_emoji || '◈') }}</span>
-                <span class="vx-node-name">{{ n.name }}</span>
-                <span v-if="n._demo" class="vx-demo-tag">示例</span>
-                <span v-if="selectedNode?.id === n.id" class="vx-node-check">✓</span>
+          <div class="lc-search">
+            <input v-model="searchQuery" type="text"
+              :placeholder="appStore.lang === 'zh' ? '搜索地区或机房' : 'Search region'" />
+            <span class="lc-search-line"></span>
+          </div>
+
+          <div class="lc-grid">
+            <button v-for="(n, i) in filteredNodes" :key="n.id" @click="selectNode(n)"
+              :class="['lc-card', selectedNode?.id === n.id && 'is-on', n._demo && 'is-demo']"
+              :style="{ '--d': (i * 55) + 'ms' }">
+              <div class="lc-card-top">
+                <span class="lc-card-flag">
+                  <img v-if="getFlagUrl(n)" :src="getFlagUrl(n)" alt=""
+                    @error="e => e.target.style.display = 'none'" />
+                  <span v-else>{{ n.flag_emoji || '◈' }}</span>
+                </span>
+                <span v-if="n._demo" class="lc-demo">示例</span>
+                <span v-if="selectedNode?.id === n.id" class="lc-card-on">◆</span>
               </div>
-
-              <div class="vx-node-loc">{{ n.vps_location || '—' }}</div>
-
-              <div class="vx-node-foot">
-                <span class="vx-node-price">¥{{ parseFloat(n.price_per_gb || 0).toFixed(2) }}<i>/GB</i></span>
-                <span :class="['vx-lat', latClass(n.id)]">{{ latText(n.id) }}</span>
+              <h3 class="lc-card-name">{{ n.name }}</h3>
+              <p class="lc-card-loc">{{ n.vps_location || '—' }}</p>
+              <div class="lc-card-foot">
+                <span class="lc-card-price">
+                  <i>¥</i>{{ parseFloat(n.price_per_gb || 0).toFixed(2) }}<em>/GB</em>
+                </span>
+                <span :class="['lc-lat', latClass(n.id)]">{{ latText(n.id) }}</span>
               </div>
-
-              <div class="vx-node-glow"></div>
+              <span class="lc-card-sweep" aria-hidden="true"></span>
             </button>
 
-            <div v-if="filteredNodes.length === 0" class="vx-none">
-              <span class="vx-none-ico">⌕</span>
-              <p>{{ appStore.lang === 'zh' ? '没有匹配的节点' : 'No nodes found' }}</p>
+            <div v-if="filteredNodes.length === 0" class="lc-none">
+              {{ appStore.lang === 'zh' ? '没有匹配的节点' : 'NO MATCH' }}
             </div>
           </div>
         </section>
 
-        <!-- ═══ 步骤 ②③  流量 + 时长 ═══ -->
         <template v-if="selectedNode">
-          <section class="vx-sec">
-            <div class="vx-sec-head">
-              <span class="vx-sec-num">02</span>
-              <h2 class="vx-sec-t">{{ appStore.lang === 'zh' ? '流量配额' : 'TRAFFIC' }}</h2>
-              <div class="vx-sec-line"></div>
+          <!-- ② -->
+          <section class="lc-sec">
+            <div class="lc-sec-head">
+              <span class="lc-idx">02</span>
+              <h2 class="lc-sec-t">{{ appStore.lang === 'zh' ? '流量配额' : 'TRAFFIC' }}</h2>
+              <div class="lc-sec-fill"></div>
             </div>
-            <div class="vx-pick">
+            <div class="lc-opts">
               <button v-for="g in affordableTraffic" :key="g" @click="selectedTraffic = g"
-                :class="['vx-pick-btn', selectedTraffic === g && 'is-on']">
-                <span class="vx-pick-v">{{ g >= 1000 ? (g / 1000).toFixed(1) + 'TB' : g + 'GB' }}</span>
-                <span class="vx-pick-sub">¥{{ trafficPrice(g).toFixed(0) }}</span>
+                :class="['lc-opt', selectedTraffic === g && 'is-on']">
+                <span class="lc-opt-v">{{ g >= 1000 ? (g / 1000).toFixed(1) : g }}</span>
+                <span class="lc-opt-u">{{ g >= 1000 ? 'TB' : 'GB' }}</span>
+                <span class="lc-opt-p">¥{{ trafficPrice(g).toFixed(0) }}</span>
               </button>
-              <div v-if="affordableTraffic.length === 0" class="vx-warn">
-                {{ appStore.lang === 'zh' ? '此节点已达容量上限' : 'Node at capacity' }}
+              <div v-if="affordableTraffic.length === 0" class="lc-warn">
+                {{ appStore.lang === 'zh' ? '此节点已达容量上限' : 'AT CAPACITY' }}
               </div>
             </div>
           </section>
 
-          <section class="vx-sec">
-            <div class="vx-sec-head">
-              <span class="vx-sec-num">03</span>
-              <h2 class="vx-sec-t">{{ appStore.lang === 'zh' ? '使用时长' : 'DURATION' }}</h2>
-              <div class="vx-sec-line"></div>
+          <!-- ③ -->
+          <section class="lc-sec">
+            <div class="lc-sec-head">
+              <span class="lc-idx">03</span>
+              <h2 class="lc-sec-t">{{ appStore.lang === 'zh' ? '使用时长' : 'DURATION' }}</h2>
+              <div class="lc-sec-fill"></div>
             </div>
-            <div class="vx-pick vx-pick-4">
+            <div class="lc-opts lc-opts-4">
               <button v-for="d in durationOptions" :key="d.days" @click="selectedDuration = d"
-                :class="['vx-pick-btn', selectedDuration?.days === d.days && 'is-on']">
-                <span v-if="d.discount <= 0.75" class="vx-best">BEST</span>
-                <span class="vx-pick-v">{{ d.label }}</span>
-                <span v-if="d.discount < 1" class="vx-pick-off">-{{ Math.round((1 - d.discount) * 100) }}%</span>
+                :class="['lc-opt', selectedDuration?.days === d.days && 'is-on']">
+                <span v-if="d.discount <= 0.75" class="lc-opt-best">BEST</span>
+                <span class="lc-opt-v lc-opt-v-sm">{{ d.label }}</span>
+                <span v-if="d.discount < 1" class="lc-opt-off">−{{ Math.round((1 - d.discount) * 100) }}%</span>
               </button>
             </div>
           </section>
 
-          <!-- 节点指标 HUD -->
-          <div class="vx-metrics">
-            <div class="vx-metric">
-              <span class="vx-metric-k">PROTOCOLS</span>
-              <span class="vx-metric-v">{{ getProtocols(selectedNode).length }}</span>
+          <div class="lc-specs">
+            <div class="lc-spec">
+              <span class="lc-spec-k">PROTOCOL</span>
+              <span class="lc-spec-v">{{ getProtocols(selectedNode).length }} 种</span>
             </div>
-            <div class="vx-metric">
-              <span class="vx-metric-k">CAPACITY</span>
-              <span class="vx-metric-v">{{ selectedNode.max_traffic_gb }}<i>GB</i></span>
+            <div class="lc-spec">
+              <span class="lc-spec-k">CAPACITY</span>
+              <span class="lc-spec-v">{{ selectedNode.max_traffic_gb }}<i>GB</i></span>
             </div>
-            <div class="vx-metric">
-              <span class="vx-metric-k">ROUTE</span>
-              <span class="vx-metric-v vx-metric-sm">{{ selectedNode.description || 'BGP' }}</span>
+            <div class="lc-spec">
+              <span class="lc-spec-k">ROUTE</span>
+              <span class="lc-spec-v lc-spec-v-sm">{{ selectedNode.description || 'BGP' }}</span>
             </div>
-            <div class="vx-metric">
-              <span class="vx-metric-k">LATENCY</span>
-              <span :class="['vx-metric-v', latClass(selectedNode.id)]">{{ latText(selectedNode.id) }}</span>
+            <div class="lc-spec">
+              <span class="lc-spec-k">LATENCY</span>
+              <span :class="['lc-spec-v', latClass(selectedNode.id)]">{{ latText(selectedNode.id) }}</span>
             </div>
           </div>
 
-          <div class="vx-protos">
-            <span v-for="p in getProtocols(selectedNode)" :key="p" class="vx-proto">{{ p }}</span>
+          <div class="lc-protos">
+            <span v-for="p in getProtocols(selectedNode)" :key="p" class="lc-proto">{{ p }}</span>
           </div>
 
-          <!-- 优惠码 -->
-          <div class="vx-coupon">
+          <div class="lc-coupon">
+            <span class="lc-coupon-l">COUPON</span>
             <input v-model="couponCode" @keyup.enter="applyCoupon" type="text" maxlength="20"
-              :placeholder="appStore.lang === 'zh' ? '优惠码（可选）' : 'COUPON (OPT)'" />
-            <button @click="applyCoupon" :disabled="couponApplying" class="vx-coupon-btn">
+              :placeholder="appStore.lang === 'zh' ? '输入优惠码' : 'Enter code'" />
+            <button @click="applyCoupon" :disabled="couponApplying" class="lc-coupon-btn">
               {{ couponApplying ? '···' : (appStore.lang === 'zh' ? '应用' : 'APPLY') }}
             </button>
-            <button v-if="couponApplied" @click="removeCoupon" class="vx-coupon-x">✕</button>
+            <button v-if="couponApplied" @click="removeCoupon" class="lc-coupon-x">✕</button>
           </div>
-          <p v-if="couponApplied" class="vx-ok">◈ 优惠码 {{ couponApplied.code }} · 已减 ¥{{ couponApplied.discount }}</p>
-          <p v-if="couponError" class="vx-err">{{ couponError }}</p>
+          <p v-if="couponApplied" class="lc-ok">− ¥{{ couponApplied.discount }} · {{ couponApplied.code }}</p>
+          <p v-if="couponError" class="lc-err">{{ couponError }}</p>
 
-          <!-- ═══ 结算栏 ═══ -->
-          <div class="vx-pay">
-            <div class="vx-pay-l">
-              <div class="vx-pay-desc">
-                {{ selectedNode.name }}
-                <span class="vx-dot-s">·</span>
-                {{ selectedTraffic }}GB
-                <span class="vx-dot-s">·</span>
-                {{ selectedDuration?.label }}
+          <div class="lc-pay">
+            <div class="lc-pay-l">
+              <p class="lc-pay-desc">
+                {{ selectedNode.name }} · {{ selectedTraffic }}GB · {{ selectedDuration?.label }}
+              </p>
+              <div class="lc-pay-amount">
+                <span class="lc-pay-cur">¥</span>
+                <span class="lc-pay-num" :key="(couponApplied ? couponApplied.final_amount : finalPrice).toFixed(2)">
+                  {{ (couponApplied ? couponApplied.final_amount : finalPrice).toFixed(2) }}
+                </span>
+                <span v-if="couponApplied" class="lc-pay-was">¥{{ finalPrice.toFixed(2) }}</span>
               </div>
-              <div class="vx-pay-price">
-                <span class="vx-cur">¥</span>{{ (couponApplied ? couponApplied.final_amount : finalPrice).toFixed(2) }}
-                <span v-if="couponApplied" class="vx-was">¥{{ finalPrice.toFixed(2) }}</span>
-              </div>
-              <div :class="['vx-bal', balanceOk ? 'is-ok' : 'is-bad']">
-                {{ appStore.lang === 'zh' ? '余额' : 'BAL' }} ¥{{ parseFloat(userStore.userInfo?.balance || 0).toFixed(2) }}
-                <span v-if="!balanceOk"> · {{ appStore.lang === 'zh' ? '不足' : 'LOW' }}</span>
-              </div>
+              <p :class="['lc-pay-bal', balanceOk ? 'is-ok' : 'is-bad']">
+                {{ appStore.lang === 'zh' ? '余额' : 'BALANCE' }} ¥{{ parseFloat(userStore.userInfo?.balance || 0).toFixed(2) }}
+              </p>
             </div>
-            <div class="vx-pay-r">
-              <button @click="buy" :disabled="buying" class="vx-buy">
-                <span class="vx-buy-txt">{{ buying ? '···' : (appStore.lang === 'zh' ? '立即购买' : 'BUY NOW') }}</span>
-                <span class="vx-buy-shine"></span>
+            <div class="lc-pay-r">
+              <button @click="buy" :disabled="buying" class="lc-buy">
+                <span>{{ buying ? '···' : (appStore.lang === 'zh' ? '立即开通' : 'ACTIVATE') }}</span>
+                <span class="lc-buy-ripple" :style="rippleStyle"></span>
               </button>
-              <router-link v-if="!balanceOk" to="/recharge" class="vx-topup">
-                {{ appStore.lang === 'zh' ? '余额不足？去充值 →' : 'Top up →' }}
+              <router-link v-if="!balanceOk" to="/recharge" class="lc-topup">
+                {{ appStore.lang === 'zh' ? '余额不足 · 去充值' : 'TOP UP' }} ↗
               </router-link>
             </div>
           </div>
         </template>
       </template>
 
-      <!-- ═══ 信任信号 ═══ -->
-      <div class="vx-trust">
-        <span class="vx-trust-i"><i>◆</i> {{ appStore.lang === 'zh' ? '支付宝 / 微信 / USDT' : 'Alipay / WeChat / USDT' }}</span>
-        <span class="vx-trust-i"><i>◆</i> {{ appStore.lang === 'zh' ? '下单即得订阅链接' : 'Instant subscription' }}</span>
-        <span class="vx-trust-i"><i>◆</i> {{ appStore.lang === 'zh' ? '全平台客户端支持' : 'All platforms' }}</span>
-        <span class="vx-trust-i"><i>◆</i> {{ appStore.lang === 'zh' ? '7×12h 客服在线' : '7×12h support' }}</span>
-      </div>
-    </div>
+      <footer class="lc-foot">
+        <div class="lc-foot-row">
+          <span>◈ {{ appStore.lang === 'zh' ? '支付宝 / 微信 / USDT' : 'ALIPAY / WECHAT / USDT' }}</span>
+          <span>◈ {{ appStore.lang === 'zh' ? '下单即得订阅链接' : 'INSTANT SUBSCRIPTION' }}</span>
+          <span>◈ {{ appStore.lang === 'zh' ? '全平台客户端' : 'ALL PLATFORMS' }}</span>
+          <span>◈ 7×12H</span>
+        </div>
+      </footer>
+    </main>
 
-    <!-- ═══ 成功弹窗 ═══ -->
-    <div v-if="showSuccess" class="vx-modal" @click.self="showSuccess = false">
-      <div class="vx-modal-box">
-        <div class="vx-modal-ring"><span>✓</span></div>
-        <h2 class="vx-modal-t">{{ appStore.lang === 'zh' ? '开通成功' : 'ACTIVATED' }}</h2>
-        <p class="vx-modal-p" v-if="purchaseResult?.email">{{ purchaseResult.email }}</p>
-        <div class="vx-modal-btns">
-          <button @click="goToClients" class="vx-modal-primary">{{ appStore.lang === 'zh' ? '查看我的节点' : 'MY NODES' }}</button>
-          <button @click="showSuccess = false" class="vx-modal-ghost">{{ appStore.lang === 'zh' ? '继续选购' : 'CONTINUE' }}</button>
+    <div v-if="showSuccess" class="lc-modal" @click.self="showSuccess = false">
+      <div class="lc-modal-box">
+        <div class="lc-modal-orb"></div>
+        <p class="lc-modal-k">ACTIVATED</p>
+        <h2 class="lc-modal-t">{{ appStore.lang === 'zh' ? '节点已开通' : 'NODE ACTIVATED' }}</h2>
+        <p v-if="purchaseResult?.email" class="lc-modal-id">{{ purchaseResult.email }}</p>
+        <div class="lc-modal-btns">
+          <button @click="goToClients" class="lc-modal-p">{{ appStore.lang === 'zh' ? '查看我的节点' : 'MY NODES' }}</button>
+          <button @click="showSuccess = false" class="lc-modal-g">{{ appStore.lang === 'zh' ? '继续' : 'CLOSE' }}</button>
         </div>
       </div>
     </div>
@@ -281,7 +279,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
 import { useUserStore } from '../stores/user';
@@ -289,6 +287,49 @@ import { useUiStore } from '../stores/ui';
 
 const router = useRouter();
 const appStore = useAppStore(); const userStore = useUserStore(); const uiStore = useUiStore();
+
+// ═══ 主题：5 套风格，右上角实时切换，选择记在 localStorage ═══
+const THEMES = [
+  { v: 'chrome', t: '铬', d: '液态铬 · 当前默认' },
+  { v: 'minimal', t: '简', d: '极简 · 米白大留白' },
+  { v: 'brutal', t: '凶', d: '硬核 · 酸性绿压满' },
+  { v: 'precise', t: '精', d: '精密 · 终端网格' },
+  { v: 'soft', t: '软', d: '柔和 · 大圆角微光' },
+];
+const THEME_KEY = 'xnow_vpn_theme';
+const theme = ref('chrome');
+const setTheme = (v) => {
+  theme.value = v;
+  try { localStorage.setItem(THEME_KEY, v); } catch (e) {}
+};
+const THEME_TEST = new URLSearchParams(
+  typeof window !== 'undefined' ? window.location.search : ''
+).get('style');
+
+// ── 铬球视差 ──
+const px = ref(0), py = ref(0), mx = ref(50), my = ref(50);
+const onMove = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  mx.value = ((e.clientX - r.left) / r.width) * 100;
+  my.value = ((e.clientY - r.top) / r.height) * 100;
+  px.value = (mx.value - 50) / 50;
+  py.value = (my.value - 50) / 50;
+};
+const onLeave = () => { px.value = 0; py.value = 0; mx.value = 50; my.value = 50; };
+const orbStyle = computed(() => ({
+  transform: `translate3d(${px.value * -14}px, ${py.value * -12}px, 0)`,
+  '--gx': mx.value + '%',
+  '--gy': my.value + '%',
+}));
+
+// ── 按钮涟漪 ──
+const rippleStyle = ref({});
+const onPointerDown = (e) => {
+  const btn = e.target.closest('.lc-buy');
+  if (!btn) return;
+  const r = btn.getBoundingClientRect();
+  rippleStyle.value = { '--rx': (e.clientX - r.left) + 'px', '--ry': (e.clientY - r.top) + 'px' };
+};
 
 const EMOJI_MAP = { '🇭🇰':'hk','🇯🇵':'jp','🇰🇷':'kr','🇹🇼':'tw','🇸🇬':'sg','🇹🇭':'th','🇻🇳':'vn','🇲🇾':'my','🇵🇭':'ph','🇮🇩':'id','🇮🇳':'in','🇦🇪':'ae','🇺🇸':'us','🇨🇦':'ca','🇬🇧':'gb','🇩🇪':'de','🇳🇱':'nl','🇫🇷':'fr','🇷🇺':'ru','🇦🇺':'au','🇧🇷':'br','🇦🇷':'ar','🇿🇦':'za','🇲🇽':'mx' };
 const NAME_MAP = { hk:'hk',hongkong:'hk',jp:'jp',japan:'jp',kr:'kr',korea:'kr',tw:'tw',taiwan:'tw',sg:'sg',singapore:'sg',th:'th',thailand:'th',vn:'vn',vietnam:'vn',my:'my',malaysia:'my',ph:'ph',philippines:'ph',id:'id',indonesia:'id',in:'in',india:'in',ae:'ae',uae:'ae',us:'us',usa:'us',ca:'ca',canada:'ca',uk:'gb',gb:'gb',de:'de',germany:'de',nl:'nl',netherlands:'nl',fr:'fr',france:'fr',ru:'ru',russia:'ru',au:'au',australia:'au',br:'br',brazil:'br',ar:'ar',argentina:'ar',za:'za',southafrica:'za',mx:'mx',mexico:'mx' };
@@ -315,18 +356,12 @@ const regionFilter = ref('');
 const trialEnabled = ref(false);
 const trialBusy = ref(false);
 
-// 区域筛选（按需生成，只有存在节点的区域才显示）
 const REGION_DEF = [
-  { v: '', t: '全部' },
-  { v: 'asia', t: '亚洲' },
-  { v: 'americas', t: '美洲' },
-  { v: 'europe', t: '欧洲' },
-  { v: 'oceania', t: '大洋洲' },
-  { v: 'middle-east', t: '中东' },
+  { v: '', t: '全部' }, { v: 'asia', t: '亚洲' }, { v: 'americas', t: '美洲' },
+  { v: 'europe', t: '欧洲' }, { v: 'oceania', t: '大洋洲' }, { v: 'middle-east', t: '中东' },
 ];
-const regionOptions = computed(() => appStore.lang === 'zh'
-  ? REGION_DEF
-  : [{ v: '', t: 'ALL' }, { v: 'asia', t: 'ASIA' }, { v: 'americas', t: 'AMERICAS' }, { v: 'europe', t: 'EUROPE' }, { v: 'oceania', t: 'OCEANIA' }, { v: 'middle-east', t: 'M.EAST' }]);
+const regionOptions = computed(() => appStore.lang === 'zh' ? REGION_DEF
+  : [{ v: '', t: 'ALL' }, { v: 'asia', t: 'ASIA' }, { v: 'americas', t: 'AMER' }, { v: 'europe', t: 'EURO' }, { v: 'oceania', t: 'OCEA' }, { v: 'middle-east', t: 'M.E' }]);
 
 const latText = (id) => {
   const v = latencyMap.value[id];
@@ -406,7 +441,6 @@ const finalPrice = computed(() => { const raw = parseFloat((basePrice.value * (s
 const actualPrice = computed(() => couponApplied.value ? couponApplied.value.final_amount : finalPrice.value);
 const balanceOk = computed(() => parseFloat(userStore.userInfo?.balance || 0) >= actualPrice.value);
 
-// 流量档位：只显示节点容量以内，且每个档位旁边直接标出该档的总价（少点一次计算）
 const affordableTraffic = computed(() => {
   const cap = selectedNode.value?.max_traffic_gb || 2000;
   return trafficOptions.value.filter((t) => t <= cap);
@@ -420,6 +454,13 @@ const trafficPrice = (g) => {
 };
 
 onMounted(async () => {
+  // 主题：URL ?style= 优先（方便直接分享某个风格），否则读上次选择
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (THEME_TEST && THEMES.some((t) => t.v === THEME_TEST)) theme.value = THEME_TEST;
+    else if (saved && THEMES.some((t) => t.v === saved)) theme.value = saved;
+  } catch (e) {}
+
   try {
     const r = await fetch('/api/vpn/products');
     const d = await r.json();
@@ -430,9 +471,6 @@ onMounted(async () => {
       if (nodes.value.length > 0) selectedNode.value = nodes.value[0];
     }
   } catch (e) {}
-  // ⚠️ 2026-11-07：数据库里还没配节点时，用两条**标注为「示例」**的节点撑住版式，
-  //    让祥哥能看到完整 UI。它们带 _demo 标记：不参与延迟测试、点下单会被拦下。
-  //    真节点一配上，这段就不会触发。
   if (nodes.value.length === 0) {
     nodes.value = [
       { id: 1, name: '美国洛杉矶', flag_emoji: '🇺🇸', vps_location: '洛杉矶 · CN2 GIA', price_per_gb: .3, max_traffic_gb: 2000, _demo: true },
@@ -443,6 +481,11 @@ onMounted(async () => {
   loading.value = false;
   setTimeout(pingNodes, 500);
   try { const r2 = await fetch('/api/vpn/trial-check'); const d2 = await r2.json(); trialEnabled.value = d2.status === 'success' && d2.enabled; } catch (e) {}
+
+  document.addEventListener('pointerdown', onPointerDown, true);
+});
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', onPointerDown, true);
 });
 
 const selectNode = (n) => {
@@ -453,7 +496,7 @@ const selectNode = (n) => {
 const buy = async () => {
   if (!selectedNode.value) return;
   const nd = selectedNode.value;
-  if (nd._demo) return uiStore.showToast(appStore.lang === 'zh' ? '这是示例节点，配置真实节点后即可购买' : 'Demo node — configure real nodes to buy', 'error');
+  if (nd._demo) return uiStore.showToast(appStore.lang === 'zh' ? '这是示例节点，配置真实节点后即可购买' : 'Demo node', 'error');
   if (!userStore.token) return uiStore.showToast(appStore.lang === 'zh' ? '请先登录' : 'Please login', 'error');
   const price = actualPrice.value;
   if (parseFloat(userStore.userInfo?.balance || 0) < price) return uiStore.showToast(appStore.lang === 'zh' ? '余额不足，请先充值' : 'Insufficient balance', 'error');
@@ -470,551 +513,967 @@ const buy = async () => {
 const goToClients = () => { showSuccess.value = false; router.push('/vpn/clients'); };
 </script>
 
-<style scoped>
+<style>
 /* ══════════════════════════════════════════════════════════════════════════
-   未来系视觉（2026-11-07）
+   五套风格（2026-11-07）
    --------------------------------------------------------------------------
-   设计取向：深空底 + 冷光渐变 + HUD 读数。00 后那批视觉习惯里，这套语言
-   出现在游戏 UI、终端工具、耳机/外设品牌页面上，接受度高；同时不牺牲可读性。
-   三条自我约束：
-     1. 动效只用 transform / opacity / background-position —— 不触发重排；
-     2. 所有装饰元素 aria-hidden，屏幕阅读器和爬虫不受影响；
-     3. 颜色对比度保持 ≥4.5:1，正文不用霓虹色（只有数据和高亮用）。
+   祥哥要「都要」—— 极简 / 凶 / 精密 / 软，加上原本的液态铬，一共五套。
+   做法：**一套 DOM + 五组 CSS 变量 + 主题级覆盖**，右上角实时切换，
+   选择记 localStorage，也支持 ?style=minimal 直接分享某个风格。
+
+   为什么不用五个组件：五套外观的**信息结构完全一样**（同样是选节点、选流量、
+   选时长、结算），差别在材质与排版。拆成五个组件会有五份重复的逻辑要同步维护，
+   改一个 bug 得改五遍。变量化的代价是 CSS 长一点，但只有一份 JS。
+
+   五套的性格：
+     chrome   液态铬 —— 镜面金属球，冷、精密、贵
+     minimal  极简   —— 米白大留白，细字重，只靠排版说话
+     brutal   凶     —— 酸性绿铺满，超粗黑体压屏，像 rave flyer
+     precise  精密   —— 终端网格，等宽字体，数据面板感
+     soft     软     —— 大圆角 + 柔和渐变 + 扩散阴影，接近 Apple Liquid Glass
    ══════════════════════════════════════════════════════════════════════════ */
 
-.vx-root {
-  position: relative;
-  min-height: 100vh;
-  background: #04050c;
-  color: #e7ecf5;
-  overflow-x: hidden;
-  font-feature-settings: "tnum" 1;
+/* ── 兜底变量（chrome 用） ── */
+.lc-root {
+  --bg: #08080a;
+  --bg-2: #0c0c10;
+  --fg: #f2f4f8;
+  --fg-dim: #8b8b98;
+  --fg-faint: #4a4a54;
+  --fg-ghost: #2e2e36;
+  --line: rgba(255, 255, 255, .08);
+  --line-strong: rgba(255, 255, 255, .16);
+  --accent: #ccff00;
+  --accent-fg: #08080a;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-num: "Inter", system-ui, sans-serif;
+  --title-size: clamp(40px, 7.4vw, 84px);
+  --title-weight-a: 200;
+  --title-weight-b: 900;
+  --title-spacing: -.045em;
+  --h1-transform: none;
+  --shadow-card: none;
+  --grain: .045;
+  --orb-show: block;
 }
 
-/* 极光光晕：两块大范围径向渐变，缓慢漂移 */
-.vx-aurora {
-  position: fixed; inset: -20% -10%; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(46% 38% at 22% 18%, rgba(0, 229, 255, .16), transparent 62%),
-    radial-gradient(42% 40% at 82% 12%, rgba(139, 92, 246, .17), transparent 60%),
-    radial-gradient(50% 44% at 60% 88%, rgba(255, 45, 149, .10), transparent 64%);
-  filter: blur(18px);
-  animation: vx-drift 22s ease-in-out infinite alternate;
-}
-@keyframes vx-drift {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(2.5%, -2%, 0) scale(1.08); }
+.lc-root {
+  position: relative; min-height: 100vh;
+  background: var(--bg); color: var(--fg);
+  overflow-x: hidden; font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  transition: background .4s, color .4s;
 }
 
-/* 网格：细线 + 透视消失感 */
-.vx-grid {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(120, 190, 255, .045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(120, 190, 255, .045) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 78% 62% at 50% 26%, #000 28%, transparent 82%);
-  -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 26%, #000 28%, transparent 82%);
-}
-
-/* 扫描线：一条光带自上而下循环 */
-.vx-scanline {
-  position: fixed; left: 0; right: 0; top: 0; height: 180px; z-index: 1; pointer-events: none;
-  background: linear-gradient(180deg, transparent, rgba(0, 229, 255, .055) 46%, transparent);
-  animation: vx-scan 9s linear infinite;
-}
-@keyframes vx-scan {
-  0%   { transform: translateY(-200px); opacity: 0; }
-  12%  { opacity: 1; }
-  88%  { opacity: 1; }
-  100% { transform: translateY(100vh); opacity: 0; }
+/* 噪点 */
+.lc-grain {
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: var(--grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vx-aurora, .vx-scanline, .vx-buy-shine, .vx-empty-ring, .vx-loading-bar i { animation: none !important; }
+  .lc-orb, .lc-orb-sheen, .lc-orb-ring, .lc-orbit-dot, .lc-card, .lc-buy-ripple,
+  .lc-empty-orb, .lc-loading-dots i, .lc-title-b { animation: none !important; }
 }
 
-/* ── HUD 状态条 ── */
-.vx-hud {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 18px 0 8px;
-  font: 600 10.5px/1 ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
-  letter-spacing: .13em; color: #4b6280;
+/* ── 顶栏 ── */
+.lc-top {
+  position: relative; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 24px clamp(18px, 4vw, 54px) 18px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
 }
-.vx-ping { position: relative; width: 7px; height: 7px; flex: none; }
-.vx-ping i {
-  position: absolute; inset: 0; border-radius: 999px; background: #00e5ff;
-  box-shadow: 0 0 10px #00e5ff; animation: vx-blink 2.4s ease-in-out infinite;
+.lc-top-l, .lc-top-r { display: flex; align-items: center; gap: 12px; }
+.lc-mark { font-size: 13px; font-weight: 900; letter-spacing: .22em; color: var(--fg); }
+.lc-top-slash { color: var(--fg-ghost); font-size: 12px; }
+.lc-top-t {
+  font-size: 9.5px; font-weight: 600; letter-spacing: .26em;
+  color: var(--fg-faint); text-transform: uppercase;
 }
-.vx-ping::after {
-  content: ''; position: absolute; inset: -4px; border-radius: 999px;
-  border: 1px solid rgba(0, 229, 255, .5); animation: vx-ripple 2.4s ease-out infinite;
+.lc-top-dot {
+  width: 4px; height: 4px; border-radius: 999px; background: var(--accent);
+  box-shadow: 0 0 9px var(--accent);
 }
-@keyframes vx-blink { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
-@keyframes vx-ripple { 0% { transform: scale(.5); opacity: 1 } 100% { transform: scale(1.7); opacity: 0 } }
-.vx-hud-txt { color: #7d9ab8; }
-.vx-hud-dim { color: #26374d; }
-@media (max-width: 640px) { .vx-hide-sm { display: none; } }
 
-/* ── Hero ── */
-.vx-hero { padding: 26px 0 8px; text-align: center; }
-.vx-badge {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 14px; border-radius: 999px;
-  border: 1px solid rgba(0, 229, 255, .28);
-  background: linear-gradient(180deg, rgba(0, 229, 255, .12), rgba(0, 229, 255, .03));
-  font: 700 10.5px/1 ui-monospace, monospace; letter-spacing: .16em;
-  color: #6ff0ff; text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+/* 主题切换 */
+.lc-themes { display: flex; align-items: center; gap: 3px; }
+.lc-themes-l {
+  font-size: 8px; font-weight: 800; letter-spacing: .24em;
+  color: var(--fg-ghost); margin-right: 6px;
 }
-.vx-badge-dot { width: 5px; height: 5px; border-radius: 999px; background: #00e5ff; box-shadow: 0 0 8px #00e5ff; }
+.lc-theme-btn {
+  min-width: 30px; padding: 6px 9px; border: none; cursor: pointer;
+  background: transparent; color: var(--fg-faint);
+  font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  border-radius: var(--radius-sm);
+  transition: background .18s, color .18s;
+}
+.lc-theme-btn:hover { color: var(--fg); background: rgba(128, 128, 128, .1); }
+.lc-theme-btn.is-on { background: var(--accent); color: var(--accent-fg); }
 
-.vx-h1 {
-  margin: 18px 0 14px;
-  font-size: clamp(30px, 6.2vw, 62px);
-  line-height: 1.04; font-weight: 900; letter-spacing: -.02em;
-  display: flex; align-items: center; justify-content: center; gap: .18em; flex-wrap: wrap;
+/* ── 首屏 ── */
+.lc-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "vtext head";
+  align-items: center;
+  gap: clamp(20px, 5vw, 68px);
+  padding: clamp(36px, 7vw, 90px) clamp(18px, 4vw, 54px) clamp(30px, 5vw, 66px);
+  min-height: 62vh;
 }
-.vx-grad {
-  background: linear-gradient(96deg, #00e5ff 0%, #7c9bff 38%, #a855f7 68%, #ff2d95 100%);
+.lc-vtext {
+  grid-area: vtext;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  writing-mode: vertical-rl; text-orientation: upright;
+  font-size: clamp(19px, 2.4vw, 27px); font-weight: 200;
+  letter-spacing: .34em; color: var(--fg-ghost);
+  user-select: none;
+}
+.lc-vtext-en {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  font-size: 8.5px; font-weight: 700; letter-spacing: .42em;
+  color: var(--fg-ghost); opacity: .7; text-transform: uppercase;
+}
+
+.lc-head { grid-area: head; position: relative; z-index: 3; max-width: 560px; }
+.lc-eyebrow {
+  display: flex; align-items: center; gap: 11px;
+  margin: 0 0 20px; font-size: 9.5px; font-weight: 700;
+  letter-spacing: .3em; color: var(--fg-faint); text-transform: uppercase;
+}
+.lc-eyebrow-line { width: 34px; height: 1px; background: var(--accent); }
+
+.lc-title {
+  margin: 0 0 22px; display: flex; flex-direction: column;
+  font-size: var(--title-size); line-height: .94;
+  letter-spacing: var(--title-spacing); text-transform: var(--h1-transform);
+}
+.lc-title-a { font-weight: var(--title-weight-a); color: var(--fg); }
+.lc-title-b {
+  font-weight: var(--title-weight-b);
+  background: linear-gradient(102deg,
+    #ffffff 0%, #c8d2ea 12%, #8a94b8 26%,
+    #ffffff 40%, #b8c4e6 52%, #6f7896 66%,
+    #e8eeff 80%, #ffffff 92%, #a8b4d4 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  background-size: 220% 100%; animation: vx-flow 8s ease-in-out infinite alternate;
+  background-size: 240% 100%;
+  animation: lc-chrome 9s ease-in-out infinite alternate;
 }
-@keyframes vx-flow { 0% { background-position: 0% 50% } 100% { background-position: 100% 50% } }
-.vx-slash { color: #1d2f45; font-weight: 300; font-size: .78em; transform: translateY(-1px); }
-.vx-h1-plain { color: #f1f5fb; }
-
-.vx-sub {
-  max-width: 660px; margin: 0 auto;
-  color: #8ea4bf; font-size: 14.5px; line-height: 1.85;
+@keyframes lc-chrome {
+  0% { background-position: 0% 50% } 100% { background-position: 100% 50% }
 }
 
-/* ── 数据 HUD 卡 ── */
-.vx-stats {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-  max-width: 720px; margin: 30px auto 0;
-  background: rgba(120, 190, 255, .10);
-  border: 1px solid rgba(120, 190, 255, .13);
-  border-radius: 16px; overflow: hidden;
-}
-.vx-stat { padding: 16px 8px; background: rgba(6, 10, 20, .82); text-align: center; }
-.vx-stat-n {
-  font: 900 21px/1 ui-monospace, monospace; color: #dbeafe; letter-spacing: -.02em;
-}
-.vx-grad-n {
-  background: linear-gradient(94deg, #00e5ff, #a855f7);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.vx-unit { font-size: .62em; font-weight: 700; color: #4b6280; }
-.vx-stat-l {
-  margin-top: 7px; font: 600 9.5px/1 ui-monospace, monospace;
-  letter-spacing: .15em; color: #4b6280; text-transform: uppercase;
-}
-@media (max-width: 560px) { .vx-stats { grid-template-columns: repeat(2, 1fr); } }
-
-/* ── 试用 ── */
-.vx-trial-wrap { margin-top: 22px; }
-.vx-trial {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 12px 26px; border-radius: 12px; cursor: pointer;
-  background: linear-gradient(96deg, rgba(255, 176, 32, .95), rgba(255, 92, 60, .95));
-  color: #180a00; font-weight: 900; font-size: 13px; letter-spacing: .04em;
-  border: none; box-shadow: 0 10px 34px rgba(255, 138, 40, .28);
-  transition: transform .18s, box-shadow .18s;
-}
-.vx-trial:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(255, 138, 40, .38); }
-.vx-trial:disabled { opacity: .6; cursor: wait; }
-.vx-trial-ico { font-size: 15px; }
-.vx-trial-hint { margin-top: 8px; font-size: 10.5px; color: #47607d; letter-spacing: .04em; }
-
-/* ── 能力卡 ── */
-.vx-feats {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-  margin: 34px 0 8px;
-}
-.vx-feat {
-  position: relative; padding: 18px 16px; border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .012));
-  border: 1px solid rgba(120, 190, 255, .12);
-  transition: border-color .22s, transform .22s;
-  overflow: hidden;
-}
-.vx-feat::after {
-  content: ''; position: absolute; inset: 0; opacity: 0;
-  background: radial-gradient(120px 60px at 50% 0%, rgba(0, 229, 255, .18), transparent 70%);
-  transition: opacity .3s; pointer-events: none;
-}
-.vx-feat:hover { border-color: rgba(0, 229, 255, .34); transform: translateY(-3px); }
-.vx-feat:hover::after { opacity: 1; }
-.vx-feat-ico {
-  font-size: 19px; line-height: 1; color: #00e5ff; margin-bottom: 10px;
-  text-shadow: 0 0 14px rgba(0, 229, 255, .7);
-}
-.vx-feat h4 {
-  font-size: 13px; font-weight: 800; color: #eaf2ff; margin: 0 0 6px; letter-spacing: .02em;
-}
-.vx-feat p { font-size: 11.5px; line-height: 1.7; color: #7791ad; margin: 0; }
-@media (max-width: 700px) { .vx-feats { grid-template-columns: 1fr; } }
-
-/* ── 区块标题 ── */
-.vx-sec { margin-top: 40px; }
-.vx-sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.vx-sec-num {
-  font: 900 11px/1 ui-monospace, monospace; color: #00e5ff;
-  padding: 5px 8px; border-radius: 6px;
-  background: rgba(0, 229, 255, .1); border: 1px solid rgba(0, 229, 255, .26);
-}
-.vx-sec-t {
-  font: 800 13px/1 ui-monospace, monospace; letter-spacing: .2em;
-  color: #a9c0d8; text-transform: uppercase; margin: 0; white-space: nowrap;
-}
-.vx-sec-line {
-  flex: 1; height: 1px;
-  background: linear-gradient(90deg, rgba(0, 229, 255, .32), transparent);
+.lc-lede {
+  margin: 0 0 30px; max-width: 470px;
+  font-size: 13.5px; line-height: 1.95; color: var(--fg-dim); font-weight: 300;
 }
 
-/* ── 搜索 / 筛选 ── */
-.vx-tools { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-.vx-search {
-  flex: 1 1 220px; display: flex; align-items: center; gap: 9px;
-  padding: 11px 14px; border-radius: 12px;
-  background: rgba(8, 13, 24, .85); border: 1px solid rgba(120, 190, 255, .14);
-  transition: border-color .2s, box-shadow .2s;
+.lc-cta-row { display: flex; gap: 11px; flex-wrap: wrap; }
+.lc-btn {
+  position: relative; display: inline-flex; align-items: center; gap: 11px;
+  padding: 15px 26px; border: none; cursor: pointer; border-radius: var(--radius-sm);
+  font-size: 12.5px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; text-decoration: none;
+  transition: transform .16s cubic-bezier(.3,.9,.3,1), background .18s, color .18s;
 }
-.vx-search:focus-within { border-color: rgba(0, 229, 255, .45); box-shadow: 0 0 0 3px rgba(0, 229, 255, .08); }
-.vx-search-ico { color: #3f5872; font-size: 14px; }
-.vx-search input {
-  flex: 1; background: none; border: none; outline: none;
-  color: #dbeafe; font-size: 12.5px;
+.lc-btn:active { transform: scale(.975); }
+.lc-btn-arrow { font-size: 15px; transition: transform .2s; }
+.lc-btn:hover .lc-btn-arrow { transform: translate(3px, -3px); }
+.lc-btn-acid { background: var(--accent); color: var(--accent-fg); }
+.lc-btn-acid:hover { filter: brightness(1.12); }
+.lc-btn-acid:disabled { opacity: .5; cursor: wait; }
+.lc-btn-ghost {
+  background: transparent; color: var(--fg-dim);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
-.vx-search input::placeholder { color: #3d5372; }
-.vx-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.vx-chip {
-  padding: 9px 13px; border-radius: 10px; cursor: pointer;
-  font: 700 10.5px/1 ui-monospace, monospace; letter-spacing: .08em;
-  color: #6b86a3; background: rgba(8, 13, 24, .7);
-  border: 1px solid rgba(120, 190, 255, .12);
-  transition: all .18s;
+.lc-btn-ghost:hover { background: rgba(128, 128, 128, .08); color: var(--fg); }
+
+/* ── 球（各主题里各有形变） ── */
+.lc-orb-wrap {
+  position: absolute; z-index: 2;
+  right: clamp(-40px, 6vw, 90px); top: 50%;
+  width: clamp(210px, 30vw, 400px); height: clamp(210px, 30vw, 400px);
+  margin-top: calc(clamp(210px, 30vw, 400px) / -2);
+  transition: transform .5s cubic-bezier(.22,.8,.3,1);
+  pointer-events: none; display: var(--orb-show);
 }
-.vx-chip:hover { color: #a9c0d8; border-color: rgba(120, 190, 255, .28); }
-.vx-chip.is-on {
-  color: #04121a; background: linear-gradient(96deg, #00e5ff, #57c8ff);
-  border-color: transparent; box-shadow: 0 0 18px rgba(0, 229, 255, .35);
+.lc-orb {
+  position: relative; width: 100%; height: 100%; border-radius: 50%;
+  background:
+    radial-gradient(circle at var(--gx, 32%) var(--gy, 26%),
+      #ffffff 0%, #e6ecff 5%, #b9c4e4 13%, #7b88b0 25%,
+      #41496e 40%, #1b2138 56%, #0b0e18 72%, #05060b 100%),
+    conic-gradient(from 200deg,
+      #ff7ae0, #8be9ff, #ffffff, #a99bff, #5d6ee0, #ffd36e, #ff7ae0);
+  background-blend-mode: screen, normal;
+  box-shadow:
+    inset -18px -22px 62px rgba(0, 0, 0, .92),
+    inset 16px 14px 44px rgba(255, 255, 255, .3),
+    0 44px 100px rgba(90, 130, 220, .16),
+    0 0 0 1px rgba(255, 255, 255, .07);
+  filter: saturate(1.22) contrast(1.05);
+  animation: lc-float 7s ease-in-out infinite;
 }
+@keyframes lc-float {
+  0%, 100% { transform: translateY(-8px) }
+  50%      { transform: translateY(8px) }
+}
+.lc-orb-sheen {
+  position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+  background: conic-gradient(from 0deg,
+    transparent 0%, rgba(255,255,255,.55) 12%, transparent 26%,
+    transparent 55%, rgba(255,255,255,.28) 68%, transparent 82%);
+  mix-blend-mode: overlay;
+  animation: lc-sheen 15s linear infinite;
+}
+@keyframes lc-sheen { to { transform: rotate(360deg) } }
+.lc-orb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(255,255,255,.09) 0deg 1deg, transparent 1deg 4deg);
+  mask-image: radial-gradient(circle, transparent 58%, #000 62%, #000 76%, transparent 82%);
+  -webkit-mask-image: radial-gradient(circle, transparent 58%, #000 62%, #000 76%, transparent 82%);
+  animation: lc-ring 40s linear infinite reverse;
+}
+@keyframes lc-ring { to { transform: rotate(360deg) } }
+.lc-orb-grid { display: none; }
+.lc-orb-shadow {
+  position: absolute; left: 50%; bottom: -8%;
+  width: 62%; height: 9%; transform: translateX(-50%);
+  border-radius: 50%; filter: blur(18px);
+  background: radial-gradient(ellipse, rgba(120, 160, 255, .3), transparent 70%);
+}
+.lc-orb-orbit {
+  position: absolute; inset: -13%; border-radius: 50%;
+  border: 1px solid var(--line);
+  animation: lc-orbit 24s linear infinite;
+}
+@keyframes lc-orbit { to { transform: rotate(360deg) } }
+.lc-orbit-dot {
+  position: absolute; top: -2.5px; left: 50%; width: 5px; height: 5px;
+  margin-left: -2.5px; border-radius: 999px; background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+
+@media (max-width: 900px) {
+  .lc-hero { grid-template-columns: 1fr; grid-template-areas: "head"; min-height: 0; }
+  .lc-vtext { display: none; }
+  .lc-orb-wrap {
+    position: relative; right: auto; top: auto; margin: 0 auto 26px;
+    width: 190px; height: 190px;
+  }
+  .lc-head { max-width: none; }
+}
+
+/* ── 数据条 ── */
+.lc-ticker {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.lc-ticker-item {
+  padding: clamp(20px, 3vw, 34px) clamp(14px, 2.6vw, 34px);
+  display: flex; flex-direction: column; gap: 9px;
+  border-right: 1px solid var(--line);
+}
+.lc-ticker-item:last-child { border-right: none; }
+.lc-ticker-n {
+  font-size: clamp(26px, 3.6vw, 44px); font-weight: 200;
+  letter-spacing: -.045em; line-height: 1; color: var(--fg);
+  font-variant-numeric: tabular-nums; font-family: var(--font-num);
+}
+.lc-ticker-n i { font-style: normal; font-size: .4em; font-weight: 700; color: var(--fg-faint); margin-left: 3px; }
+.lc-ticker-word { font-weight: 900; letter-spacing: -.03em; }
+.lc-ticker-l {
+  font-size: 8.5px; font-weight: 700; letter-spacing: .28em;
+  color: var(--fg-faint); text-transform: uppercase;
+}
+@media (max-width: 700px) {
+  .lc-ticker { grid-template-columns: repeat(2, 1fr); }
+  .lc-ticker-item:nth-child(2) { border-right: none; }
+  .lc-ticker-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+}
+
+/* ── 主体 ── */
+.lc-main {
+  position: relative; z-index: 3;
+  padding: clamp(40px, 6vw, 76px) clamp(18px, 4vw, 54px) 60px;
+  max-width: 1180px; margin: 0 auto;
+}
+.lc-sec { margin-bottom: clamp(38px, 5vw, 64px); }
+.lc-sec-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+.lc-idx {
+  font-size: 9.5px; font-weight: 800; letter-spacing: .1em;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.lc-sec-t {
+  margin: 0; font-size: 12px; font-weight: 800;
+  letter-spacing: .22em; color: var(--fg); text-transform: uppercase;
+}
+.lc-sec-fill { flex: 1; height: 1px; background: var(--line); min-width: 20px; }
+.lc-filter { display: flex; gap: 3px; flex-wrap: wrap; }
+.lc-filter-btn {
+  padding: 7px 12px; border: none; cursor: pointer; background: transparent;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; color: var(--fg-faint);
+  border-radius: var(--radius-sm);
+  transition: color .16s, background .16s;
+}
+.lc-filter-btn:hover { color: var(--fg); }
+.lc-filter-btn.is-on { color: var(--accent-fg); background: var(--accent); }
+
+.lc-search { position: relative; margin-bottom: 26px; }
+.lc-search input {
+  width: 100%; padding: 13px 0; border: none; outline: none;
+  background: transparent; color: var(--fg);
+  font-family: var(--font); font-size: 13px; letter-spacing: .02em;
+}
+.lc-search input::placeholder { color: var(--fg-ghost); letter-spacing: .08em; }
+.lc-search-line {
+  position: absolute; left: 0; bottom: 0; width: 100%; height: 1px;
+  background: var(--line-strong); overflow: hidden;
+}
+.lc-search-line::after {
+  content: ''; position: absolute; inset: 0; background: var(--accent);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .34s cubic-bezier(.3,.9,.3,1);
+}
+.lc-search:focus-within .lc-search-line::after { transform: scaleX(1); }
 
 /* ── 节点卡 ── */
-.vx-nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 11px; }
-.vx-node {
+.lc-grid {
+  display: grid; gap: 1px;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.lc-card {
   position: relative; overflow: hidden; text-align: left; cursor: pointer;
-  padding: 15px; border-radius: 15px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .042), rgba(255, 255, 255, .01));
-  border: 1px solid rgba(120, 190, 255, .13);
-  transition: transform .2s, border-color .2s, box-shadow .2s;
-  color: inherit; font: inherit;
+  padding: 20px 18px 17px; border: none; color: inherit; font: inherit;
+  background: var(--bg-2); border-radius: 0;
+  box-shadow: var(--shadow-card);
+  transition: background .28s cubic-bezier(.3,.9,.3,1);
+  animation: lc-in .5s cubic-bezier(.3,.9,.3,1) both;
+  animation-delay: var(--d, 0ms);
 }
-.vx-node:hover { transform: translateY(-3px); border-color: rgba(120, 190, 255, .32); }
-.vx-node.is-on {
-  border-color: rgba(0, 229, 255, .62);
-  box-shadow: 0 0 0 1px rgba(0, 229, 255, .4), 0 12px 36px rgba(0, 229, 255, .16);
+@keyframes lc-in {
+  from { opacity: 0; transform: translateY(10px) }
+  to   { opacity: 1; transform: none }
 }
-.vx-node-glow {
-  position: absolute; inset: 0; opacity: 0; pointer-events: none;
-  background: radial-gradient(140px 70px at 50% 0%, rgba(0, 229, 255, .3), transparent 72%);
-  transition: opacity .32s;
+.lc-card.is-on { background: color-mix(in srgb, var(--accent) 8%, var(--bg-2)); }
+.lc-card-sweep {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 0;
+  background: var(--accent); z-index: 0;
+  transition: height .34s cubic-bezier(.3,.9,.3,1);
 }
-.vx-node.is-on .vx-node-glow { opacity: 1; }
-.vx-node-top { display: flex; align-items: center; gap: 9px; }
-.vx-flag {
-  width: 25px; height: 18px; object-fit: cover; border-radius: 3px; flex: none;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, .5);
+.lc-card:hover .lc-card-sweep,
+.lc-card.is-on .lc-card-sweep { height: 2px; }
+
+.lc-card-top {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 18px; margin-bottom: 14px;
 }
-.vx-flag-ph {
+.lc-card-flag {
   display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(120, 190, 255, .1); font-size: 12px; color: #6b86a3;
+  width: 22px; height: 16px; overflow: hidden;
+  background: rgba(128, 128, 128, .12); font-size: 12px;
+  border-radius: calc(var(--radius-sm) / 2);
 }
-.vx-node-name {
-  font-size: 13.5px; font-weight: 800; color: #f0f6ff;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+.lc-card-flag img { width: 100%; height: 100%; object-fit: cover; }
+.lc-demo {
+  padding: 2px 6px; font-size: 8px; font-weight: 800; letter-spacing: .1em;
+  color: #ffb020; background: rgba(255, 176, 32, .1);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, .28);
+  border-radius: var(--radius-sm);
 }
-.vx-node-check {
-  flex: none; width: 17px; height: 17px; border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: #00e5ff; color: #04121a; font-size: 10px; font-weight: 900;
-  box-shadow: 0 0 12px rgba(0, 229, 255, .8);
-}
-.vx-demo-tag {
-  flex: none; padding: 2px 6px; border-radius: 4px;
-  font: 700 9px/1 ui-monospace, monospace; letter-spacing: .08em;
-  color: #ffb020; background: rgba(255, 176, 32, .13);
-  border: 1px solid rgba(255, 176, 32, .3);
-}
-.vx-node-loc {
-  margin: 7px 0 12px; font-size: 11px; color: #5e7893;
+.lc-card-on { font-size: 9px; color: var(--accent); }
+
+.lc-card-name {
+  position: relative; z-index: 1; margin: 0 0 6px;
+  font-size: 15px; font-weight: 800; letter-spacing: -.01em; color: var(--fg);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.vx-node-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.vx-node-price {
-  font: 900 15px/1 ui-monospace, monospace; color: #dbeafe; letter-spacing: -.02em;
+.lc-card-loc {
+  position: relative; z-index: 1; margin: 0 0 18px;
+  font-size: 10.5px; color: var(--fg-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.vx-node-price i { font: 600 9.5px/1 ui-monospace, monospace; color: #4b6280; font-style: normal; margin-left: 1px; }
-.vx-lat {
-  font: 700 10px/1 ui-monospace, monospace; letter-spacing: .04em;
-  padding: 3px 7px; border-radius: 999px;
+.lc-card-foot {
+  position: relative; z-index: 1;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
 }
-.vx-lat.l-good { color: #34e5b0; background: rgba(52, 229, 176, .11); }
-.vx-lat.l-mid  { color: #ffc046; background: rgba(255, 192, 70, .11); }
-.vx-lat.l-bad  { color: #ff5f7a; background: rgba(255, 95, 122, .11); }
-.vx-lat.l-none { color: #3f5872; background: rgba(120, 190, 255, .06); }
+.lc-card-price {
+  font-family: var(--font-num);
+  font-size: 19px; font-weight: 300; letter-spacing: -.03em; color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.lc-card-price i { font-style: normal; font-size: .58em; font-weight: 600; color: var(--fg-faint); margin-right: 1px; }
+.lc-card-price em { font-style: normal; font-size: .46em; font-weight: 600; color: var(--fg-faint); letter-spacing: .04em; }
 
-.vx-none {
-  grid-column: 1 / -1; padding: 44px 0; text-align: center; color: #4b6280;
+.lc-lat {
+  font-size: 9px; font-weight: 700; letter-spacing: .1em;
+  padding: 3px 6px; font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
 }
-.vx-none-ico { font-size: 26px; display: block; margin-bottom: 8px; opacity: .5; }
-.vx-none p { font-size: 12.5px; margin: 0; }
+.lc-lat.l-good { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.lc-lat.l-mid  { color: #ffc046; background: rgba(255, 192, 70, .1); }
+.lc-lat.l-bad  { color: #ff5f7a; background: rgba(255, 95, 122, .1); }
+.lc-lat.l-none { color: var(--fg-ghost); background: rgba(128, 128, 128, .08); }
 
-/* ── 选项按钮 ── */
-.vx-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 9px; }
-.vx-pick-4 { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
-.vx-pick-btn {
-  position: relative; cursor: pointer; padding: 13px 8px; border-radius: 13px;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .008));
-  border: 1px solid rgba(120, 190, 255, .13);
-  transition: transform .18s, border-color .18s, box-shadow .18s;
-  color: inherit; font: inherit;
+.lc-none {
+  grid-column: 1 / -1; padding: 50px 0; text-align: center;
+  background: var(--bg); color: var(--fg-ghost);
+  font-size: 10px; font-weight: 700; letter-spacing: .24em;
 }
-.vx-pick-btn:hover { transform: translateY(-2px); border-color: rgba(120, 190, 255, .3); }
-.vx-pick-btn.is-on {
-  border-color: rgba(0, 229, 255, .6);
-  background: linear-gradient(180deg, rgba(0, 229, 255, .14), rgba(0, 229, 255, .03));
-  box-shadow: 0 0 0 1px rgba(0, 229, 255, .35), 0 10px 30px rgba(0, 229, 255, .14);
-}
-.vx-pick-v { font: 900 14px/1 ui-monospace, monospace; color: #eaf2ff; letter-spacing: -.01em; }
-.vx-pick-btn.is-on .vx-pick-v { color: #6ff0ff; }
-.vx-pick-sub { font: 600 10px/1 ui-monospace, monospace; color: #4b6280; }
-.vx-pick-off {
-  position: absolute; top: 6px; right: 7px;
-  font: 800 8.5px/1 ui-monospace, monospace; color: #34e5b0; letter-spacing: .04em;
-}
-.vx-best {
-  position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
-  padding: 2.5px 8px; border-radius: 999px;
-  font: 900 8.5px/1 ui-monospace, monospace; letter-spacing: .1em;
-  color: #180a00; background: linear-gradient(96deg, #ffb020, #ff6a3d);
-  box-shadow: 0 3px 12px rgba(255, 138, 40, .45);
-}
-.vx-warn { grid-column: 1 / -1; text-align: center; padding: 16px; font-size: 12px; color: #ffc046; }
 
-/* ── 指标 HUD ── */
-.vx-metrics {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-  margin-top: 22px; border-radius: 14px; overflow: hidden;
-  background: rgba(120, 190, 255, .1);
-  border: 1px solid rgba(120, 190, 255, .12);
+/* ── 选项 ── */
+.lc-opts {
+  display: grid; gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
 }
-.vx-metric {
-  padding: 14px 10px; background: rgba(6, 10, 20, .84);
-  display: flex; flex-direction: column; align-items: center; gap: 7px;
+.lc-opts-4 { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.lc-opt {
+  position: relative; cursor: pointer; border: none; border-radius: 0;
+  padding: 17px 10px; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; background: var(--bg-2); color: inherit; font: inherit;
+  transition: background .22s cubic-bezier(.3,.9,.3,1);
 }
-.vx-metric-k {
-  font: 600 8.5px/1 ui-monospace, monospace; letter-spacing: .16em; color: #3f5872;
+.lc-opt:hover { background: color-mix(in srgb, var(--fg) 6%, var(--bg-2)); }
+.lc-opt.is-on { background: var(--accent); color: var(--accent-fg); }
+.lc-opt-v {
+  font-family: var(--font-num);
+  font-size: 20px; font-weight: 300; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; line-height: 1;
 }
-.vx-metric-v {
-  font: 900 16px/1 ui-monospace, monospace; color: #dbeafe; letter-spacing: -.02em;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.lc-opt-v-sm { font-size: 14px; font-weight: 700; letter-spacing: 0; font-family: var(--font); }
+.lc-opt-u { font-size: 8.5px; font-weight: 700; letter-spacing: .16em; opacity: .5; margin-top: -2px; }
+.lc-opt-p { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; opacity: .55; font-variant-numeric: tabular-nums; }
+.lc-opt.is-on .lc-opt-p { opacity: .75; }
+.lc-opt-off {
+  position: absolute; top: 7px; right: 8px;
+  font-size: 8px; font-weight: 800; letter-spacing: .04em; color: var(--accent);
 }
-.vx-metric-sm { font-size: 12px; font-weight: 700; }
-.vx-metric-v i { font: 600 9px/1 ui-monospace, monospace; color: #4b6280; font-style: normal; }
-.vx-metric-v.l-good { color: #34e5b0; }
-.vx-metric-v.l-mid { color: #ffc046; }
-.vx-metric-v.l-bad { color: #ff5f7a; }
-.vx-metric-v.l-none { color: #3f5872; }
-@media (max-width: 600px) { .vx-metrics { grid-template-columns: repeat(2, 1fr); } }
+.lc-opt.is-on .lc-opt-off { color: var(--accent-fg); opacity: .7; }
+.lc-opt-best {
+  position: absolute; top: 0; left: 0; padding: 3px 7px;
+  font-size: 7.5px; font-weight: 900; letter-spacing: .14em;
+  background: var(--fg); color: var(--bg);
+}
+.lc-warn {
+  grid-column: 1 / -1; padding: 22px; text-align: center; background: var(--bg);
+  font-size: 10px; font-weight: 700; letter-spacing: .2em; color: #ffc046;
+}
 
-/* ── 协议标签 ── */
-.vx-protos { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 14px; }
-.vx-proto {
-  padding: 5px 11px; border-radius: 999px;
-  font: 700 10px/1 ui-monospace, monospace; letter-spacing: .05em;
-  color: #7d9ab8; background: rgba(0, 229, 255, .06);
-  border: 1px solid rgba(0, 229, 255, .16);
+/* ── 规格条 ── */
+.lc-specs {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+}
+.lc-spec {
+  padding: 20px 14px; display: flex; flex-direction: column; gap: 8px;
+  border-right: 1px solid var(--line);
+}
+.lc-spec:last-child { border-right: none; }
+.lc-spec-k { font-size: 8px; font-weight: 700; letter-spacing: .26em; color: var(--fg-faint); }
+.lc-spec-v {
+  font-family: var(--font-num);
+  font-size: 17px; font-weight: 300; letter-spacing: -.02em;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.lc-spec-v i { font-style: normal; font-size: .5em; font-weight: 700; color: var(--fg-faint); margin-left: 2px; }
+.lc-spec-v-sm { font-size: 12px; font-weight: 700; font-family: var(--font); }
+.lc-spec-v.l-good { color: var(--accent); }
+.lc-spec-v.l-mid { color: #ffc046; }
+.lc-spec-v.l-bad { color: #ff5f7a; }
+.lc-spec-v.l-none { color: var(--fg-ghost); }
+@media (max-width: 640px) {
+  .lc-specs { grid-template-columns: repeat(2, 1fr); }
+  .lc-spec:nth-child(2) { border-right: none; }
+  .lc-spec:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+}
+
+/* ── 协议 ── */
+.lc-protos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 26px; }
+.lc-proto {
+  padding: 6px 11px; font-size: 9px; font-weight: 700; letter-spacing: .12em;
+  color: var(--fg-faint); box-shadow: inset 0 0 0 1px var(--line-strong);
+  text-transform: uppercase; border-radius: var(--radius-sm);
 }
 
 /* ── 优惠码 ── */
-.vx-coupon { display: flex; gap: 8px; margin-top: 22px; align-items: center; }
-.vx-coupon input {
-  flex: 1; padding: 11px 14px; border-radius: 11px; outline: none;
-  background: rgba(8, 13, 24, .85); border: 1px solid rgba(120, 190, 255, .14);
-  color: #dbeafe; font: 600 12.5px/1 ui-monospace, monospace; letter-spacing: .08em;
-  text-transform: uppercase; transition: border-color .2s;
+.lc-coupon { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.lc-coupon-l { font-size: 8px; font-weight: 800; letter-spacing: .24em; color: var(--fg-faint); flex: none; }
+.lc-coupon input {
+  flex: 1; min-width: 0; padding: 11px 0; border: none; outline: none;
+  background: transparent; color: var(--fg); font-family: var(--font); font-size: 12px;
+  letter-spacing: .12em; text-transform: uppercase;
+  box-shadow: inset 0 -1px 0 var(--line-strong);
 }
-.vx-coupon input::placeholder { color: #3d5372; letter-spacing: .04em; text-transform: none; }
-.vx-coupon input:focus { border-color: rgba(255, 176, 32, .45); }
-.vx-coupon-btn {
-  padding: 11px 20px; border-radius: 11px; cursor: pointer; border: none;
-  font: 800 11.5px/1 ui-monospace, monospace; letter-spacing: .08em;
-  color: #180a00; background: linear-gradient(96deg, #ffb020, #ff8a28);
-  transition: filter .18s;
+.lc-coupon input::placeholder { color: var(--fg-ghost); letter-spacing: .04em; text-transform: none; }
+.lc-coupon input:focus { box-shadow: inset 0 -1px 0 var(--accent); }
+.lc-coupon-btn {
+  flex: none; padding: 11px 18px; border: none; cursor: pointer;
+  background: transparent; color: var(--fg-dim);
+  font-size: 9.5px; font-weight: 800; letter-spacing: .16em;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  border-radius: var(--radius-sm);
+  transition: background .18s, color .18s;
 }
-.vx-coupon-btn:hover { filter: brightness(1.1); }
-.vx-coupon-btn:disabled { opacity: .6; cursor: wait; }
-.vx-coupon-x {
-  padding: 10px 12px; border-radius: 11px; cursor: pointer;
-  background: rgba(255, 95, 122, .1); border: 1px solid rgba(255, 95, 122, .3);
-  color: #ff5f7a; font-size: 11px;
+.lc-coupon-btn:hover { background: rgba(128, 128, 128, .1); color: var(--fg); }
+.lc-coupon-x {
+  flex: none; padding: 10px 12px; border: none; cursor: pointer;
+  background: transparent; color: #ff5f7a; font-size: 11px;
+  box-shadow: inset 0 0 0 1px rgba(255, 95, 122, .3);
+  border-radius: var(--radius-sm);
 }
-.vx-ok { margin-top: 9px; font-size: 11.5px; color: #34e5b0; }
-.vx-err { margin-top: 9px; font-size: 11.5px; color: #ff5f7a; }
+.lc-ok { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .1em; color: var(--accent); }
+.lc-err { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .1em; color: #ff5f7a; }
 
-/* ── 结算栏 ── */
-.vx-pay {
-  display: flex; align-items: center; justify-content: space-between; gap: 20px;
-  margin-top: 26px; padding: 20px 22px; border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .015)),
-    radial-gradient(320px 120px at 12% 0%, rgba(0, 229, 255, .12), transparent 70%);
-  border: 1px solid rgba(0, 229, 255, .2);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+/* ── 结算 ── */
+.lc-pay {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 26px; flex-wrap: wrap;
+  margin-top: 30px; padding-top: 30px;
+  border-top: 1px solid var(--line-strong);
 }
-.vx-pay-desc { font-size: 11.5px; color: #7d9ab8; letter-spacing: .02em; }
-.vx-dot-s { color: #2a3d55; margin: 0 4px; }
-.vx-pay-price {
-  margin-top: 7px; font: 900 33px/1 ui-monospace, monospace;
-  color: #6ff0ff; letter-spacing: -.03em;
-  text-shadow: 0 0 26px rgba(0, 229, 255, .45);
+.lc-pay-desc {
+  margin: 0 0 10px; font-size: 10px; font-weight: 700;
+  letter-spacing: .18em; color: var(--fg-faint); text-transform: uppercase;
 }
-.vx-cur { font-size: .52em; font-weight: 700; margin-right: 2px; color: #4b8fa8; }
-.vx-was {
-  font-size: .38em; font-weight: 600; color: #44607c; margin-left: 9px;
-  text-decoration: line-through; text-shadow: none;
+.lc-pay-amount { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.lc-pay-cur { font-size: 18px; font-weight: 300; color: var(--fg-faint); font-family: var(--font-num); }
+.lc-pay-num {
+  font-family: var(--font-num);
+  font-size: clamp(42px, 6.2vw, 74px); font-weight: 200;
+  letter-spacing: -.05em; line-height: .9; color: var(--fg);
+  animation: lc-num .34s cubic-bezier(.3,.9,.3,1);
 }
-.vx-bal {
-  display: inline-block; margin-top: 9px; padding: 4px 10px; border-radius: 999px;
-  font: 700 10px/1 ui-monospace, monospace; letter-spacing: .05em;
+@keyframes lc-num {
+  from { opacity: .4; transform: translateY(7px) }
+  to   { opacity: 1; transform: none }
 }
-.vx-bal.is-ok { color: #34e5b0; background: rgba(52, 229, 176, .1); border: 1px solid rgba(52, 229, 176, .28); }
-.vx-bal.is-bad { color: #ff5f7a; background: rgba(255, 95, 122, .1); border: 1px solid rgba(255, 95, 122, .3); }
-.vx-pay-r { display: flex; flex-direction: column; align-items: flex-end; gap: 9px; }
+.lc-pay-was {
+  font-size: 13px; font-weight: 300; color: var(--fg-ghost);
+  text-decoration: line-through; margin-left: 8px;
+}
+.lc-pay-bal { margin: 9px 0 0; font-size: 9.5px; font-weight: 700; letter-spacing: .14em; }
+.lc-pay-bal.is-ok { color: var(--fg-faint); }
+.lc-pay-bal.is-bad { color: #ff5f7a; }
 
-.vx-buy {
+.lc-pay-r { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.lc-buy {
   position: relative; overflow: hidden; cursor: pointer; border: none;
-  padding: 15px 40px; border-radius: 14px;
-  background: linear-gradient(96deg, #00e5ff, #4db8ff 52%, #a855f7);
-  color: #04121a; font-weight: 900; font-size: 15px; letter-spacing: .06em;
-  box-shadow: 0 14px 40px rgba(0, 229, 255, .3);
-  transition: transform .18s, box-shadow .18s;
+  padding: 20px 46px; border-radius: var(--radius-sm);
+  background: var(--fg); color: var(--bg);
+  font-family: var(--font); font-size: 13px; font-weight: 900; letter-spacing: .16em;
+  text-transform: uppercase;
+  transition: transform .16s cubic-bezier(.3,.9,.3,1), filter .2s;
 }
-.vx-buy:hover { transform: translateY(-2px); box-shadow: 0 18px 50px rgba(0, 229, 255, .44); }
-.vx-buy:disabled { opacity: .6; cursor: wait; transform: none; }
-.vx-buy-txt { position: relative; z-index: 2; }
-.vx-buy-shine {
-  position: absolute; top: 0; left: -60%; width: 40%; height: 100%; z-index: 1;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55), transparent);
-  animation: vx-shine 3.4s ease-in-out infinite;
+.lc-buy:hover { filter: brightness(1.1); }
+.lc-buy:active { transform: scale(.975); }
+.lc-buy:disabled { opacity: .5; cursor: wait; transform: none; }
+.lc-buy span:first-child { position: relative; z-index: 2; }
+.lc-buy-ripple {
+  position: absolute; z-index: 1; pointer-events: none;
+  left: var(--rx, 50%); top: var(--ry, 50%);
+  width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 999px;
+  background: var(--accent);
+  animation: lc-ripple .62s cubic-bezier(.2,.8,.3,1);
 }
-@keyframes vx-shine {
-  0% { left: -60% } 55% { left: 130% } 100% { left: 130% }
+@keyframes lc-ripple {
+  from { transform: scale(0); opacity: .85 }
+  to   { transform: scale(70); opacity: 0 }
 }
-.vx-topup { font-size: 11px; color: #ffc046; text-decoration: none; }
-.vx-topup:hover { color: #ffd77a; }
+.lc-topup {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .14em;
+  color: #ffc046; text-decoration: none; text-transform: uppercase;
+}
 @media (max-width: 640px) {
-  .vx-pay { flex-direction: column; align-items: stretch; gap: 16px; }
-  .vx-pay-r { align-items: stretch; }
-  .vx-buy { width: 100%; }
-  .vx-topup { text-align: center; }
+  .lc-pay { flex-direction: column; align-items: stretch; }
+  .lc-pay-r { align-items: stretch; }
+  .lc-buy { width: 100%; }
+  .lc-topup { text-align: center; }
 }
 
-/* ── 空态 ── */
-.vx-empty {
-  position: relative; margin: 44px 0; padding: 54px 20px; text-align: center;
-  border-radius: 20px; overflow: hidden;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .035), transparent);
-  border: 1px dashed rgba(120, 190, 255, .22);
+/* ── 空态 / 加载 ── */
+.lc-empty { padding: 70px 20px; text-align: center; }
+.lc-empty-orb {
+  width: 54px; height: 54px; margin: 0 auto 22px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fff 0%, #b9c4e4 18%, #41496e 52%, #0b0e18 88%);
+  box-shadow: inset -6px -8px 20px rgba(0,0,0,.85), 0 14px 34px rgba(90,130,220,.18);
+  animation: lc-pulse 2.6s ease-in-out infinite;
 }
-.vx-empty-ring {
-  width: 46px; height: 46px; margin: 0 auto 18px; border-radius: 999px;
-  border: 1.5px solid rgba(0, 229, 255, .5); border-top-color: transparent;
-  animation: vx-spin 1.6s linear infinite;
+@keyframes lc-pulse {
+  0%, 100% { transform: scale(1); opacity: .85 }
+  50%      { transform: scale(1.07); opacity: 1 }
 }
-@keyframes vx-spin { to { transform: rotate(360deg) } }
-.vx-empty-t {
-  font: 800 12px/1 ui-monospace, monospace; letter-spacing: .26em; color: #6ff0ff;
-}
-.vx-empty-p { margin: 12px auto 0; max-width: 440px; font-size: 12.5px; line-height: 1.85; color: #5e7893; }
+.lc-empty-t { margin: 0 0 12px; font-size: 10px; font-weight: 800; letter-spacing: .32em; color: var(--accent); }
+.lc-empty-p { margin: 0 auto; max-width: 380px; font-size: 12px; line-height: 1.9; color: var(--fg-faint); }
 
-/* ── 加载 ── */
-.vx-loading { padding: 60px 0; text-align: center; }
-.vx-loading-bar {
-  width: 180px; height: 2px; margin: 0 auto 14px; border-radius: 2px;
-  background: rgba(120, 190, 255, .12); overflow: hidden;
+.lc-loading { padding: 80px 0; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.lc-loading-t { font-size: 9.5px; font-weight: 800; letter-spacing: .3em; color: var(--fg-faint); }
+.lc-loading-dots { display: inline-flex; gap: 4px; }
+.lc-loading-dots i {
+  width: 4px; height: 4px; border-radius: 999px; background: var(--accent);
+  animation: lc-bounce 1.1s ease-in-out infinite;
 }
-.vx-loading-bar i {
-  display: block; width: 40%; height: 100%;
-  background: linear-gradient(90deg, transparent, #00e5ff, transparent);
-  animation: vx-slide 1.3s ease-in-out infinite;
-}
-@keyframes vx-slide { 0% { transform: translateX(-100%) } 100% { transform: translateX(350%) } }
-.vx-loading p {
-  font: 600 10px/1 ui-monospace, monospace; letter-spacing: .22em; color: #3f5872;
+.lc-loading-dots i:nth-child(2) { animation-delay: .16s }
+.lc-loading-dots i:nth-child(3) { animation-delay: .32s }
+@keyframes lc-bounce {
+  0%, 100% { opacity: .2; transform: translateY(0) }
+  50%      { opacity: 1; transform: translateY(-4px) }
 }
 
-/* ── 信任条 ── */
-.vx-trust {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px;
-  margin-top: 44px; padding-top: 22px;
-  border-top: 1px solid rgba(120, 190, 255, .09);
+/* ── 底部 ── */
+.lc-foot { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); }
+.lc-foot-row {
+  display: flex; flex-wrap: wrap; gap: 10px 30px;
+  font-size: 9px; font-weight: 700; letter-spacing: .18em;
+  color: var(--fg-ghost); text-transform: uppercase;
 }
-.vx-trust-i {
-  display: inline-flex; align-items: center; gap: 7px;
-  font: 600 10.5px/1 ui-monospace, monospace; letter-spacing: .05em; color: #47607d;
-}
-.vx-trust-i i { color: #00e5ff; font-style: normal; font-size: 7px; opacity: .7; }
 
-/* ── 成功弹窗 ── */
-.vx-modal {
+/* ── 弹窗 ── */
+.lc-modal {
   position: fixed; inset: 0; z-index: 10001; display: flex;
   align-items: center; justify-content: center; padding: 20px;
-  background: rgba(2, 4, 10, .82); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px);
 }
-.vx-modal-box {
-  width: 100%; max-width: 350px; padding: 34px 26px; text-align: center;
-  border-radius: 22px; position: relative; overflow: hidden;
-  background: linear-gradient(180deg, #0b1220, #070b14);
-  border: 1px solid rgba(0, 229, 255, .26);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .8), 0 0 60px rgba(0, 229, 255, .1);
+.lc-modal-box {
+  position: relative; width: 100%; max-width: 340px;
+  padding: 40px 28px 30px; text-align: center;
+  background: var(--bg-2); border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line-strong), 0 40px 90px rgba(0, 0, 0, .7);
+  animation: lc-in .4s cubic-bezier(.3,.9,.3,1);
 }
-.vx-modal-ring {
-  width: 60px; height: 60px; margin: 0 auto 18px; border-radius: 999px;
-  display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid rgba(52, 229, 176, .55);
-  background: radial-gradient(circle, rgba(52, 229, 176, .16), transparent 70%);
-  box-shadow: 0 0 34px rgba(52, 229, 176, .3);
+.lc-modal-orb {
+  width: 44px; height: 44px; margin: 0 auto 20px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fff 0%, #b9c4e4 18%, #41496e 52%, #0b0e18 88%);
+  box-shadow: inset -5px -7px 18px rgba(0,0,0,.85), 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
 }
-.vx-modal-ring span { font-size: 24px; color: #34e5b0; font-weight: 900; }
-.vx-modal-t {
-  margin: 0 0 12px; font: 900 17px/1 ui-monospace, monospace;
-  letter-spacing: .14em; color: #eaf2ff;
+.lc-modal-k { margin: 0 0 10px; font-size: 8.5px; font-weight: 800; letter-spacing: .34em; color: var(--accent); }
+.lc-modal-t { margin: 0 0 16px; font-size: 19px; font-weight: 200; letter-spacing: -.02em; color: var(--fg); }
+.lc-modal-id {
+  margin: 0 0 4px; padding: 10px 12px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; color: var(--fg-dim); word-break: break-all;
+  background: rgba(128, 128, 128, .1); border-radius: var(--radius-sm);
 }
-.vx-modal-p {
-  margin: 0 0 4px; padding: 9px 12px; border-radius: 9px;
-  font: 600 12.5px/1.4 ui-monospace, monospace; color: #6ff0ff;
-  background: rgba(0, 229, 255, .07); border: 1px solid rgba(0, 229, 255, .18);
-  word-break: break-all;
-}
-.vx-modal-btns { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
-.vx-modal-primary {
-  padding: 13px; border-radius: 12px; cursor: pointer; border: none;
-  font-weight: 900; font-size: 13px; letter-spacing: .04em;
-  color: #04121a; background: linear-gradient(96deg, #00e5ff, #4db8ff);
+.lc-modal-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+.lc-modal-p {
+  padding: 14px; border: none; cursor: pointer; border-radius: var(--radius-sm);
+  background: var(--accent); color: var(--accent-fg);
+  font-family: var(--font); font-size: 11px; font-weight: 900;
+  letter-spacing: .16em; text-transform: uppercase;
   transition: filter .18s;
 }
-.vx-modal-primary:hover { filter: brightness(1.08); }
-.vx-modal-ghost {
-  padding: 13px; border-radius: 12px; cursor: pointer;
-  font-weight: 700; font-size: 12.5px; color: #8ea4bf;
-  background: rgba(255, 255, 255, .05);
-  border: 1px solid rgba(120, 190, 255, .16);
+.lc-modal-p:hover { filter: brightness(1.1); }
+.lc-modal-g {
+  padding: 14px; border: none; cursor: pointer; border-radius: var(--radius-sm);
+  background: transparent; color: var(--fg-dim);
+  font-family: var(--font); font-size: 10px; font-weight: 800;
+  letter-spacing: .16em; text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
   transition: background .18s;
 }
-.vx-modal-ghost:hover { background: rgba(255, 255, 255, .09); }
+.lc-modal-g:hover { background: rgba(128, 128, 128, .1); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   主题 2：极简 MINIMAL
+   米白底 + 黑字，去掉球和所有装饰，只靠排版和留白说话。
+   字重全降一档（细体），卡片无底色，靠 1px 线分隔。
+   ══════════════════════════════════════════════════════════════════════════ */
+.lc-root[data-theme="minimal"] {
+  --bg: #f6f5f2;
+  --bg-2: #f6f5f2;
+  --fg: #111110;
+  --fg-dim: #5c5b57;
+  --fg-faint: #8e8d88;
+  --fg-ghost: #c9c8c3;
+  --line: rgba(17, 17, 16, .1);
+  --line-strong: rgba(17, 17, 16, .18);
+  --accent: #111110;
+  --accent-fg: #f6f5f2;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --font: "Helvetica Neue", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "Helvetica Neue", system-ui, sans-serif;
+  --title-size: clamp(38px, 6.6vw, 76px);
+  --title-weight-a: 300;
+  --title-weight-b: 500;
+  --title-spacing: -.035em;
+  --grain: 0;
+  --orb-show: none;
+}
+.lc-root[data-theme="minimal"] .lc-title-b {
+  background: none; -webkit-text-fill-color: currentColor; color: var(--fg);
+  animation: none;
+}
+.lc-root[data-theme="minimal"] .lc-grain { display: none; }
+.lc-root[data-theme="minimal"] .lc-card { background: transparent; }
+.lc-root[data-theme="minimal"] .lc-card.is-on { background: #fff; }
+.lc-root[data-theme="minimal"] .lc-grid { background: transparent; border: none; }
+.lc-root[data-theme="minimal"] .lc-card { border-bottom: 1px solid var(--line); }
+.lc-root[data-theme="minimal"] .lc-card-price { font-weight: 400; }
+.lc-root[data-theme="minimal"] .lc-ticker-n { font-weight: 300; }
+.lc-root[data-theme="minimal"] .lc-hero { min-height: 58vh; }
+.lc-root[data-theme="minimal"] .lc-btn { letter-spacing: .14em; font-weight: 600; }
+.lc-root[data-theme="minimal"] .lc-buy { font-weight: 700; letter-spacing: .2em; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   主题 3：凶 BRUTAL
+   酸性绿铺满整屏，超粗黑体压到溢出，硬边直角，噪点加重。
+   像 rave flyer / Off-White 的网页版。
+   ══════════════════════════════════════════════════════════════════════════ */
+.lc-root[data-theme="brutal"] {
+  --bg: #ccff00;
+  --bg-2: #ccff00;
+  --fg: #000000;
+  --fg-dim: rgba(0, 0, 0, .68);
+  --fg-faint: rgba(0, 0, 0, .55);
+  --fg-ghost: rgba(0, 0, 0, .3);
+  --line: #000;
+  --line-strong: #000;
+  --accent: #000000;
+  --accent-fg: #ccff00;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --font: "Arial Black", "Helvetica Neue", "PingFang SC", Impact, sans-serif;
+  --font-num: "Arial Black", Impact, sans-serif;
+  --title-size: clamp(46px, 10.5vw, 132px);
+  --title-weight-a: 900;
+  --title-weight-b: 900;
+  --title-spacing: -.06em;
+  --grain: .11;
+}
+.lc-root[data-theme="brutal"] .lc-title-b {
+  background: none; -webkit-text-fill-color: currentColor; color: #000;
+  animation: none;
+  -webkit-text-stroke: 2px #000;
+}
+.lc-root[data-theme="brutal"] .lc-title { line-height: .84; }
+.lc-root[data-theme="brutal"] .lc-grain { opacity: .11; mix-blend-mode: multiply; }
+.lc-root[data-theme="brutal"] .lc-mark { font-size: 16px; letter-spacing: .3em; }
+.lc-root[data-theme="brutal"] .lc-ticker-n { font-weight: 900; letter-spacing: -.05em; }
+.lc-root[data-theme="brutal"] .lc-card { background: transparent; border: 2px solid #000; }
+.lc-root[data-theme="brutal"] .lc-grid { gap: 10px; background: transparent; border: none; }
+.lc-root[data-theme="brutal"] .lc-card.is-on { background: #000; color: #ccff00; }
+.lc-root[data-theme="brutal"] .lc-card.is-on .lc-card-name,
+.lc-root[data-theme="brutal"] .lc-card.is-on .lc-card-price { color: #ccff00; }
+.lc-root[data-theme="brutal"] .lc-card.is-on .lc-card-loc { color: rgba(204, 255, 0, .7); }
+.lc-root[data-theme="brutal"] .lc-opts { gap: 10px; background: transparent; border: none; }
+.lc-root[data-theme="brutal"] .lc-opt { border: 2px solid #000; background: transparent; }
+.lc-root[data-theme="brutal"] .lc-opt-v { font-weight: 900; }
+.lc-root[data-theme="brutal"] .lc-specs { border-top: 3px solid #000; border-bottom: 3px solid #000; }
+.lc-root[data-theme="brutal"] .lc-spec-k { font-weight: 900; letter-spacing: .2em; }
+.lc-root[data-theme="brutal"] .lc-spec-v { font-weight: 900; }
+.lc-root[data-theme="brutal"] .lc-pay { border-top: 3px solid #000; }
+.lc-root[data-theme="brutal"] .lc-pay-num { font-weight: 900; font-size: clamp(52px, 8vw, 96px); }
+.lc-root[data-theme="brutal"] .lc-btn { border: 2px solid #000; font-weight: 900; }
+.lc-root[data-theme="brutal"] .lc-btn-ghost { box-shadow: none; border: 2px solid #000; color: #000; }
+.lc-root[data-theme="brutal"] .lc-btn-ghost:hover { background: #000; color: #ccff00; }
+.lc-root[data-theme="brutal"] .lc-buy { border: 3px solid #000; }
+.lc-root[data-theme="brutal"] .lc-proto { box-shadow: none; border: 1.5px solid #000; color: #000; font-weight: 900; }
+.lc-root[data-theme="brutal"] .lc-vtext { font-weight: 900; color: rgba(0, 0, 0, .18); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   主题 4：精密 PRECISE
+   近黑底 + 终端绿，等宽字体，网格线密集，字号全部收小。
+   像 Bloomberg 终端、工业设备面板、网管监控屏。
+   ══════════════════════════════════════════════════════════════════════════ */
+.lc-root[data-theme="precise"] {
+  --bg: #07090c;
+  --bg-2: #0b0e13;
+  --fg: #c3cfd9;
+  --fg-dim: #7d8e9c;
+  --fg-faint: #55636e;
+  --fg-ghost: #2b353d;
+  --line: rgba(120, 180, 210, .14);
+  --line-strong: rgba(120, 180, 210, .28);
+  --accent: #4ade80;
+  --accent-fg: #04070a;
+  --radius: 2px;
+  --radius-sm: 2px;
+  --font: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --font-num: ui-monospace, "SF Mono", Consolas, monospace;
+  --title-size: clamp(26px, 3.6vw, 44px);
+  --title-weight-a: 700;
+  --title-weight-b: 700;
+  --title-spacing: -.01em;
+  --grain: .02;
+}
+.lc-root[data-theme="precise"] .lc-title-b {
+  background: none; -webkit-text-fill-color: currentColor; color: var(--accent);
+  animation: none;
+}
+.lc-root[data-theme="precise"] .lc-title { flex-direction: row; gap: .3em; flex-wrap: wrap; line-height: 1.1; }
+.lc-root[data-theme="precise"] .lc-hero { min-height: 34vh; }
+.lc-root[data-theme="precise"] .lc-lede { font-size: 11.5px; line-height: 1.85; max-width: 620px; }
+.lc-root[data-theme="precise"] .lc-top-t { letter-spacing: .18em; }
+.lc-root[data-theme="precise"] .lc-ticker-n { font-size: clamp(20px, 2.4vw, 30px); font-weight: 700; }
+.lc-root[data-theme="precise"] .lc-sec-t { font-size: 10.5px; letter-spacing: .18em; }
+.lc-root[data-theme="precise"] .lc-card-name { font-size: 12.5px; font-weight: 700; }
+.lc-root[data-theme="precise"] .lc-card-loc { font-size: 9.5px; }
+.lc-root[data-theme="precise"] .lc-card-price { font-size: 15px; font-weight: 700; }
+.lc-root[data-theme="precise"] .lc-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.lc-root[data-theme="precise"] .lc-opt-v { font-size: 15px; font-weight: 700; }
+.lc-root[data-theme="precise"] .lc-pay-num { font-size: clamp(30px, 4vw, 46px); font-weight: 700; }
+.lc-root[data-theme="precise"] .lc-buy { font-size: 11px; letter-spacing: .12em; padding: 16px 34px; }
+/* 精密版把球换成网格球 */
+.lc-root[data-theme="precise"] .lc-orb {
+  background: radial-gradient(circle at 50% 50%, rgba(74, 222, 128, .08), transparent 62%);
+  box-shadow: none; filter: none; animation: none;
+  border: 1px solid rgba(74, 222, 128, .3);
+}
+.lc-root[data-theme="precise"] .lc-orb-sheen { display: none; }
+.lc-root[data-theme="precise"] .lc-orb-ring {
+  background:
+    repeating-linear-gradient(0deg, rgba(74, 222, 128, .16) 0 1px, transparent 1px 15px),
+    repeating-linear-gradient(90deg, rgba(74, 222, 128, .16) 0 1px, transparent 1px 15px);
+  mask-image: radial-gradient(circle, #000 0%, #000 62%, transparent 78%);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, #000 62%, transparent 78%);
+  animation: none; border-radius: 50%;
+}
+.lc-root[data-theme="precise"] .lc-orb-orbit { border-color: rgba(74, 222, 128, .2); }
+.lc-root[data-theme="precise"] .lc-orb-shadow { display: none; }
+.lc-root[data-theme="precise"] .lc-vtext { font-size: 11px; letter-spacing: .3em; color: var(--fg-ghost); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   主题 5：软 SOFT
+   浅灰蓝底 + 白色大圆角卡 + 柔和渐变 + 扩散阴影。
+   接近 Apple Liquid Glass / Nothing OS 的观感。
+   ══════════════════════════════════════════════════════════════════════════ */
+.lc-root[data-theme="soft"] {
+  --bg: #eef1f8;
+  --bg-2: #ffffff;
+  --fg: #1a2138;
+  --fg-dim: #5d6785;
+  --fg-faint: #8a94ad;
+  --fg-ghost: #c3cbdd;
+  --line: rgba(40, 55, 100, .07);
+  --line-strong: rgba(40, 55, 100, .13);
+  --accent: #6d7cff;
+  --accent-fg: #ffffff;
+  --radius: 26px;
+  --radius-sm: 16px;
+  --font: "SF Pro Display", -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "SF Pro Display", -apple-system, system-ui, sans-serif;
+  --title-size: clamp(34px, 5.4vw, 64px);
+  --title-weight-a: 400;
+  --title-weight-b: 700;
+  --title-spacing: -.03em;
+  --grain: 0;
+  --shadow-card: 0 2px 8px rgba(40, 55, 100, .04), 0 12px 32px rgba(40, 55, 100, .06);
+}
+.lc-root[data-theme="soft"] {
+  background:
+    radial-gradient(60% 50% at 18% 8%, rgba(140, 160, 255, .22), transparent 62%),
+    radial-gradient(55% 45% at 85% 4%, rgba(200, 150, 255, .18), transparent 60%),
+    radial-gradient(50% 40% at 50% 96%, rgba(120, 220, 230, .16), transparent 64%),
+    #eef1f8;
+  background-attachment: fixed;
+}
+.lc-root[data-theme="soft"] .lc-title-b {
+  background: linear-gradient(102deg, #6d7cff 0%, #a78bff 42%, #64c8e8 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: none;
+}
+.lc-root[data-theme="soft"] .lc-grain { display: none; }
+.lc-root[data-theme="soft"] .lc-top { background: rgba(255, 255, 255, .55); backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); }
+.lc-root[data-theme="soft"] .lc-ticker { border: none; gap: 12px; padding: 0 clamp(18px, 4vw, 54px); }
+.lc-root[data-theme="soft"] .lc-ticker-item {
+  background: rgba(255, 255, 255, .7); border-radius: var(--radius-sm);
+  border-right: none; backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-card); margin-top: 12px; margin-bottom: 12px;
+}
+.lc-root[data-theme="soft"] .lc-grid {
+  gap: 14px; background: transparent; border: none;
+}
+.lc-root[data-theme="soft"] .lc-card {
+  background: rgba(255, 255, 255, .82); border-radius: var(--radius);
+  backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, .9);
+  box-shadow: var(--shadow-card);
+  transition: transform .3s cubic-bezier(.3,.9,.3,1), box-shadow .3s;
+}
+.lc-root[data-theme="soft"] .lc-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(40,55,100,.08), 0 22px 50px rgba(40,55,100,.1); }
+.lc-root[data-theme="soft"] .lc-card.is-on {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--accent), 0 14px 40px rgba(109, 124, 255, .22);
+}
+.lc-root[data-theme="soft"] .lc-card-sweep { display: none; }
+.lc-root[data-theme="soft"] .lc-opts { gap: 10px; background: transparent; border: none; }
+.lc-root[data-theme="soft"] .lc-opt {
+  background: rgba(255, 255, 255, .8); border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, .9);
+  box-shadow: 0 2px 8px rgba(40, 55, 100, .04);
+  transition: transform .24s, box-shadow .24s, background .24s;
+}
+.lc-root[data-theme="soft"] .lc-opt:hover { transform: translateY(-2px); }
+.lc-root[data-theme="soft"] .lc-opt.is-on {
+  background: linear-gradient(135deg, #6d7cff, #9182ff);
+  color: #fff; box-shadow: 0 10px 26px rgba(109, 124, 255, .34);
+}
+.lc-root[data-theme="soft"] .lc-opt-best { border-radius: 0 var(--radius-sm) 0 8px; }
+.lc-root[data-theme="soft"] .lc-specs {
+  border: none; gap: 12px; margin-bottom: 24px;
+}
+.lc-root[data-theme="soft"] .lc-spec {
+  background: rgba(255, 255, 255, .7); border-radius: var(--radius-sm);
+  border-right: none; backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-card); padding: 18px 14px;
+}
+.lc-root[data-theme="soft"] .lc-proto {
+  background: rgba(255, 255, 255, .8); box-shadow: none;
+  border: 1px solid rgba(40, 55, 100, .08);
+  color: var(--fg-dim); border-radius: 999px; padding: 6px 14px;
+}
+.lc-root[data-theme="soft"] .lc-pay {
+  border-top: none; margin-top: 34px; padding: 26px 26px;
+  background: rgba(255, 255, 255, .82); border-radius: var(--radius);
+  backdrop-filter: blur(18px); box-shadow: var(--shadow-card);
+}
+.lc-root[data-theme="soft"] .lc-btn { border-radius: 999px; font-weight: 700; letter-spacing: .04em; text-transform: none; font-size: 13.5px; }
+.lc-root[data-theme="soft"] .lc-btn-ghost { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.lc-root[data-theme="soft"] .lc-buy {
+  border-radius: 999px; background: linear-gradient(135deg, #6d7cff, #8b7dff 55%, #a78bff);
+  color: #fff; font-weight: 700; letter-spacing: .06em; text-transform: none; font-size: 14px;
+  box-shadow: 0 12px 30px rgba(109, 124, 255, .34);
+}
+.lc-root[data-theme="soft"] .lc-buy:hover { filter: brightness(1.06); box-shadow: 0 16px 38px rgba(109, 124, 255, .42); }
+.lc-root[data-theme="soft"] .lc-search input {
+  background: rgba(255, 255, 255, .8); border-radius: 999px; padding: 13px 20px;
+  box-shadow: var(--shadow-card);
+}
+.lc-root[data-theme="soft"] .lc-search-line {
+  display: none;
+}
+.lc-root[data-theme="soft"] .lc-filter-btn { border-radius: 999px; }
+.lc-root[data-theme="soft"] .lc-filter-btn.is-on { background: #fff; color: var(--accent); box-shadow: 0 4px 12px rgba(109,124,255,.18); }
+.lc-root[data-theme="soft"] .lc-coupon input,
+.lc-root[data-theme="soft"] .lc-coupon-btn,
+.lc-root[data-theme="soft"] .lc-coupon-x { box-shadow: none; border-radius: 999px; }
+.lc-root[data-theme="soft"] .lc-coupon input { background: rgba(255,255,255,.8); padding: 12px 18px; box-shadow: var(--shadow-card); }
+.lc-root[data-theme="soft"] .lc-modal-box { border-radius: 28px; }
+/* 软版球：柔和光球 */
+.lc-root[data-theme="soft"] .lc-orb {
+  background:
+    radial-gradient(circle at 34% 28%, #ffffff 0%, #e4ebff 22%, #c7d2ff 44%, #b4bcff 62%, #d9e0fb 100%);
+  box-shadow:
+    inset -14px -16px 44px rgba(120, 140, 220, .28),
+    inset 12px 10px 34px rgba(255, 255, 255, .9),
+    0 30px 70px rgba(109, 124, 255, .28);
+  filter: none;
+  animation: lc-float 9s ease-in-out infinite;
+}
+.lc-root[data-theme="soft"] .lc-orb-sheen { opacity: .5; }
+.lc-root[data-theme="soft"] .lc-orb-ring { display: none; }
+.lc-root[data-theme="soft"] .lc-orb-shadow { background: radial-gradient(ellipse, rgba(109, 124, 255, .32), transparent 70%); }
+.lc-root[data-theme="soft"] .lc-vtext { color: rgba(40, 55, 100, .16); }
 </style>
