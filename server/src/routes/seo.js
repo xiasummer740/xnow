@@ -23,7 +23,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Service, SiteServicePrice, Config } from '../models/index.js';
+import { Service, SiteServicePrice, Config, VpnProduct } from '../models/index.js';
 import { platformOf, slugOf, labelOfSlug, PLATFORM_CN, typeOf, per1000, PLATFORM_LABELS } from '../utils/platform.js';
 import { copyOf } from '../utils/platformCopy.js';
 import { typeCopyOf, TYPE_COPY } from '../utils/typeCopy.js';
@@ -375,7 +375,10 @@ Disallow: /recharge
 Disallow: /vip
 Disallow: /affiliate
 Disallow: /finance.html
-Disallow: /vpn
+# ⚠️ 2026-11-07：/vpn 从 Disallow 名单里移除了 —— 页面已改成服务端渲染（有真内容），
+#    要收录。只拦它的登录后子路由（我的节点 / 后台），那些没有收录价值。
+Disallow: /vpn/admin
+Disallow: /vpn/clients
 
 # 检索型 AI 爬虫（用户提问时来取内容，属"引用"不属"训练"）
 User-agent: GPTBot
@@ -441,6 +444,10 @@ router.get('/sitemap.xml', async (req, res) => {
         urls.push({ loc: `${base}/guide`, pri: '0.8' });
         for (const a of ARTICLES) {
             urls.push({ loc: `${base}/guide/${a.slug}`, pri: '0.7' });
+        }
+        // 安全节点（2026-11-07 起服务端渲染，分站不卖这个，只主站出）
+        if (!brand.isSubsite) {
+            urls.push({ loc: `${base}/vpn`, pri: '0.8' });
         }
         // ⚠️ 这里**故意不加** <?xml-stylesheet?>：
         //    加了之后浏览器会把 XML 渲染成漂亮表格，但 Chrome 从 2026 起对 XSLT 弹红色警告
@@ -908,6 +915,175 @@ ${guideBody(a)}
             }));
     } catch (e) {
         console.error('[seo] 知识库详情失败', e.message);
+        res.status(500).type('text/plain').send('error');
+    }
+});
+
+// ── GET /vpn（全球安全节点，2026-11-07）────────────────────────────────────
+// 之前这个页面是 client/public/vpn.html 一个 2.9KB 的手写壳，<div id="app"> 全空、
+// 正文 0 字 —— 搜索引擎抓到的是空页面，而 robots.txt 又 Disallow 了它，
+// meta 却写着 index,follow。三处互相抵消，等于什么都没做。
+// 现在改成服务端渲染，和 /c/:slug 一个套路。
+//
+// ⚠️ 关键：**没配节点时也要有真内容**。当前 vpn_products 表是 0 行，
+//    如果按「有货才渲染」写，上线第一天就是空页面。所以下面把计费方式、
+//    协议、接入流程、FAQ 全部写死在服务端，节点列表只是其中一块。
+//    祥哥配好节点后，这块自动填上，不用改代码。
+const VPN_FAQ = [
+    ['怎么使用？', '下单后在「我的节点」里会拿到订阅链接和二维码。把订阅链接导入对应客户端（Windows 用 v2rayN / macOS 用 V2Box / iOS 用 Shadowrocket / Android 用 v2rayNG），点更新订阅就能看到全部线路，选一条连接即可。不需要手工填地址和密码。'],
+    ['流量怎么算？', '按你购买的流量包扣减，上传和下载都计入。流量用完即停，不会自动续费、不会有超额扣款。到期时间从开通那一刻开始算 30 天，流量没用完也会到期，两者先到先停。'],
+    ['能几台设备同时用？', '默认同一份订阅可以在多台设备上导入，但同时在线数受节点配置限制。如果是团队使用，建议按人数购买多个订阅，避免互相挤占。'],
+    ['节点在哪些地区？', '按实际可用的地区展示，通常在页面上会标注国旗和机房位置。选节点时不要只看距离 —— 到你常用网站的路由质量比物理距离更重要，建议下单前先申请试用测一下。'],
+    ['能试用吗？', '支持试用（页面上的「免费试用」按钮，具体额度和是否开放由站点配置决定）。试用拿到的是和正式订阅一样的接入方式，可以先测延迟和速度再决定买多少流量。'],
+    ['到期了怎么办？', '到期后订阅自动失效，需要重新购买并重新导入订阅。已经过期的订阅链接不会恢复，请在「我的节点」里换取新的链接。'],
+    ['为什么连接不上？', '按这个顺序排查：① 订阅是否更新到最新（客户端里点「更新订阅」）；② 设备时间是否准确（时间偏差超过 2 分钟会导致握手失败）；③ 换一条线路试；④ 本地网络是否拦截了对应端口。四条都试过还不行，联系客服并提供客户端名称和报错截图。'],
+];
+
+router.get('/vpn', async (req, res) => {
+    try {
+        const catalog = await loadCatalog(req.site);
+        const brand = brandOf(req, catalog);
+        // 分站不卖安全节点（站长没有这个业务，前端菜单也是 v-if="!isSubsite" 隐藏的）
+        if (brand.isSubsite) {
+            return res.status(404).type('text/html; charset=utf-8').send(
+                `<!doctype html><meta charset="utf-8"><title>页面不存在</title><meta name="robots" content="noindex"><div style="font:16px system-ui;padding:40px">页面不存在。<a href="/">回首页</a></div>`
+            );
+        }
+
+        const base = `https://${brand.host}`;
+        const canonical = `${base}/vpn`;
+        const m = brand.meta || {};
+
+        let products = [];
+        try {
+            products = await VpnProduct.findAll({ where: { active: true }, order: [['sort', 'ASC']] });
+        } catch (e) {
+            console.error('[seo] 读取节点失败', e.message);
+        }
+        const hasNodes = products.length > 0;
+        const minPricePerGb = hasNodes
+            ? Math.min(...products.map((p) => Number(p.price_per_gb || 0)).filter((n) => n > 0))
+            : 0;
+        const priceText = minPricePerGb > 0 ? `${minPricePerGb.toFixed(2)} 元 / GB 起` : '按节点配置定价';
+
+        const title = `全球安全节点 · 多协议一键接入 · ${brand.name}`;
+        const desc = hasNodes
+            ? `${brand.name} 全球安全节点：${products.length} 个地区可选，${priceText}，支持 VLESS / VMess / Trojan / Shadowsocks / Hysteria2 多协议，下单即得订阅链接，Windows / macOS / iOS / Android 全平台可用。`
+            : `${brand.name} 全球安全节点：支持 VLESS / VMess / Trojan / Shadowsocks / Hysteria2 多协议，按流量 GB 计费，下单即得订阅链接，Windows / macOS / iOS / Android 全平台可用。`;
+
+        // 节点表：有货才渲染，没货给一句状态说明（不留空白，页面始终有内容）
+        const nodeBlock = hasNodes
+            ? `<table class="seo-table"><thead><tr><th>节点</th><th>地区</th><th>最大流量</th><th>价格</th></tr></thead><tbody>${
+                products.map((p) => `<tr>
+<td>${esc(p.flag_emoji || '')} ${esc(p.name)}</td>
+<td>${esc(p.vps_location || '—')}</td>
+<td>${p.max_traffic_gb ? `${esc(String(p.max_traffic_gb))} GB` : '—'}</td>
+<td>${Number(p.price_per_gb) > 0 ? `${Number(p.price_per_gb).toFixed(2)} 元 / GB` : '按流量包'}</td>
+</tr>${p.description ? `<tr><td colspan="4" style="color:#94a3b8;font-size:13px;padding-top:0">${esc(p.description)}</td></tr>` : ''}`).join('')
+            }</tbody></table><p>全部节点按流量计费，30 天有效期，流量用完即停，不自动续费。</p>`
+            : `<p>节点正在配置中。当前可直接联系客服了解开通时间，或先看下面的计费方式与接入流程 —— 开通后本页会自动列出全部可用地区与价格。</p>`;
+
+        const protocols = ['VLESS + Reality', 'VMess + WebSocket', 'Trojan + TLS', 'Shadowsocks', 'Hysteria2'];
+        const clients = [
+            ['Windows', 'v2rayN / Clash Verge'],
+            ['macOS', 'V2Box / ClashX'],
+            ['iOS', 'Shadowrocket / Stash'],
+            ['Android', 'v2rayNG / Clash Meta'],
+            ['Linux', 'v2rayA / Clash'],
+        ];
+
+        const body = `<div class="seo-wrap">${styleBlock}
+<nav style="font-size:13px;color:#94a3b8;margin-bottom:10px">
+<a href="/" style="color:#22d3ee">首页</a> › 全球安全节点
+</nav>
+<h1>${esc(brand.name)} 全球安全节点</h1>
+<p>覆盖多地区的安全接入节点，支持主流协议，下单后直接拿到订阅链接，导入客户端点一下就能用。不需要手工配置地址和密钥。</p>
+<p>计费方式：<b>按流量 GB 计费</b>，${esc(priceText)}，开通后 30 天有效，流量用完即停，不自动续费、不超额扣款。</p>
+
+<h2>可用节点</h2>
+${nodeBlock}
+
+<h2>支持的协议</h2>
+<ul>${protocols.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
+<p>协议在节点侧配置好后由客户端自动识别，你不需要手动选择 —— 导入订阅后客户端会列出全部可用线路。</p>
+
+<h2>四步接入</h2>
+<ol>
+<li>下单并完成支付（余额支付，即时到账）</li>
+<li>进入「我的节点」拿到<b>订阅链接</b>和二维码</li>
+<li>在客户端里添加订阅、点「更新订阅」，线路列表就出来了</li>
+<li>选一条延迟低的连接即可，之后每换设备只需再导入一次</li>
+</ol>
+
+<h2>支持哪些设备</h2>
+<table class="seo-table"><thead><tr><th>系统</th><th>常用客户端</th></tr></thead><tbody>
+${clients.map(([os, app]) => `<tr><td>${esc(os)}</td><td>${esc(app)}</td></tr>`).join('')}
+</tbody></table>
+<p>同一份订阅可以在多台设备上导入，但同时在线数受节点配置限制。团队使用建议按人数分别购买。</p>
+
+<h2>常见问题</h2>
+${faqHtml(VPN_FAQ.map(([q, a]) => ({ q, a })))}
+${m.tgUrl || m.wechatId ? `<h2>联系</h2><ul>${m.tgUrl ? `<li>Telegram：${esc(m.tgUrl)}</li>` : ''}${m.wechatId ? `<li>微信：${esc(m.wechatId)}</li>` : ''}</ul>` : ''}
+<a class="seo-cta" href="/vpn">进入节点商城 →</a>
+<div class="seo-foot">${esc(brand.name)} · 按流量计费 · 订阅式接入</div>
+</div>`;
+
+        const ld = [
+            {
+                '@context': 'https://schema.org',
+                '@type': 'Service',
+                name: `${brand.name} 全球安全节点`,
+                serviceType: '安全网络接入服务',
+                description: desc,
+                provider: { '@type': 'Organization', name: brand.name, url: `${base}/` },
+                areaServed: 'Worldwide',
+                availableChannel: {
+                    '@type': 'ServiceChannel',
+                    serviceUrl: canonical,
+                    servicePhone: undefined,
+                },
+                ...(hasNodes && minPricePerGb > 0 ? {
+                    offers: {
+                        '@type': 'Offer',
+                        priceCurrency: 'CNY',
+                        price: Number(minPricePerGb.toFixed(2)),
+                        priceSpecification: {
+                            '@type': 'UnitPriceSpecification',
+                            price: Number(minPricePerGb.toFixed(2)),
+                            priceCurrency: 'CNY',
+                            unitText: '每 GB 流量',
+                        },
+                        availability: 'https://schema.org/InStock',
+                        url: canonical,
+                    },
+                } : {}),
+            },
+            {
+                '@context': 'https://schema.org',
+                '@type': 'FAQPage',
+                mainEntity: VPN_FAQ.map(([q, a]) => ({
+                    '@type': 'Question', name: q,
+                    acceptedAnswer: { '@type': 'Answer', text: a },
+                })),
+            },
+            {
+                '@context': 'https://schema.org',
+                '@type': 'BreadcrumbList',
+                itemListElement: [
+                    { '@type': 'ListItem', position: 1, name: brand.name, item: `${base}/` },
+                    { '@type': 'ListItem', position: 2, name: '全球安全节点', item: canonical },
+                ],
+            },
+        ];
+
+        const shell = readTemplate('main');
+        if (!shell) return res.status(503).type('text/plain').send('building');
+        const ldAll = ld.map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+        res.type('text/html; charset=utf-8')
+            .set('Cache-Control', 'public, max-age=900')
+            .send(injectIntoShell(shell, { head: headOf({ brand, title, desc, canonical, ld: ldAll }), body }));
+    } catch (e) {
+        console.error('[seo] /vpn 失败', e.message);
         res.status(500).type('text/plain').send('error');
     }
 });

@@ -84,9 +84,9 @@ router.get('/products', async (req, res) => {
 router.get('/ping', async (req, res) => {
   try {
     const { id } = req.query;
-    if (!id) return res.json({ status: 'error', message: 'Missing node id' });
+    if (!id) return res.status(400).json({ status: 'error', message: 'Missing node id' });
     const product = await VpnProduct.findByPk(id);
-    if (!product?.xxui_url) return res.json({ status: 'error', message: 'Node not found or no URL' });
+    if (!product?.xxui_url) return res.status(404).json({ status: 'error', message: 'Node not found or no URL' });
 
     const start = Date.now();
     await axios.get(product.xxui_url, { timeout: 5000 });

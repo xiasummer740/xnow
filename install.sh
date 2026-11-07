@@ -572,6 +572,12 @@ server {
     # 抓取预算全浪费在空页面上；/llms.txt /blog /faq 这类请求更是拿到一坨
     # 首页 HTML，AI 引擎解析直接失败（llms.txt 等于没做）。
     # 白名单来源：client/src/router/index.ts
+    # /vpn 单独一条：入口是 vpn.html（不是 index.html），且还有 /vpn/admin、/vpn/clients 子路由
+    location ~ ^/vpn(/|$) {
+        add_header Cache-Control "no-cache";
+        try_files \$uri \$uri/ /vpn.html;
+    }
+
     location ~ ^/(order|history|recharge|vip|affiliate|boost|clients|showcase|login|api-doc|mass-order|admin|my-site)(/|$) {
         add_header Cache-Control "no-cache";
         try_files \$uri \$uri/ /index.html;

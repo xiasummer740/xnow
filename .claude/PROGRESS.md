@@ -2085,3 +2085,60 @@ sitemap：主站 71 条 / 分站 70 条
 - **品牌词搜不到自己**（Bing 命中 0）—— 要靠外链与第三方提及，见 GEO-PLAYBOOK 第三节
 - GSC 需要 Google 账号手动「请求编入索引」，新页面提交后不会自动抓
 - `sameAs` 目前只有 TG，Twitter / YouTube / Instagram 账号拿到后补进 `brandMeta`
+
+---
+
+## 2026-11-07 16:00 安全节点（/vpn）转正式业务 + 未来系 UI
+
+祥哥定调「A」（真要做），并要求「先做好，回头自己配置节点」，同时要一套新 UI。
+
+### 一、/vpn 从「空壳」改为服务端渲染
+
+**改之前的实测状态**（三层问题叠在一起）：
+
+| 层 | 问题 |
+|---|---|
+| 业务 | `vpn_products` 表 **0 行**、`vpn_clients` **0 条**，但 `vpn_shop_enabled=true`（开着空店） |
+| SEO | `vpn.html` 的 meta 是 `index, follow` + 完整 canonical/JSON-LD，**但 robots.txt `Disallow: /vpn`、sitemap 0 条** —— 三处互相抵消 |
+| 内容 | `<div id="app"></div>` 全空，正文 **0 字**（313 字符全是 meta 文本） |
+
+**改完**：
+- `seo.js` 新增 `GET /vpn` 服务端渲染：**4489 字符正文 + 6 个 h2 + 3 块 JSON-LD**
+  （Service / FAQPage / BreadcrumbList）
+- 内容分两块：节点列表（有货才出）+ **写死的通用部分**（计费方式/协议/四步接入/
+  支持设备/7 条 FAQ）—— 这样即使表里 0 行，页面也有真内容可抓，配好节点后自动填充
+- `robots.txt` 去掉 `Disallow: /vpn`，只拦 `/vpn/admin` `/vpn/clients`
+- `sitemap.xml` 加 `/vpn`（主站专有，分站不卖这个）
+- nginx：`location = /vpn` → 后端；`location ~ ^/vpn(/|$)` → SPA（子路由）
+- 修 `api/vpn/ping` 缺参数返回 200 → **400**
+
+### 二、⚠️ 我引入并修掉的一个回归
+
+加 SPA 白名单时漏了 `/vpn` 的子路由，`/vpn/admin` 和 `/vpn/clients` 一度 **404**。
+
+教训：**加白名单必须按 router 的 children 全铺开测**，只测父路由会漏。
+已补 `location ~ ^/vpn(/|$)` → `try_files $uri $uri/ /vpn.html`，
+现在 29 个前端路由全部实测 200。
+
+### 三、新 UI（VpnShop.vue 重写）
+
+未来系视觉，00 后向：
+- 深空底 `#04050c` + 双极光光晕（22s 漂移）+ 网格 + 扫描线
+- 主色：青 `#00e5ff` / 紫 `#8b5cf6` / 品红 `#ff2d95`，渐变文字带流动动画
+- HUD 语言：`SYSTEM ONLINE / N NODES / latency` 状态条、`01 02 03` 步骤编号、
+  等宽字体读数、`◈ ⬡ ◎` 几何符号代替 emoji
+- 卡片：玻璃拟态 + hover 上浮 + 内部光晕 + 选中脉冲边框
+- 结算栏：大号等宽价格 + 发光 + 按钮扫光动画
+- 流量档位**直接标出该档总价**（原来要自己算）
+- 空态：`NODE DEPLOYING` 旋转环（没节点时的正常展示）
+- 全站 `prefers-reduced-motion` 时关闭动效
+
+三条自我约束：动效只用 transform/opacity/background-position（不触发重排）；
+装饰元素全部 `aria-hidden`；正文不用霓虹色（对比度 ≥4.5:1）。
+
+**demo 节点**：表里没数据时仍显示两条示例节点（美国洛杉矶 / 英国伦敦）撑住版式，
+但带**「示例」标签**、不参与延迟测试、点下单会被拦下提示
+「这是示例节点，配置真实节点后即可购买」—— 配真节点后这段不触发。
+
+构建三步全跑，`VpnShop-AXisgkd9.js` 19.7KB + `VpnShop-C07SWD9-.css` 22.1KB，
+部署走 `quick-deploy.sh`，全机回归含邻居项目全 200。
