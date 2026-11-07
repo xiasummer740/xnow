@@ -2008,3 +2008,80 @@ SeoGuard 报 `7h2d5u.taikon.top` 的 GPTBot/ClaudeBot 抓首页 404。一查不�
 
 **未推送到远程**：本地领先 `origin/feat/sites` 6 个提交。
 远程是 `github.com/xiasummer740/xnow.git`（公开仓库），push 属于发布动作，等祥哥确认。
+
+---
+
+## 2026-11-07 SEO / GEO 全链路重做（页面 16 → 71）
+
+祥哥问「SEO GEO 做得怎么样，推广效果要做到顶级」，要求按顺序全做完。
+实测后先给了一份现状评估（技术 85 分 / 内容 40 分 / 外链 10 分），然后三阶段全部落地。
+
+### 起因：实测发现的三个「白费功夫」问题
+
+1. **软 404 泛滥** —— 任意不存在的路径都返回 `200 + 首页 HTML`
+   （`/blog` `/faq` `/guide` `/llms.txt` `/random/garbage/path` 全是 200 + 3441 字节首页）。
+   根因：`xnow-spa-https` 的 `location /` 用 `try_files ... /index.html` 兜底。
+2. **`/llms.txt` 是假 200** —— 拿到的是 HTML，AI 引擎解析直接失败，等于没做。
+3. **`/en` 完全没进索引体系** —— sitemap 里 0 条，首页 hreflang 也 0 条（只有 `/en` 自己单方面声明）。
+
+另外：`Organization` 结构化数据只有 name/url/description，缺 sameAs/logo/contactPoint；
+Bing 搜「XNOW PRO 社媒增长」命中 **0** 次。
+
+### 阶段一：技术债（已完成并上线）
+
+| 改动 | 做法 |
+|---|---|
+| 软 404 → 真 404 | `location /` 去掉 `/index.html` 兜底改 `=404`；新增 SPA 白名单正则（来源 `client/src/router/index.ts`）；`error_page 404 @xnow_404` → 后端 `/__404` 渲染品牌 404 页 |
+| llms.txt | 后端生成 `/llms.txt`（摘要 + 平台页 + 关键事实 + 联系）与 `/llms-full.txt`（逐条服务清单）；nginx 正则白名单加 `llms\.txt|llms-full\.txt` |
+| 多语言 | sitemap 加 `/en` + `xhtml:link` 三向 hreflang；首页补 zh-CN/en/x-default |
+| 实体信号 | `Organization` 补 `alternateName`/`logo`/`sameAs`(TG)/`contactPoint`；新增 `brandMeta` 从 Config 读客服联系方式 |
+
+⚠️ **踩的坑**：named location 里的 `proxy_pass` **不允许带 URI**
+（`proxy_pass http://127.0.0.1:3000/__404` 直接 `nginx: [emerg]`）；
+必须写成 `rewrite ^ /__404 break;` + `proxy_pass http://127.0.0.1:3000;`。
+脚本自带回滚，第一次失败时生产零改动。
+
+### 阶段二：内容扩张（页面 16 → 71）
+
+- **类型子页** `/c/:slug/:type`（如 `/c/tiktok/fans`）：新增 `utils/typeCopy.js`，
+  8 种服务类型（粉丝/点赞/播放/评论/直播/分享/订阅/流量）各写
+  intro / metrics / scenes / pitfalls / choose / faq。
+  只给「有硬内容且档位 ≥3」的类型出页面，「其他」杂类不做（否则是给搜索引擎喂空页）。
+  平台页加子页内链「按XX服务类型查看」。
+- **知识库** `/guide` + `/guide/:slug`：新增 `utils/guideCopy.js`，10 篇实证型文章
+  （链接格式、掉粉、速度与价格、安全性、新号起步、重复下单、档位选择、播放与互动、
+  直播间数据、怎么验证是否执行）。每篇带 Article + BreadcrumbList + FAQPage。
+
+写文案的两条硬标准：**开头 80 字给结论**（AI 摘录的就是这段）、
+**给可验证的判断标准**（数字/比例/时间），不写「最好/第一」。
+
+### 阶段三：外部信号
+
+- IndexNow 主动提交：主站 71 地址 + 分站 70 地址，均 HTTP 200 接受（cron 每天 3:20 也跑这个）
+- 新增 `deploy/seo/GEO-PLAYBOOK.md`：现状基线、已做改动清单（勿重复）、
+  只有人工能做的部分（品牌一致性 / 行业目录收录 / 内容分发 / 品牌词占位）、
+  每周衡量指标与红线
+
+### 模板同步（CLAUDE.md 硬性要求，三处都改了）
+
+`install.sh` 的 nginx heredoc · `deploy/nginx/production/xnow-spa-https`（从线上拉回来存档）·
+`server/src/utils/siteDomain.js` 的分站 vhost 生成器
+（三处都加了白名单 + 真 404 + llms/guide 转发）。
+
+### 验收（全部实测，含邻居）
+
+```
+sitemap：主站 71 条 / 分站 70 条
+核心 9 个路径 × 普通/GPTBot/ClaudeBot = 全 200
+13 个 SPA 路由（order/history/admin/boost/login/vip/recharge/affiliate/
+  clients/showcase/mass-order/api-doc/my-site）全 200，0 异常
+真 404：/blog /faq /nonexistent /guide/nope /c/tiktok/nope 全部 404
+新页面 × GPTBot：/guide /guide/link-format /c/tiktok/fans /llms.txt 全 200
+全机回归：tk7188.com / code.taikon.top 均 200 ✅
+```
+
+### 仍然没解决的（需要祥哥）
+
+- **品牌词搜不到自己**（Bing 命中 0）—— 要靠外链与第三方提及，见 GEO-PLAYBOOK 第三节
+- GSC 需要 Google 账号手动「请求编入索引」，新页面提交后不会自动抓
+- `sameAs` 目前只有 TG，Twitter / YouTube / Instagram 账号拿到后补进 `brandMeta`
