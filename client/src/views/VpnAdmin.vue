@@ -169,11 +169,39 @@
     <div v-if="editMode!==null" class="xui-overlay" @click.self="editMode=null">
       <div class="xui-modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
         <div style="font-size:1.1rem;font-weight:900;margin-bottom:1rem">{{ editing.id?'编辑节点':'添加节点' }}</div>
-        <div style="display:flex;flex-direction:column;gap:0.75rem;font-size:0.85rem">
+        <div style="display:flex;flex-direction:column;gap:0.9rem;font-size:0.85rem">
+
+          <!-- ① 连接面板 -->
+          <div style="background:#f5f7f9;border-radius:0.75rem;padding:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
+            <div style="font-size:0.68rem;font-weight:800;color:var(--xui-text-dim);letter-spacing:0.08em">① 连接面板</div>
+            <input v-model="editing.xxui_url" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-family:monospace;font-size:0.75rem" placeholder="https://面板IP:2053">
+            <input v-model="editing.xxui_api_key" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-family:monospace;font-size:0.75rem" placeholder="API 密钥（面板 → 设置 → 安全 → API 密钥）">
+            <button @click="fetchInbounds" :disabled="loadingInbounds" class="xui-btn" style="font-size:0.75rem;padding:0.45rem 0.75rem;align-self:flex-start">
+              {{ loadingInbounds ? '读取中…' : (panelInbounds.length ? `↻ 刷新（已读到 ${panelInbounds.length} 个）` : '读取入站列表') }}
+            </button>
+            <div v-if="connResult && connResult.status==='error'" style="font-size:0.72rem;color:var(--xui-danger)">✗ {{ connResult.message }}</div>
+            <div v-else-if="connResult && connResult.status==='success'" style="font-size:0.72rem;color:var(--xui-primary)">{{ connResult.message }}</div>
+          </div>
+
+          <!-- ② 选入站 -->
+          <div>
+            <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">② 选择入站 *</div>
+            <select v-model="editing.xxui_inbound_id" @change="onInboundPick" :disabled="!panelInbounds.length" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-size:0.8rem">
+              <option :value="0">{{ panelInbounds.length ? '-- 请选择 --' : '请先在上一步读取入站列表' }}</option>
+              <option v-for="ib in panelInbounds" :key="ib.id" :value="ib.id">
+                #{{ ib.id }} · 端口 {{ ib.port }} · {{ ib.protocol }}{{ ib.remark ? ' · ' + ib.remark : '' }}{{ ib.enable ? '' : '（已停用）' }}
+              </option>
+            </select>
+            <div v-if="pickedInbound" style="font-size:0.7rem;color:var(--xui-text-dim);margin-top:0.3rem">
+              已选：端口 {{ pickedInbound.port }} · {{ pickedInbound.protocol }} · 现有 {{ pickedInbound.clients }} 个客户端
+            </div>
+          </div>
+
+          <!-- ③ 卖多少钱 -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
-            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">名称 *</div><input v-model="editing.name" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none" placeholder="日本东京"></div>
+            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">名称 *</div><input v-model="editing.name" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none" placeholder="洛杉矶"></div>
             <div>
-              <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">旗帜 + 地区</div>
+              <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">地区</div>
               <select v-model="editing.flag_emoji" @change="onFlagChange" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none">
                 <option value="">-- 选择 --</option>
                 <optgroup v-for="g in flagGroups" :key="g.label" :label="g.label"><option v-for="f in g.items" :key="f.emoji" :value="f.emoji">{{ f.emoji }} {{ f.name }}</option></optgroup>
@@ -181,42 +209,42 @@
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
-            <div>
-              <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">位置描述</div>
-              <select v-model="editing.vps_location" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;margin-bottom:0.25rem">
-                <option value="">-- 选择 --</option>
-                <optgroup v-for="g in flagGroups" :key="'l_'+g.label" :label="g.label"><option v-for="f in g.items" :key="'l_'+f.emoji" :value="f.location">{{ f.location }}</option></optgroup>
-              </select>
-              <input v-model="editing.vps_location" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.4rem 0.75rem;outline:none;font-size:0.75rem" placeholder="或手动输入">
+            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">单价 (¥/GB)</div><input v-model.number="editing.price_per_gb" type="number" step="0.01" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none"></div>
+            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">容量 (GB)</div><input v-model.number="editing.max_traffic_gb" type="number" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none"></div>
+          </div>
+
+          <!-- 高级：默认收起，99% 的情况用不着改 -->
+          <details style="background:#f8fafb;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.55rem 0.75rem">
+            <summary style="cursor:pointer;font-size:0.72rem;font-weight:700;color:var(--xui-text-dim)">高级设置 · 订阅端口 / 线路描述 / 协议标签</summary>
+            <div style="display:flex;flex-direction:column;gap:0.6rem;margin-top:0.7rem">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+                <div><div style="font-size:0.68rem;color:var(--xui-text-dim);margin-bottom:0.25rem">订阅端口</div><input v-model.number="editing.sub_port" type="number" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;font-size:0.8rem"></div>
+                <div><div style="font-size:0.68rem;color:var(--xui-text-dim);margin-bottom:0.25rem">订阅路径</div><input v-model="editing.sub_path" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;font-size:0.8rem" placeholder="/sub/"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+                <div>
+                  <div style="font-size:0.68rem;color:var(--xui-text-dim);margin-bottom:0.25rem">位置描述</div>
+                  <select v-model="editing.vps_location" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;font-size:0.8rem;margin-bottom:0.25rem">
+                    <option value="">-- 选择 --</option>
+                    <optgroup v-for="g in flagGroups" :key="'l_'+g.label" :label="g.label"><option v-for="f in g.items" :key="'l_'+f.emoji" :value="f.location">{{ f.location }}</option></optgroup>
+                  </select>
+                  <input v-model="editing.vps_location" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.3rem 0.6rem;outline:none;font-size:0.72rem" placeholder="或手动输入">
+                </div>
+                <div>
+                  <div style="font-size:0.68rem;color:var(--xui-text-dim);margin-bottom:0.25rem">线路类型</div>
+                  <select v-model="editing.description" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;font-size:0.8rem;margin-bottom:0.25rem">
+                    <option value="">-- 选择 --</option><option v-for="d in descPresets" :key="d" :value="d">{{ d }}</option>
+                  </select>
+                  <input v-model="editing.description" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.3rem 0.6rem;outline:none;font-size:0.72rem" placeholder="或手动输入">
+                </div>
+              </div>
+              <div>
+                <div style="font-size:0.68rem;color:var(--xui-text-dim);margin-bottom:0.25rem">支持的协议（逗号分隔，选完入站会自动填）</div>
+                <input v-model="editing.protocolsStr" style="width:100%;background:#fff;border:1px solid var(--xui-border);border-radius:0.5rem;padding:0.4rem 0.6rem;outline:none;font-size:0.75rem" placeholder="VLESS + Reality, VMess + WS" />
+              </div>
             </div>
-            <div>
-              <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">线路类型</div>
-              <select v-model="editing.description" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;margin-bottom:0.25rem">
-                <option value="">-- 选择 --</option><option v-for="d in descPresets" :key="d" :value="d">{{ d }}</option>
-              </select>
-              <input v-model="editing.description" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.4rem 0.75rem;outline:none;font-size:0.75rem" placeholder="或手动输入">
-            </div>
-            <div>
-              <div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">支持的协议 (逗号分隔)</div>
-              <input v-model="editing.protocolsStr" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-size:0.75rem" placeholder="VLESS + Reality, VMess + WS, ..." />
-            </div>
-          </div>
-          <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">XX-UI 面板地址 *</div><input v-model="editing.xxui_url" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-family:monospace;font-size:0.75rem" placeholder="https://panel.example.com"></div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem">
-            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">入站 ID *</div><input v-model.number="editing.xxui_inbound_id" type="number" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none"></div>
-            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">最大流量(GB)</div><input v-model.number="editing.max_traffic_gb" type="number" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none"></div>
-            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">单价(¥/GB)</div><input v-model.number="editing.price_per_gb" type="number" step="0.01" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none"></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
-            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">订阅端口</div><input v-model.number="editing.sub_port" type="number" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none"></div>
-            <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">订阅路径</div><input v-model="editing.sub_path" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none" placeholder="/sub/"></div>
-          </div>
-          <div><div style="font-size:0.7rem;color:var(--xui-text-dim);margin-bottom:0.25rem">节点独立 API Key（可选）</div><input v-model="editing.xxui_api_key" style="width:100%;background:#f5f7f9;border:1px solid var(--xui-border);border-radius:0.6rem;padding:0.5rem 0.75rem;outline:none;font-family:monospace;font-size:0.75rem" placeholder="留空使用全局密钥"></div>
-          <div>
-            <button @click="testConnection" :disabled="testingConn" class="xui-btn" :class="connResult&&connResult.status==='success'?'':'xui-btn-ghost'" style="font-size:0.75rem;padding:0.4rem 0.75rem">
-              {{ testingConn?'检测中...':(connResult?(connResult.status==='success'?'✓ '+connResult.message:'✗ '+connResult.message):'🔍 检测连通性') }}
-            </button>
-          </div>
+          </details>
+
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.8rem"><input v-model="editing.active" type="checkbox" style="accent-color:var(--xui-primary)"> 启用此节点</label>
         </div>
         <div style="display:flex;gap:0.75rem;margin-top:1rem">
@@ -303,8 +331,14 @@ const editServer = (s) => {
     let p = [];
     try { p = JSON.parse(s.protocols || '[]'); } catch (e) {}
     editing.value = { ...s, protocolsStr: p.join(', ') };
+    // 编辑已有节点时手上没有面板的入站列表，先塞一个占位项，
+    // 否则下拉是空的，看起来像"没选入站"，一保存就把 ID 冲成 0。
+    panelInbounds.value = s.xxui_inbound_id
+      ? [{ id: s.xxui_inbound_id, port: '—', protocol: '已保存', remark: s.name || '', enable: true, clients: 0 }]
+      : [];
   } else {
     editing.value = { id: null, name: '', vps_location: '', flag_emoji: '', xxui_url: '', xxui_inbound_id: 0, max_traffic_gb: 2000, price_per_gb: 0.50, sub_port: 2096, sub_path: '/sub/', xxui_api_key: '', active: true, description: '', protocolsStr: '' };
+    panelInbounds.value = [];   // 新建时清空，逼着先走"读取入站"
   }
 };
 
@@ -321,7 +355,61 @@ const flagGroups = [
 ];
 const descPresets = ['BGP 高速线路', 'CN2 GIA 优质线路', '9929 精品线路', 'CMIN2 移动优化', 'IIJ 日本直连', '软银 日本专线', 'HKT 家宽', 'HGC 商宽', 'NTT 国际线路', 'HE 国际线路', 'Cogent 国际线路'];
 const testingConn = ref(false); const connResult = ref(null);
-const testConnection = async () => { testingConn.value = true; connResult.value = null; try { const r = await fetch('/api/vpn/admin/test-connection', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ xxui_url: editing.value.xxui_url, api_key: editing.value.xxui_api_key, inbound_id: editing.value.xxui_inbound_id }) }); connResult.value = await r.json(); } catch (e) { connResult.value = { status: 'error', message: '网络异常' }; } testingConn.value = false; };
+
+// ── 从面板读入站 ─────────────────────────────────────────────
+// 原来这张表单要手填 12 个字段，其中一大半是"面板自己知道、却让用户抄一遍"：
+// 入站 ID、端口、协议、备注、订阅路径…… 抄错任何一个，表现都是客户付款后
+// 拿到一条死链接，而且后台完全不报错。所以改成先问面板一遍，再让人挑。
+const panelInbounds = ref([]);
+const loadingInbounds = ref(false);
+const pickedInbound = computed(
+  () => panelInbounds.value.find(i => Number(i.id) === Number(editing.value.xxui_inbound_id)) || null
+);
+
+const fetchInbounds = async () => {
+  if (!editing.value.xxui_url) {
+    connResult.value = { status: 'error', message: '先填面板地址' };
+    return;
+  }
+  loadingInbounds.value = true; connResult.value = null;
+  try {
+    const r = await fetch('/api/vpn/admin/test-connection', {
+      method: 'POST', headers: apiHeaders(),
+      body: JSON.stringify({ xxui_url: editing.value.xxui_url, api_key: editing.value.xxui_api_key }),
+    });
+    const d = await r.json();
+    connResult.value = d;
+    panelInbounds.value = Array.isArray(d.inbounds) ? d.inbounds : [];
+    // 面板上只有一个入站就直接选上，省一次点击
+    if (panelInbounds.value.length === 1) {
+      editing.value.xxui_inbound_id = panelInbounds.value[0].id;
+      onInboundPick();
+    }
+  } catch (e) {
+    connResult.value = { status: 'error', message: '网络异常，后端可能未部署' };
+    panelInbounds.value = [];
+  }
+  loadingInbounds.value = false;
+};
+
+// 选了入站之后，能自动填的都填上 —— 名称、协议标签
+const onInboundPick = () => {
+  const ib = pickedInbound.value;
+  if (!ib) return;
+  if (!editing.value.name && ib.remark) editing.value.name = ib.remark;
+  if (!editing.value.protocolsStr) {
+    const p = String(ib.protocol || '').toLowerCase();
+    const label = {
+      vless: 'VLESS + Reality', vmess: 'VMess + WS', trojan: 'Trojan + TLS',
+      shadowsocks: 'Shadowsocks', hysteria2: 'Hysteria2', hysteria: 'Hysteria',
+    }[p];
+    if (label) editing.value.protocolsStr = label;
+  }
+};
+
+// 兼容旧引用（模板里已改成 fetchInbounds）
+const testConnection = fetchInbounds;
+
 const saveServer = async () => {
   if (!editing.value.name || !editing.value.xxui_inbound_id) { editErr.value = '名称和入站 ID 为必填项'; return; }
   savingNode.value = true; editErr.value = '';

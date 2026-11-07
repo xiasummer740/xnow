@@ -470,13 +470,29 @@ router.post('/admin/test-connection', authenticate, requireAdmin, async (req, re
     if (!r.data?.success) return res.json({ status: 'error', message: 'API Key 无效或面板无响应' });
 
     const inbounds = r.data.obj || [];
+    // 顺手把入站列表整理成前端能直接渲染的形状 —— 这样「添加节点」可以下拉选，
+    // 不用再让人手输 ID、手抄协议名。settings 里的 clients 只用来数个数，
+    // 不往前端发（里面是 uuid / 密码，没必要出网）。
+    const list = inbounds.map(i => {
+      let clients = 0;
+      try { clients = (JSON.parse(i.settings || '{}').clients || []).length; } catch (e) { /* settings 不是合法 JSON 就当 0 */ }
+      return {
+        id: i.id,
+        port: i.port,
+        protocol: i.protocol || '',
+        remark: i.remark || '',
+        enable: !!i.enable,
+        clients,
+      };
+    });
+
     if (inbound_id) {
-      const found = inbounds.find(i => i.id === Number(inbound_id));
-      if (!found) return res.json({ status: 'error', message: `入站 ${inbound_id} 不存在或未开启允许远程管理` });
-      res.json({ status: 'success', message: `✓ 连接成功! 入站 ${inbound_id} (${found.protocol || '?'}:${found.port}) 已就绪`, protocol: found.protocol, port: found.port });
+      const found = list.find(i => i.id === Number(inbound_id));
+      if (!found) return res.json({ status: 'error', message: `入站 ${inbound_id} 不存在或未开启允许远程管理`, inbounds: list });
+      res.json({ status: 'success', message: `✓ 连接成功! 入站 ${inbound_id} (${found.protocol || '?'}:${found.port}) 已就绪`, protocol: found.protocol, port: found.port, inbounds: list });
     } else {
-      const ready = inbounds.filter(i => i.port);
-      res.json({ status: 'success', message: `✓ 连接成功! 发现 ${inbounds.length} 个入站，${ready.length} 个可用`, count: inbounds.length });
+      const ready = list.filter(i => i.port);
+      res.json({ status: 'success', message: `✓ 连接成功! 发现 ${list.length} 个入站，${ready.length} 个可用`, count: list.length, inbounds: list });
     }
   } catch (e) {
     const msg = e.code === 'ECONNREFUSED' ? '无法连接面板，地址或端口错误' :
