@@ -917,6 +917,21 @@ router.get('/orders', authenticate, async (req, res) => {
     if (date_from) where.created_at = { ...where.created_at, [Op.gte]: new Date(date_from) };
     if (date_to) where.created_at = { ...where.created_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
     const { count, rows } = await Order.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
+
+    // 🏷 补服务类型：orders 表本身不存 type，历史订单也没有 ext_fields，
+    //    不补这一层老订单一律按普通单渲染 —— 订阅型会显示成「0 / 500 / 0」，
+    //    管理员看着像卡住了，实际在等客户发新视频。
+    const svcIds = [...new Set(rows.map(o => o.service_id).filter(Boolean))];
+    if (svcIds.length) {
+      try {
+        const svcs = await Service.findAll({ where: { service_id: svcIds }, attributes: ['service_id', 'type'] });
+        const typeMap = new Map(svcs.map(s => [String(s.service_id), s.type]));
+        for (const o of rows) o.dataValues.service_type = typeMap.get(String(o.service_id)) || null;
+      } catch (e) {
+        console.warn('[admin/orders] 补充服务类型失败:', (e && e.message) || e);
+      }
+    }
+
     res.json({ status: 'success', data: { items: rows, total: count, page, pageSize: limit } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
