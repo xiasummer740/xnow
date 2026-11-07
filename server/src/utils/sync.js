@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Config, Service } from '../models/index.js';
+import { sanitizeServiceDescription } from './sanitizeText.js';
 
 export const autoSyncServices = async () => {
   try {
@@ -144,7 +145,11 @@ export const autoSyncServices = async () => {
         max: item.max ? parseInt(item.max) : 0,
         refill: item.refill === true || item.refill === '1' || item.refill === 1,
         cancel: item.cancel === true || item.cancel === '1' || item.cancel === 1,
-        description: rawDesc,
+        // 🚫 上游描述里会夹带上游品牌和下单链接（例：
+        //    「取消自动化订单👉https://tk7188.com/subscriptions」），
+        //    原样落库就等于原样送到客户眼前 —— 客户点一下就去上游下单了。
+        //    落库前统一清洗，规则见 utils/sanitizeText.js
+        description: sanitizeServiceDescription(rawDesc),
         sort: sortOrder
       };
     });

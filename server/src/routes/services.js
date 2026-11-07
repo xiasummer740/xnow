@@ -4,6 +4,7 @@ import { Op } from 'sequelize';
 import { Service, Config, User, SiteServicePrice } from '../models/index.js';
 import { customerDiscountMultiplier } from '../utils/customerPrice.js';
 import { isAgentActive } from '../utils/agentStatus.js';
+import { stripUpstream } from '../utils/sanitizeText.js';
 import { authenticate } from '../middleware/auth.js';
 
 // 🚫 下架哨兵：utils/sync.js 会把「上游已不存在」的服务 sort 置成 999999。
@@ -98,7 +99,8 @@ router.get('/public', async (req, res) => {
         //    前端只用到 sell_price（已核实 Home.vue 唯一消费点）。
         min: s.min, max: s.max,
         sell_price: finalPrice,
-        description: s.description
+        // 兜底再洗一次：库里可能还留着历史脏数据（同步层已改成落库前清洗）
+        description: stripUpstream(s.description)
       };
     });
     const payload = { status: 'success', data: formatted };
@@ -207,7 +209,7 @@ router.get('/', authenticate, async (req, res) => {
         //    全带进列表能把响应撑到 2MB 上下（对比一下：/public 不带描述就已经是 715KB）。
         //    而页面只在**选中某一条**时才显示描述（Order.vue 唯一消费点）。
         //    现在客户侧选中时调 `/api/services/detail/:id` 懒加载，管理员仍然全量带（他们要批量看简介）。
-        description: isStaff ? s.description : undefined
+        description: isStaff ? stripUpstream(s.description) : undefined
       };
     });
 
@@ -266,13 +268,15 @@ router.get('/detail/:serviceId', authenticate, async (req, res) => {
     const s = await Service.findOne({ where: { service_id: sid, ...NOT_DELISTED }, attributes: ['service_id', 'name', 'description', 'type', 'min', 'max'] });
     if (!s) return res.status(404).json({ status: 'error', message: '商品不存在或已下架' });
 
-    let desc = s.description || '';
+    let desc = stripUpstream(s.description || '');
     if (!desc.trim()) {
       const fetched = await fetchDescFromUpstream(sid);
       if (fetched) {
-        desc = fetched;
+        // 🚫 这里抓到的是上游原文，可能带 tk7188.com 之类的品牌和下单链接。
+        //    入库前必须洗掉，否则谁先点开这个服务，脏数据就永久写进库里了。
+        desc = stripUpstream(fetched);
         // 入库存下来，后面所有人直接读库；失败也不影响本次返回
-        Service.update({ description: fetched }, { where: { service_id: sid } })
+        Service.update({ description: desc }, { where: { service_id: sid } })
           .catch((e) => console.error(`[services/detail] 描述入库失败 service=${sid}:`, e.message));
       }
     }
@@ -281,7 +285,8 @@ router.get('/detail/:serviceId', authenticate, async (req, res) => {
       status: 'success',
       data: {
         service: s.service_id, name: s.name, type: s.type, min: s.min, max: s.max,
-        description: desc
+        // 兜底：库里历史脏数据经过上面那层已洗过，这里返回的是干净文本
+        description: stripUpstream(desc)
       }
     });
   } catch (err) {
