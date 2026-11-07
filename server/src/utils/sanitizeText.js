@@ -32,6 +32,26 @@ const BARE_BRAND_RE = /(?<![0-9A-Za-z])7188(?![0-9A-Za-z])/g;
 // @品牌名 形式（上游客服账号）
 const AT_HANDLE_RE = /@tk7188[\w]*/gi;
 
+// 🖼 第三方图床 / 截图服务。上游描述里爱用这些挂「效果图」「后台截图」「速度证明」。
+//    · prnt.sc           —— 截图工具，点开就是上游后台那张截图
+//    · perfectcdn.com    —— 第三方对象存储，图挂了客户看到的就是裂图
+//    两家都不受我们控制：内容看不到、可用性不归我们管、哪天被清理或限流描述就残了。
+//    判定原则：客户要照着填的示例链接（t.me / tiktok.com / x.com / instagram.com）
+//    一律保留；只承载图片、且不由我们托管的，删掉。
+const IMAGE_HOST = '(?:[a-z0-9-]+\\.)*(?:prnt\\.sc|perfectcdn\\.com)';
+// 链接结尾用 [^\s<>]* 而不是 \S*：描述里常是 `...png<br><br><br>Views` 这种，
+// 中间没有空格，\S* 会把后面的 <br> 和下一个词一起吞掉。
+const URL_TAIL = '[^\\s<>"\'）)]*';
+// 整行就是一个图片链接（可能带 → ➡ - • 之类的前缀）——整行删
+const PURE_IMAGE_LINE_RE = new RegExp(`^[\\s\\-–—→➡*•·|]*\\s*https?://${IMAGE_HOST}${URL_TAIL}\\s*$`, 'i');
+// 行内夹着的图床链接（例：`Proof: https://prnt.sc/12oa770`）——只删链接本身，
+// 同一行里的其它说明（Approx. / Views Quality / Retention）必须留下
+const INLINE_IMAGE_RE = new RegExp(`(?:\\b(?:Proof|proof|证据|截图|效果图)\\s*[:：]?\\s*)?https?://${IMAGE_HOST}${URL_TAIL}`, 'gi');
+// 行内是否含图床
+const LINE_HAS_IMAGE = new RegExp(IMAGE_HOST, 'i');
+// 引导语结尾（"✨ 粉丝质量如下👇"）——删掉下面的图后这行会悬空，要一起删
+const LEAD_IN_TAIL_RE = /[👇⬇➡→↓]\s*$/;
+
 const NEUTRAL_LINE = '如需取消或修改订单，请联系在线客服';
 
 /**
@@ -46,6 +66,28 @@ export const stripUpstream = (raw, opts = {}) => {
   if (!text.trim()) return '';
 
   const neutral = opts.lineReplace || NEUTRAL_LINE;
+
+  // ⓪ 第三方图床处理。分两种，不能一刀切：
+  //    · 整行就是图片链接      → 整行删（连带上面那句"如下👇"的引导语）
+  //    · 图片链接夹在句子里    → 只删链接本身，同一行的说明文字要留住
+  //      （例：`Proof: https://prnt.sc/xxx` 所在的整段还写着掉落率、速度等有用信息，
+  //        整行删等于把客户最需要的那段一起抹了）
+  {
+    const lines = text.split('\n');
+    const kept = [];
+    for (const line of lines) {
+      if (PURE_IMAGE_LINE_RE.test(line)) {
+        // 上一行是「✨ 粉丝质量如下👇」这种引导语就一起丢掉，否则留着半句话
+        if (kept.length && LEAD_IN_TAIL_RE.test(kept[kept.length - 1].trim())) {
+          kept.pop();
+        }
+        continue;
+      }
+      // 行内图床链接：只摘掉链接（和 "Proof:" 这类紧邻标签），保留其余文字
+      kept.push(LINE_HAS_IMAGE.test(line) ? line.replace(INLINE_IMAGE_RE, '') : line);
+    }
+    text = kept.join('\n');
+  }
 
   // ① 含上游域名的整行 → 中性引导语（保留"可以取消/联系客服"这个有用信息）
   text = text
