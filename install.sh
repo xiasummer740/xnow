@@ -566,6 +566,17 @@ server {
         add_header Cache-Control "public, max-age=31536000, immutable";
     }
 
+    # ── SPA 路由白名单（2026-11-07）──────────────────────────────────────
+    # 只有前端 router 里真实存在的路径才返回 index.html。
+    # 之前是「任何未知路径都返回 200 + 首页」——搜索引擎判为 soft 404，
+    # 抓取预算全浪费在空页面上；/llms.txt /blog /faq 这类请求更是拿到一坨
+    # 首页 HTML，AI 引擎解析直接失败（llms.txt 等于没做）。
+    # 白名单来源：client/src/router/index.ts
+    location ~ ^/(order|history|recharge|vip|affiliate|boost|clients|showcase|login|api-doc|mass-order|admin|my-site)(/|$) {
+        add_header Cache-Control "no-cache";
+        try_files \$uri \$uri/ /index.html;
+    }
+
     location / {
         # HTML 必须每次校验：否则发版后浏览器拿缓存里的旧页面，
         # 而旧页面指向旧代码包 —— 表现为「服务器上是新包，用户端毫无变化」。
@@ -575,7 +586,20 @@ server {
         # 404.html / finance.html（以及必须补进 public 的 vpn.html / en.html / Google 验证文件），
         # Vite 会把它们原样拷进 dist/，靠 \$uri.html 才能让 /finance、/vpn、/en 命中各自页面。
         # 少了它，这些路径会静默塌成 SPA 首页 —— HTTP 仍 200，但页面内容全错（实测过）。
-        try_files \$uri \$uri.html \$uri/ /index.html;
+        # 2026-11-07：去掉最后的 /index.html 兜底 —— 找不到就真 404
+        try_files \$uri \$uri.html \$uri/ =404;
+    }
+
+    # 真 404 页：由后端渲染（带品牌与返回链接），HTTP 状态保持 404。
+    # ⚠️ named location 里的 proxy_pass 不允许带 URI，所以用 rewrite ... break 改写。
+    error_page 404 @xnow_404;
+    location @xnow_404 {
+        rewrite ^ /__404 break;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 NGXEOF

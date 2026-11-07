@@ -335,12 +335,25 @@ ${realIp}
     # 🤖 SEO / AI 公开页（2026-10-29 起改为**后端按域名生成**）
     #    以前 robots.txt 是写死的一句、sitemap.xml 直接 404、首页是纯 SPA 空壳
     #    （HTML 1676 字节 / 可见中文 6 个字）—— 搜索引擎抓不到内容，AI 无从引用。
-    #    现在这四条转发给后端 server/src/routes/seo.js 服务端渲染。
+    #    现在这些转发给后端 server/src/routes/seo.js 服务端渲染。
     #    ⚠️ 后端挂了也不能让首页白屏：下面用 error_page 回落到静态 site.html。
-    location ~ "^/(robots\\.txt|sitemap\\.xml|sitemap\\.xsl|[0-9a-f]{32}\\.txt)$" {
+    #    2026-11-07：补 llms.txt / llms-full.txt —— 分站也要能被 AI 引擎摘要；
+    #    之前这两个路径被 location / 当成静态文件，找不到就回落 site.html（假 200）。
+    location ~ "^/(robots\\.txt|sitemap\\.xml|sitemap\\.xsl|llms\\.txt|llms-full\\.txt|[0-9a-f]{32}\\.txt)$" {
         proxy_pass http://127.0.0.1:${backendPort};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+    }
+
+    # 知识库（2026-11-07）：问答型内容，分站与主站共用同一套文章
+    location ^~ /guide {
+        proxy_pass http://127.0.0.1:${backendPort};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
     }
 
     # 平台落地页（/c/tiktok 这类）：服务端渲染，带 JSON-LD / FAQ / 价格区间
@@ -378,10 +391,30 @@ ${realIp}
         return 404;
     }
 
+    # ── SPA 路由白名单（2026-11-07）──────────────────────────────────────
+    # 与主站同一套前端，白名单来源 client/src/router/index.ts。
+    # 之前是「任何未知路径都回落 site.html 且 HTTP 200」——搜索引擎判 soft 404。
+    location ~ ^/(order|history|recharge|vip|affiliate|boost|clients|showcase|login|api-doc|mass-order|admin|my-site)(/|$) {
+        try_files $uri $uri/ /site.html;
+    }
+
     location / {
         # ⚠️ 不能用 /index.html：那份带平台 SEO 元信息（title/description/og 全是 XNOW）。
         #    /site.html 是构建时生成的中性入口（同一份 JS，只是元信息中性）。
-        try_files $uri $uri/ /site.html;
+        # 2026-11-07：去掉最后的 /site.html 兜底 —— 找不到就真 404
+        try_files $uri $uri/ =404;
+    }
+
+    # 真 404 页由后端渲染（会带上当前分站域名），HEAD 状态保持 404。
+    # ⚠️ named location 里的 proxy_pass 不允许带 URI，用 rewrite ... break 改写。
+    error_page 404 @site_404;
+    location @site_404 {
+        rewrite ^ /__404 break;
+        proxy_pass http://127.0.0.1:${backendPort};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 `;

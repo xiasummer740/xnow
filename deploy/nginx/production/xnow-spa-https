@@ -5,7 +5,7 @@ server {
     #    不加通配符的话，未匹配的 Host 会落到 default_server
     #    （那是另一个项目的 :8000），表现为"站长开了站，打开却是别人的网站"。
     #    自有域名不在这里：它由 siteDomain.js 自助生成独立 vhost（含证书申请）。
-    server_name xnow.taikon.top *.xnow.taikon.top;
+    server_name xnow.taikon.top;
 
     ssl_certificate /etc/nginx/ssl/xnow.crt;
     ssl_certificate_key /etc/nginx/ssl/xnow.key;
@@ -45,6 +45,7 @@ server {
     set_real_ip_from 2405:8100::/32;
     set_real_ip_from 2a06:98c0::/29;
     set_real_ip_from 2c0f:f248::/32;
+    set_real_ip_from 127.0.0.1;
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
 
@@ -74,10 +75,19 @@ server {
     }
 
     # SEO / AI 公开页（2026-10-29）：后端 server/src/routes/seo.js 服务端渲染
-    location ~ ^/(robots\.txt|sitemap\.xml|sitemap\.xsl)$ {
+    location ~ "^/(robots\.txt|sitemap\.xml|sitemap\.xsl|llms\.txt|llms-full\.txt|[0-9a-f]{32}\.txt)$" {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+    }
+
+    # 知识库（2026-11-07）：服务端渲染的文章，必须转给后端
+    location ^~ /guide {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location ^~ /c/ {
@@ -113,12 +123,38 @@ server {
         add_header Cache-Control "public, max-age=31536000, immutable";
     }
 
+    # ── SPA 路由白名单（2026-11-07）──────────────────────────────────────
+    # 只有前端 router 里真实存在的路径才返回 index.html。
+    # 之前是「任何未知路径都返回 200 + 首页」——搜索引擎判为 soft 404，
+    # 抓取预算全浪费在空页面上；/llms.txt /blog /faq 这类请求更是拿到一坨
+    # 首页 HTML，AI 引擎解析直接失败（llms.txt 等于没做）。
+    # 白名单来源：client/src/router/index.ts
+    location ~ ^/(order|history|recharge|vip|affiliate|boost|clients|showcase|login|api-doc|mass-order|admin|my-site)(/|$) {
+        root /var/www/xnow/client/dist;
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
+    }
+
     location / {
         root /var/www/xnow/client/dist;
         # HTML 必须每次校验：否则发版后浏览器拿缓存里的旧页面，
         # 而旧页面指向旧代码包 —— 表现为「服务器上是新包，用户端毫无变化」。
         # no-cache 不是不缓存，是「用之前先问服务器有没有变」，没变回 304，变了回 200。
         add_header Cache-Control "no-cache";
-        try_files $uri $uri.html $uri/ /index.html;
+        # 2026-11-07：去掉最后的 /index.html 兜底 —— 找不到就真 404
+        try_files $uri $uri.html $uri/ =404;
+    }
+
+    # 真 404 页：由后端渲染（带品牌与返回链接），HTTP 状态保持 404。
+    # ⚠️ named location 里的 proxy_pass 不允许带 URI，所以用 rewrite ... break 改写。
+    # proxy_intercept_errors 默认 off，/api/ 后端自己返回的 404 JSON 不受影响。
+    error_page 404 @xnow_404;
+    location @xnow_404 {
+        rewrite ^ /__404 break;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
