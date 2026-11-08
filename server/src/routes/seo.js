@@ -304,6 +304,9 @@ const headOf = ({ brand, title, desc, canonical, ld, hreflangs, locale = 'zh_CN'
 <link rel="canonical" href="${esc(canonical)}" />
 ${(hreflangs || []).map((h) => `<link rel="alternate" hreflang="${esc(h.lang)}" href="${esc(h.href)}" />`).join('\n')}
 <meta name="robots" content="index, follow, max-image-preview:large" />
+<!-- Bing Webmaster 站点验证（2026-11-08）。Bing 只校验首页，但全站带上更省事。
+     ⚠️ 验证成功后也**不能删**，否则 Bing 会取消已验证状态。 -->
+<meta name="msvalidate.01" content="A7003F7341A3B427C0759A2603DF6916" />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(desc)}" />

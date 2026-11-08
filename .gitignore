@@ -65,7 +65,11 @@ typings/
 # 别人可以拿它往你的 GSC 提交垃圾 URL。统一放这里，永不入库。
 .secrets/
 *.service-account.json
-bing-api-key*.txt
+# Bing API key：真实文件名是 .bing-api-key.txt（带前导点）。
+# ⚠️ 不能只写 `bing-api-key*.txt` —— 它匹配不到以 `.` 开头的文件名，
+#    `server/.bing-api-key.txt` 会漏网进公开仓库。不带 `/` 的模式匹配任意层级。
+.bing-api-key.txt
+bing-api-key.txt
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -142,3 +146,6 @@ ISSUES.md
 # Google Indexing API 服务账号私钥（2026-11-08）
 .gsc-service-account.json
 *service-account*.json
+
+# Bing 已提交 URL 记录（每日配额 100，靠它去重）
+.bing-submitted
