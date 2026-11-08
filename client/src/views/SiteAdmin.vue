@@ -56,7 +56,7 @@
     <!-- 💰 110 期：代理到期**不停站**（只有本站月费到期才停）。这句务必说清楚，
          否则站长会以为"代理一停我站就没了"，不敢让代理到期。 -->
     <p v-if="site && billingState.isAgent" class="text-[10px] text-slate-500 leading-relaxed px-1">
-      至尊代理到期后，你的分站<b class="text-slate-400">照常运营</b>，只是进货价从 8 折回到原价。
+      至尊代理到期后，你的分站<b class="text-slate-400">照常运营</b>，只是结算价从 8 折回到原价。
     </p>
 
     <!-- 💳 代理资格 + 分站月费（87 期商业化） -->
@@ -285,7 +285,7 @@
           <div>
             <input v-model.number="form.markup_pct" type="number" step="10" min="0" max="2000" inputmode="numeric"
               class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-lg font-bold text-right" />
-            <p class="text-[10px] text-slate-500 mt-1">可填 0 ~ 2000；0 = 按进货价卖（不赚不亏），低于 0 就是亏本，系统不让填。</p>
+            <p class="text-[10px] text-slate-500 mt-1">可填 0 ~ 2000；0 = 按结算价卖（不赚不亏），低于 0 就是亏本，系统不让填。</p>
 
             <!-- 💾 102 期：祥哥在这里找不到保存 —— 全局按钮在整页最底部，手机上要滑很久。
                  现在输入框下面直接一个保存按钮，带「未保存/已保存」状态。 -->
@@ -298,10 +298,10 @@
               <span v-else class="text-[11px] text-emerald-400 whitespace-nowrap">✓ 已保存</span>
             </div>
             <p v-if="markupMsg" class="text-[11px] mt-1.5" :class="markupOk ? 'text-emerald-400' : 'text-rose-400'">{{ markupMsg }}</p>
-            <p class="text-[10px] text-slate-600 mt-1">客户看到的价格 = 你的进货价 ×（1 + 加价率）。改完点上面的按钮就生效。</p>
+            <p class="text-[10px] text-slate-600 mt-1">客户看到的价格 = 你的结算价 ×（1 + 加价率）。改完点上面的按钮就生效。</p>
           </div>
           <p class="text-[11px] text-slate-400 leading-relaxed bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2">
-            加价率越高，客户看到的价格越高、你每单赚得越多。系统有底线：售价低于你的进货价会直接拦住。
+            加价率越高，客户看到的价格越高、你每单赚得越多。系统有底线：售价低于你的结算价会直接拦住。
             <span class="block text-slate-500 mt-1">下面还能给单个服务单独定价、或做全站折扣。</span>
           </p>
         </div>
@@ -706,7 +706,7 @@
           </div>
           <button v-if="customers.length < customerTotal" @click="loadMoreCustomers()" class="w-full mt-2 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700">加载更多</button>
         </div>
-        <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的成本</p>
+        <p class="text-[10px] text-slate-600">手机号/邮箱已脱敏；「你赚」= 客户付款 − 你的结算价</p>
       </section>
 
       <!-- ⚠️ 定价页有自己的「保存定价」，这里再出现「保存全部修改」= 两个保存按钮，站长会懵 -->
@@ -938,9 +938,9 @@ const steps = computed(() => {
     {
       key: 'price',
         go: 'pricing',
-      title: '设置全站价（不低于你的进货价）',
+      title: '设置全站价（不低于你的结算价）',
       done: mk !== null && mk >= 0,
-      hint: mk === null ? '还没设置加价率' : `当前加价 ${mk}%（0% = 按进货价卖，不赚不亏）`
+      hint: mk === null ? '还没设置加价率' : `当前加价 ${mk}%（0% = 按结算价卖，不赚不亏）`
     },
     {
       key: 'pay',

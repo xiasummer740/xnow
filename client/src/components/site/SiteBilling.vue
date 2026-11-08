@@ -19,7 +19,7 @@
             <p class="text-[12px] text-slate-300 mt-1.5">
               已开通 <span class="text-emerald-300 font-bold">长期有效</span>（早期代理，不计月费）
             </p>
-            <p class="text-[11px] text-slate-500 mt-1">代理资格只影响进货价（8 折），分站另计 ¥{{ plan.site_monthly }}/月</p>
+            <p class="text-[11px] text-slate-500 mt-1">代理资格只影响结算价（8 折），分站另计 ¥{{ plan.site_monthly }}/月</p>
           </template>
           <template v-else-if="isAgent && agentExpireText">
             <p class="text-[12px] text-slate-300 mt-1.5 tabular-nums">
@@ -29,11 +29,11 @@
                 （剩 {{ agentDaysLeft > 0 ? agentDaysLeft : 0 }} 天）
               </span>
             </p>
-            <p class="text-[11px] text-slate-500 mt-1">到期只是进货价回到原价，分站照常运营；续费即恢复 8 折</p>
+            <p class="text-[11px] text-slate-500 mt-1">到期只是结算价回到原价，分站照常运营；续费即恢复 8 折</p>
           </template>
           <template v-else>
             <p class="text-[12px] text-slate-300 mt-1.5">
-              可选：<b class="text-amber-300">¥{{ plan.agent_monthly }} / 月</b> 让进货价打 8 折
+              可选：<b class="text-amber-300">¥{{ plan.agent_monthly }} / 月</b> 让结算价打 8 折
             </p>
             <p class="text-[11px] text-slate-500 mt-1">不开也能开分站；开了只是每单成本低 20%。代理费不含分站，每个分站另外 ¥{{ plan.site_monthly }}/月</p>
           </template>
@@ -117,7 +117,7 @@ const headers = () => ({
 const isStaff = computed(() => ['admin', 'super_admin'].includes(me.value.role))
 const isAgent = computed(() => me.value.role === 'agent')
 // 🚫 110 期（祥哥定调）：「分站没必要放代理」——
-//    代理跟分站是两件事（代理只管进货价 8 折），要开通/续费代理去侧边栏「至尊代理」页，
+//    代理跟分站是两件事（代理只管结算价 8 折），要开通/续费代理去侧边栏「至尊代理」页，
 //    这里只留分站月费。所以代理卡默认不显示，只有显式传 agent-card 才显示。
 const showAgentCard = computed(() => {
   if (!props.agentCard) return false                 // 默认整页不出现代理卡

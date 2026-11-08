@@ -15,8 +15,9 @@
       <div class="flex flex-col py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         <p class="px-3 pt-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">业务</p>
         <router-link to="/order" @click="handleNav('/order')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span>{{ appStore.t('menu_order') }}</span></router-link>
-        <!-- 🎯 千川流量：独立业务线（本地商品 + 人工派单）。分站暂不开放 ——
-             站长拿到进货价再加价卖，价格体系会乱，先用主站跑通再说。 -->
+        <!-- 🎯 千川流量：独立业务线（本地商品 + 人工派单）。分站暂不开放。
+             （原因写在这里会进生产 bundle，见 CLAUDE.md 红线：客户可见处
+             不出现内部经营术语。要了解背景看 .claude/handover。） -->
         <router-link v-if="!appStore.isSubsite" to="/boost" @click="handleNav('/boost')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg><span>千川流量</span><span class="nav-badges"><span class="nav-badge nav-badge-cn">国内</span><span class="nav-badge">新</span></span></router-link>
         <router-link to="/mass-order" @click="handleNav('/mass-order')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg><span>{{ appStore.t('menu_mass') }}</span></router-link>
         <router-link to="/history" @click="handleNav('/history')" class="nav-item" active-class="nav-active"><svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>{{ appStore.t('menu_history') }}</span></router-link>

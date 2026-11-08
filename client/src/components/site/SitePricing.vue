@@ -3,7 +3,7 @@ import { useUiStore } from '../../stores/ui'
 
 // 💰 站长自己的价格体系：单服务定价 + 活动折扣
 //    后端：GET/PUT /api/sites/:id/prices、PUT /api/sites/:id（折扣三字段）
-//    红线：任何价格乘上折扣都不得低于站长的进货价，后端会拦（这里只负责把话说清楚）。
+//    红线：任何价格乘上折扣都不得低于站长的结算价，后端会拦（这里只负责把话说清楚）。
 import { ref, computed, onMounted, watch } from 'vue';
 import { useUserStore } from '../../stores/user';
 const uiStore = useUiStore()
@@ -89,12 +89,12 @@ const sheetMargin = computed(() => {
   };
 });
 
-// 常用价位：以进货价为基准，避免站长自己算错
+// 常用价位：以结算价为基准，避免站长自己算错
 function quickPresets(it) {
   const c = Number(it.cost_per_1k) || 0;
   const f = (x) => String(Number((c * x).toFixed(4)));
   return [
-    { t: `进货价 ¥${c.toFixed(2)}`, v: f(1) },
+    { t: `结算价 ¥${c.toFixed(2)}`, v: f(1) },
     { t: '+20%', v: f(1.2) },
     { t: '+50%', v: f(1.5) },
     { t: '×2', v: f(2) },
@@ -175,7 +175,7 @@ async function runBulk() {
     : bulkScope.value === 'category' ? `分类「${shortCat(activeCategory.value)}」`
     : bulkScope.value === 'q' ? `搜到「${query.value.trim()}」的服务`
     : '全部服务';
-  const how = bulkMode.value === 'margin' ? `进货价 +${bulkMargin.value}%`
+  const how = bulkMode.value === 'margin' ? `结算价 +${bulkMargin.value}%`
     : bulkMode.value === 'rate' ? `统一 ¥${bulkFixed.value}`
     : '恢复跟随全站统一价';
   if (!await uiStore.confirm(`确定把 ${scopeName} 全部改成「${how}」？\n这会直接写进你的价格表（可以再改回来）。`)) return;
@@ -355,7 +355,7 @@ onMounted(load);
     <section class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <h2 class="font-bold text-sm text-amber-400">单个服务改价（可选）</h2>
-        <span class="text-[10px] text-slate-500">你的进货价就是底线 · 当前全场加价 {{ meta.markup_pct ?? 0 }}%</span>
+        <span class="text-[10px] text-slate-500">你的结算价就是底线 · 当前全场加价 {{ meta.markup_pct ?? 0 }}%</span>
       </div>
 
       <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
@@ -383,7 +383,7 @@ onMounted(load);
           <div>
             <label class="block text-[10px] text-slate-400 mb-1">怎么改</label>
             <select v-model="bulkMode" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-[12px]">
-              <option value="margin">进货价 + N%</option>
+              <option value="margin">结算价 + N%</option>
               <option value="rate">统一价（每 1000）</option>
               <option value="clear">恢复跟随全站统一价</option>
             </select>
@@ -407,7 +407,7 @@ onMounted(load);
           {{ bulkBusy ? '正在改…' : '执行批量调价' }}
         </button>
         <p class="text-[10px] text-slate-500 leading-relaxed mt-1">
-          低于你的进货价的方案会被整批拦下（一条都不会改动），不会让你亏本卖。
+          低于你的结算价的方案会被整批拦下（一条都不会改动），不会让你亏本卖。
         </p>
       </div>
       <!-- ✅ 结果放折叠外面，执行完一定看得见 -->
@@ -498,7 +498,7 @@ onMounted(load);
               <div class="min-w-0 flex-grow">
                 <div class="text-xs text-slate-200 line-clamp-2">{{ it.name }}</div>
                 <div class="text-[10px] text-slate-500 mt-1">
-                  进货价 ¥{{ it.cost_per_1k.toFixed(2) }} / 千
+                  结算价 ¥{{ it.cost_per_1k.toFixed(2) }} / 千
                   <span v-if="it.override !== null && it.override !== undefined" class="text-amber-400">· 已单独定价</span>
                   <span v-else-if="dirty(it)" class="text-amber-400">· 待保存</span>
                 </div>
@@ -539,7 +539,7 @@ onMounted(load);
           <div class="min-w-0">
             <div class="text-xs text-slate-200 line-clamp-2">{{ sheet.name }}</div>
             <div class="text-[10px] text-slate-500 mt-1">
-              进货价 ¥{{ sheet.cost_per_1k.toFixed(2) }} / 千 · {{ shortCat(sheet.category) }}
+              结算价 ¥{{ sheet.cost_per_1k.toFixed(2) }} / 千 · {{ shortCat(sheet.category) }}
             </div>
           </div>
           <button @click="closeSheet" class="text-slate-500 text-lg leading-none px-2 py-1 shrink-0">✕</button>
@@ -563,7 +563,7 @@ onMounted(load);
              :class="sheetMargin && sheetMargin.lose ? 'text-red-400' : 'text-emerald-400/85'">
           <template v-if="sheetMargin">
             客户实付 ¥{{ sheetMargin.sell }} / 千 · 你赚 ¥{{ sheetMargin.profit }} / 千（毛利 {{ sheetMargin.pct }}%）
-            <span v-if="sheetMargin.lose" class="block text-red-400 mt-1">低于进货价，保存会被拒</span>
+            <span v-if="sheetMargin.lose" class="block text-red-400 mt-1">低于结算价，保存会被拒</span>
           </template>
           <template v-else><span class="text-slate-500">填个价格，这里实时显示你能赚多少</span></template>
         </div>
@@ -583,7 +583,7 @@ onMounted(load);
 
       <div class="mt-3">
         <p class="text-[11px] text-slate-500 mb-3 leading-relaxed">
-          打折只影响你的客户看到的价格，你的进货价不变。系统有底线：打完折也不许低于你的进货价，填太狠会直接拦下。
+          打折只影响你的客户看到的价格，你的结算价不变。系统有底线：打完折也不许低于你的结算价，填太狠会直接拦下。
         </p>
 
         <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
