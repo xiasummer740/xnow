@@ -2050,11 +2050,38 @@ router.get('/en/c/:slug', async (req, res, next) => {
         ];
         const otherLinks = catalog.platforms.filter((p) => p.label !== 'Other' && p.slug !== plat.slug)
             .slice(0, 10).map((p) => `<a href="/en/c/${p.slug}">${esc(p.label)}</a>`).join('');
+
+        // 🇬🇧 英文同义词（2026-11-09 补）：
+        //   之前只给中文和 5 个外语种做了同义词，**漏了英文** —— 而英文是全球
+        //   最大市场。实测英文平台页只有 4 个 h2，中文有 8 个，内容量差一半。
+        //   英文用户搜的是 "buy tiktok followers" / "cheap smm panel" 这类动作词，
+        //   标题放最主流的两个，其余靠这一节承接长尾。
+        const EN_SYN = {
+            '粉丝': ['buy followers', 'get followers', 'purchase followers', 'cheap followers', 'real followers', 'grow followers', 'increase followers', 'followers service'],
+            '点赞': ['buy likes', 'get likes', 'purchase likes', 'cheap likes', 'real likes', 'increase likes'],
+            '播放': ['buy views', 'get views', 'increase views', 'cheap views', 'video plays', 'view service'],
+            '评论': ['buy comments', 'custom comments', 'increase comments', 'comment service'],
+            '订阅': ['buy subscribers', 'get subscribers', 'increase subscribers', 'real subscribers', 'channel subscribers'],
+            '分享': ['buy shares', 'get shares', 'increase shares'],
+            '直播': ['live viewers', 'stream viewers', 'concurrent viewers', 'live stream traffic'],
+            '流量': ['buy traffic', 'website traffic', 'web traffic', 'increase visitors'],
+        };
+        const synItems = (plat.types || []).map((t) => {
+            const words = EN_SYN[String(t.label || '').trim()];
+            if (!words || !words.length) return '';
+            return `<li><b>${esc(t.label)}</b>: ${words.map((w) => esc(w)).join(' · ')}</li>`;
+        }).filter(Boolean);
+        const synBlock = synItems.length ? `<h2>Other names for the same services</h2>
+<p>People search for these ${esc(plat.label)} services in different ways. They all refer to the same thing:</p>
+<ul>${synItems.join('')}</ul>
+<p>Whatever you call it, the delivery is identical: pick the tier, enter the target link or username and the quantity, and the page prices it per 1,000 in real time.</p>` : '';
+
         const body = `<div class="seo-wrap">${styleBlock}
 <h1>Buy ${esc(plat.label)} Followers, Likes &amp; Views · ${esc(brand.name)}</h1>
 <p>${esc(brand.name)} has <b>${plat.count}</b> ${esc(plat.label)} services: followers, likes, views, comments and more. Priced per 1,000 units from <b>¥${cheapest}</b>, processed automatically after you submit.</p>
 <h2>Service types</h2>
 <table class="seo-table"><thead><tr><th>Type</th><th>From</th><th>Options</th><th>Minimum</th></tr></thead><tbody>${typeRows}</tbody></table>
+${synBlock}
 <h2>How to choose ${esc(plat.label)} services</h2>
 <p>Choose by volume and quality tier: for large volume with fast results, take a higher-priced tier; test a small quantity before scaling up. The order page shows the total as you type the quantity.</p>
 <h2>Frequently asked questions</h2>

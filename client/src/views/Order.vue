@@ -518,7 +518,14 @@ const loadServiceDescription = async (sid) => {
         }, 10000, 1);
         if (!res.ok) return;
         const j = await res.json().catch(() => null);
-        const text = (j && j.status === 'success' && j.data && j.data.description) || '';
+        // 🔧 2026-11-09：数据库里 51 个服务的描述带 <br> 标签（例如
+        //    「链接：…<br>开始时间：0-2小时<br>速度：…」）。下面模板用的是
+        //    `{{ activeDescription }}` 插值 —— Vue 会转义 HTML，客户看到的
+        //    是**字面的 <br>**，不是换行。模板已有 whitespace-pre-wrap，
+        //    所以这里把 <br> 换成真换行符即可。
+        //    ⚠️ 不要改成 v-html：描述来自外部数据，那等于开一个 XSS 口子。
+        const raw = (j && j.status === 'success' && j.data && j.data.description) || '';
+        const text = raw.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
         descCache.set(key, text);
         // 期间用户可能又换了服务，只有当它还是当前选中项时才写回
         if (String(activeServiceId.value) === key) activeDescription.value = text;

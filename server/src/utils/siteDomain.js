@@ -367,6 +367,21 @@ ${realIp}
         proxy_read_timeout 30s;
     }
 
+    # 💰 价格表（2026-11-09 补）：后端 SSR 生成分站自己的价格页。
+    #    ⚠️ 之前**漏了这条** —— /price 落进下面的 SPA 兜底，dist 里没有
+    #    price.html，于是所有分站的价格表都是 404。站长把价格表链接发给客户
+    #    会直接打不开。实测：绕过 nginx 直连后端是 200（12012 字节），
+    #    经 nginx 就是 404 —— 纯配置缺失，不是代码问题。
+    location ^~ /price {
+        proxy_pass http://127.0.0.1:${backendPort};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
     # 首页：服务端渲染 HTML 壳（title/description/canonical/JSON-LD + 可抓内容块）
     location = / {
         proxy_pass http://127.0.0.1:${backendPort}/;

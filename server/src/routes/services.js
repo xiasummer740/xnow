@@ -99,8 +99,14 @@ router.get('/public', async (req, res) => {
         //    前端只用到 sell_price（已核实 Home.vue 唯一消费点）。
         min: s.min, max: s.max,
         sell_price: finalPrice,
-        // 兜底再洗一次：库里可能还留着历史脏数据（同步层已改成落库前清洗）
-        description: stripUpstream(s.description)
+        // 🚀 2026-11-09：列表**不再下发 description**。
+        //    实测 2798 条里有描述的 732 条，description 字段全文 348KB，
+        //    整个响应 940KB。逐个核实过消费点：
+        //      · Order.vue 走独立的 /api/services/detail/:id 按需拉（带 descCache）
+        //      · Home.vue / Landing.vue 只用 name/category/sell_price
+        //      · Admin.vue 用的是管理端接口，不是这个公开列表
+        //    → 公开列表里的 description **前端没有任何地方读**。
+        //    ⚠️ 以后若要显示描述，请走 detail 接口，别把它加回来。
       };
     });
     const payload = { status: 'success', data: formatted };
