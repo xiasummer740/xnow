@@ -78,7 +78,17 @@ const stripSeo = (html) => html
 const injectIntoShell = (html, { head, body }) => {
     let out = stripSeo(html);
     if (body) {
-        out = out.replace(/(<div id=["']app["'][^>]*>)([\s\S]*?)(<\/div>)/i, (m, a, _b, c) => a + body + c);
+        // ⚠️ 给 #app 打上 data-ssr="1"：main.ts 见到这个标记就**不挂载 Vue**。
+        //
+        // 为什么必须这样：Vue 的 mount('#app') 会清空容器再挂载组件树。
+        // 而这些落地页在 Vue Router 里根本没有对应路由（/guide、/price、/id、
+        // /ar…），挂载的结果就是 SSR 内容被抹掉、页面变成空白。
+        // 2026-11-08 踩过：curl 看到 8000 字，浏览器打开只有 300 字。
+        //
+        // 不挂载的代价是没有 SPA 交互，但这些页面本来就是内容页，
+        // 里面的链接都是整页跳转，纯静态反而更快。
+        out = out.replace(/(<div id=["']app["'])([^>]*)(>)([\s\S]*?)(<\/div>)/i,
+            (m, open, attrs, gt, _inner, close) => `${open}${attrs} data-ssr="1"${gt}${body}${close}`);
     }
     out = out.replace(/<\/head>/i, `${head}\n</head>`);
     return out;

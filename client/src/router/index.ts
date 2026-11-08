@@ -56,7 +56,29 @@ router.beforeEach((to, from, next) => {
 
   // 💡 2. 核心加法：路由级 Token 过期/缺失拦截
   const token = localStorage.getItem('xnow_token');
-  const publicPaths = ['/', '/en', '/vpn', '/login', '/showcase']; // 允许免登录访问的白名单路径（/en 为英文营销镜像，/vpn 为节点商城公开页）
+
+  // ⚠️ 公开路径白名单 —— 这些是**服务端渲染的 SEO 落地页**，必须免登录。
+  //    2026-11-08 踩过的坑：加了 7 个语种落地页、价格表、知识库之后，
+  //    只验证了 curl（爬虫能拿到完整 HTML），**没验证浏览器** ——
+  //    结果真实用户访问 /guide、/price、/id、/ar 全被踢回 /login，
+  //    页面对爬虫存在、对人不存在。凡是新增 SSR 页面，都要往这里加一条，
+  //    并且用浏览器实测一次，不能只看 curl。
+  const PUBLIC_EXACT = [
+    '/', '/en', '/vpn', '/login', '/showcase',
+    '/price', '/en/price',
+    '/guide', '/en/guide',
+    '/id', '/pt', '/vi', '/ar', '/ru',
+    '/id/price', '/pt/price', '/vi/price', '/ar/price', '/ru/price',
+  ];
+  const PUBLIC_PREFIX = [
+    '/c/',                 // 平台落地页（/c/tiktok）
+    '/guide/',             // 知识库文章（中文）
+    '/en/guide/',          // 知识库文章（英文）
+    '/en/c/',              // 英文平台页
+    '/id/c/', '/pt/c/', '/vi/c/', '/ar/c/', '/ru/c/',   // 多语种平台页
+  ];
+  const isPublicPath = PUBLIC_EXACT.includes(to.path)
+    || PUBLIC_PREFIX.some((p) => to.path.startsWith(p));
 
   // 🏬 分站屏蔽「至尊代理」页：那是平台自己的招代理页面（¥99/月、8 折进货、佣金翻倍），
   //    出现在站长的店里替他拉代理，也等于告诉客户"站长是二级代理"。手输 URL 也挡掉。
@@ -82,9 +104,10 @@ router.beforeEach((to, from, next) => {
     return next('/');
   }
 
-  // 🤖 平台落地页（/c/tiktok）也必须免登录 —— 那是搜索引擎/AI 导流进来的第一页，
-  //    要求登录等于把流量全丢掉。
-  if (!publicPaths.includes(to.path) && !to.path.startsWith('/c/') && !token) {
+  // 🤖 平台落地页（/c/tiktok）、价格表、知识库、多语种首页都必须免登录 ——
+  //    那些是搜索引擎/AI 导流进来的第一页，要求登录等于把流量全丢掉。
+  //    注意 /vpn/admin 仍受保护：它不匹配 PUBLIC_PREFIX（没有 '/vpn/' 这一条）。
+  if (!isPublicPath && !token) {
       // 没 Token 且访问受保护页面，直接踢回登录
       next('/login');
   } else if (token && (to.path.startsWith('/admin') || to.path === '/vpn/admin')) {

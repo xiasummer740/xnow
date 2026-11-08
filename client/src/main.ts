@@ -119,4 +119,19 @@ router.afterEach((to) => {
 const appStore = useAppStore(pinia);
 appStore.fetchConfig();
 
-app.mount('#app')
+// 🖼️ 服务端渲染落地页（/guide、/price、/id、/ar…）不挂载 Vue。
+//
+// 后端 seo.js 的 injectIntoShell 会往 #app 里塞好正文，并打上 data-ssr="1"。
+// 如果这里照常 mount('#app')，Vue 会清空容器再渲染自己的路由树 —— 而这些路径
+// 在 Vue Router 里没有对应路由，结果就是人看到的页面变成空白（爬虫看到的
+// 却是完整的，因为爬虫不执行 JS）。
+//
+// 2026-11-08 的教训：只 curl 验证响应体、没打开浏览器看一眼，等于没验证。
+const appEl = document.getElementById('app');
+if (appEl?.dataset.ssr === '1') {
+  // 纯静态内容页：保留服务端 HTML，不启动 SPA。
+  // 页面内链接都是整页跳转，用户点「去下单」会正常进入 SPA 页面。
+  console.log('[xnow] SSR 内容页，跳过 Vue 挂载');
+} else {
+  app.mount('#app');
+}
