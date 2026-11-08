@@ -75,20 +75,29 @@ const stripSeo = (html) => html
     .replace(/<link\s+rel=["']canonical["'][^>]*>/gi, '')
     .replace(/<script[^>]+application\/ld\+json[^>]*>[\s\S]*?<\/script>/gi, '');
 
-const injectIntoShell = (html, { head, body }) => {
+/**
+ * 把服务端内容塞进 SPA 壳。
+ *
+ * ⚠️ `ssrOnly` 参数极其重要，默认 false（=照常挂载 Vue）：
+ *
+ * · 默认（不传 / false）：服务端内容作为「首屏 + 爬虫可见内容」写进去，
+ *   但 Vue 仍会挂载并接管。**首页必须是这个模式** —— 首页有登录、下单、
+ *   平台跳转等全部交互，不挂载 Vue 等于把一个静态页丢给客户。
+ *
+ * · `ssrOnly: true`：打完内容后给 #app 打 `data-ssr="1"`，main.ts 见到就
+ *   不挂载 Vue。只给「纯内容页」用（知识库、平台页、类型子页、价格表）——
+ *   这些路径在 Vue Router 里没有对应路由，挂载了反而会把内容抹成空白。
+ *
+ * 2026-11-08 的教训：一开始给所有 SR 页都打 data-ssr，结果**首页也被打成
+ * 静态页**，没有登录入口、没有按钮、卡片数 0。上线约 1 小时后被祥哥问到
+ * 「首页现在正常不」才发现。
+ */
+const injectIntoShell = (html, { head, body, ssrOnly }) => {
     let out = stripSeo(html);
     if (body) {
-        // ⚠️ 给 #app 打上 data-ssr="1"：main.ts 见到这个标记就**不挂载 Vue**。
-        //
-        // 为什么必须这样：Vue 的 mount('#app') 会清空容器再挂载组件树。
-        // 而这些落地页在 Vue Router 里根本没有对应路由（/guide、/price、/id、
-        // /ar…），挂载的结果就是 SSR 内容被抹掉、页面变成空白。
-        // 2026-11-08 踩过：curl 看到 8000 字，浏览器打开只有 300 字。
-        //
-        // 不挂载的代价是没有 SPA 交互，但这些页面本来就是内容页，
-        // 里面的链接都是整页跳转，纯静态反而更快。
+        const flag = ssrOnly ? ' data-ssr="1"' : '';
         out = out.replace(/(<div id=["']app["'])([^>]*)(>)([\s\S]*?)(<\/div>)/i,
-            (m, open, attrs, gt, _inner, close) => `${open}${attrs} data-ssr="1"${gt}${body}${close}`);
+            (m, open, attrs, gt, _inner, close) => `${open}${attrs}${flag}${gt}${body}${close}`);
     }
     out = out.replace(/<\/head>/i, `${head}\n</head>`);
     return out;
@@ -883,6 +892,7 @@ ${linksTo(brand, catalog.platforms, plat.slug)}
         const html = injectIntoShell(shell, {
             head: headOf({ brand, title, desc, canonical, ld: ldAll, hreflangs: typeAlt }),
             body,
+            ssrOnly: true,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=1800').send(html);
     } catch (e) {
@@ -1139,6 +1149,8 @@ ${plats.map((p) => `<li><a href="${isEn ? '/en' : ''}/c/${p.slug}" style="color:
             ],
         }),
         body,
+        ssrOnly: true,
+        ssrOnly: true,
     });
     if (isEn) html = setHtmlLang(html, 'en');
     res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=1800').send(html);
@@ -1227,6 +1239,8 @@ ${guideBody(a)}
             locale: ui.locale, hreflangs: alt,
         }),
         body,
+        ssrOnly: true,
+        ssrOnly: true,
     });
     if (isEn) html = setHtmlLang(html, 'en');
     res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=1800').send(html);
@@ -1504,6 +1518,8 @@ ${linksTo(brand, catalog.platforms, plat.slug)}
         const html = injectIntoShell(shell, {
             head: headOf({ brand, title, desc, canonical, ld: jsonLdOf(brand, canonical, { platCn, faq, types: plat.types }), hreflangs: platAlt }),
             body,
+            ssrOnly: true,
+            ssrOnly: true,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
     } catch (e) {
@@ -1754,6 +1770,7 @@ router.get('/price', async (req, res, next) => {
         const html = injectIntoShell(shell, {
             head: headOf({ brand, title: page.title, desc: page.desc, canonical: page.canonical, ld: page.ld, hreflangs: page.hreflangs }),
             body: page.body,
+            ssrOnly: true,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
     } catch (e) {
@@ -1773,6 +1790,7 @@ router.get('/en/price', async (req, res, next) => {
         const html = injectIntoShell(shell, {
             head: headOf({ brand, title: page.title, desc: page.desc, canonical: page.canonical, ld: page.ld, locale: 'en_US', ogImageAlt: `${brand.name} price list`, hreflangs: page.hreflangs }),
             body: page.body,
+            ssrOnly: true,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
     } catch (e) {
@@ -1975,6 +1993,7 @@ const renderLangPage = async (req, res, next, lang, kind, slug) => {
                 hreflangs: hreflangsFor(base, kind === 'price' ? '/price' : kind === 'plat' ? `/c/${slug}` : ''),
             }),
             body: page.body,
+            ssrOnly: true,
         }), LANGS[lang].code, LANGS[lang].dir);
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
     } catch (e) {
@@ -2064,6 +2083,9 @@ ${faqHtml(faqs)}
                 ],
             }),
             body,
+            // /en/c/:slug 在 Vue Router 里没有对应路由（只有 /c/:slug → Landing.vue），
+            // 挂载 Vue 会把这页内容抹成空白，所以必ssrOnly。
+            ssrOnly: true,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
     } catch (e) {
