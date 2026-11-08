@@ -60,6 +60,13 @@ typings/
 .env.production
 .env.local
 
+# 🔐 搜索平台的 API 凭据（2026-11-08）
+# 本仓库是 PUBLIC：Google service account 私钥 / Bing API key 一旦提交就等于公开，
+# 别人可以拿它往你的 GSC 提交垃圾 URL。统一放这里，永不入库。
+.secrets/
+*.service-account.json
+bing-api-key*.txt
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 
@@ -131,3 +138,7 @@ ISSUES.md
 
 # 本地构建临时目录（2026-11-06）
 .tmp-build/
+
+# Google Indexing API 服务账号私钥（2026-11-08）
+.gsc-service-account.json
+*service-account*.json
