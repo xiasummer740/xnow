@@ -96,6 +96,19 @@ const C = {
       howToChooseText: 'Pilih berdasarkan jumlah dan tingkat kualitas: untuk volume besar dengan hasil cepat, ambil tingkat harga lebih tinggi; sebaiknya uji jumlah kecil dulu sebelum menambah. Halaman pesanan menghitung total secara langsung sesuai jumlah yang Anda isi.',
     },
     types: { fans: 'Pengikut', likes: 'Suka', views: 'Tayangan', comments: 'Komentar', shares: 'Bagikan', traffic: 'Trafik', live: 'Live', subscribe: 'Langganan', other: 'Lainnya' },
+
+    // 🇮🇩 印尼语同义词：当地最主流的几种叫法。标题只放最重要的两个，
+    // 其余靠正文覆盖 —— 长尾搜索就靠这些词被匹配到。
+    synonyms: {
+      fans: ['jasa follower', 'beli follower', 'tambah follower', 'follower murah', 'jual follower', 'naikkan follower', 'jasa followers tiktok', 'follower real'],
+      likes: ['jasa like', 'beli like', 'tambah like', 'like murah', 'jual like', 'like real'],
+      views: ['jasa view', 'beli view', 'tambah view', 'view murah', 'jasa tayangan', 'tayangan murah'],
+      comments: ['jasa komentar', 'beli komentar', 'tambah komentar', 'komentar murah'],
+      shares: ['jasa share', 'beli share', 'tambah share', 'share murah'],
+      subscribers: ['jasa subscriber', 'beli subscriber', 'tambah subscriber', 'subscriber murah'],
+      live: ['viewer live', 'penonton live', 'jasa live', 'penonton streaming', 'viewer streaming'],
+      traffic: ['jasa traffic', 'beli traffic', 'kunjungan website', 'traffic website'],
+    },
   },
 
   // ── 巴西葡语 ─────────────────────────────────────────────────────────
@@ -163,6 +176,19 @@ const C = {
       howToChooseText: 'Escolha pelo volume e pelo nível de qualidade: para grandes volumes com resultado rápido, use um nível de preço mais alto; teste uma quantidade pequena antes de aumentar. A página do pedido calcula o total na hora conforme a quantidade informada.',
     },
     types: { fans: 'Seguidores', likes: 'Curtidas', views: 'Visualizações', comments: 'Comentários', shares: 'Compartilhamentos', traffic: 'Tráfego', live: 'Ao vivo', subscribe: 'Inscritos', other: 'Outros' },
+
+    // 🇧🇷 巴西葡语同义词。巴西用「seguidores」「curtidas」，
+    // 葡萄牙本土更常用「subscritores」，这里只覆盖巴西市场。
+    synonyms: {
+      fans: ['comprar seguidores', 'seguidores baratos', 'aumentar seguidores', 'ganhar seguidores', 'seguidores reais', 'seguidores brasileiros', 'vender seguidores'],
+      likes: ['comprar curtidas', 'curtidas baratas', 'aumentar curtidas', 'curtidas reais'],
+      views: ['comprar visualizações', 'visualizações baratas', 'aumentar visualizações', 'comprar views'],
+      comments: ['comprar comentários', 'comentários baratos', 'aumentar comentários'],
+      shares: ['comprar compartilhamentos', 'aumentar compartilhamentos'],
+      subscribers: ['comprar inscritos', 'aumentar inscritos', 'inscritos baratos'],
+      live: ['espectadores ao vivo', 'viewers live', 'audiência ao vivo', 'pessoas assistindo'],
+      traffic: ['comprar tráfego', 'tráfego para site', 'visitas site', 'aumentar visitas'],
+    },
   },
 
   // ── 越南语 ──────────────────────────────────────────────────────────
@@ -230,6 +256,19 @@ const C = {
       howToChooseText: 'Chọn theo số lượng và mức chất lượng: với số lượng lớn cần kết quả nhanh, hãy chọn mức giá cao hơn; nên thử số lượng nhỏ trước khi tăng. Trang đặt hàng tính tổng tiền ngay theo số lượng bạn nhập.',
     },
     types: { fans: 'Người theo dõi', likes: 'Lượt thích', views: 'Lượt xem', comments: 'Bình luận', shares: 'Chia sẻ', traffic: 'Truy cập', live: 'Trực tiếp', subscribe: 'Đăng ký', other: 'Khác' },
+
+    // 🇻🇳 越南语同义词。越南用户大量用英文缩写（fl / like / view / sub），
+    // 这些缩写必须出现在页面上，否则搜缩写的用户匹配不到。
+    synonyms: {
+      fans: ['mua follower', 'tăng follower', 'buff follower', 'follower giá rẻ', 'tăng follow', 'mua fl', 'buff fl', 'follower thật'],
+      likes: ['mua like', 'tăng like', 'buff like', 'like giá rẻ', 'mua tim'],
+      views: ['mua view', 'tăng view', 'buff view', 'view giá rẻ', 'tăng lượt xem'],
+      comments: ['mua comment', 'tăng comment', 'buff comment', 'mua bình luận'],
+      shares: ['mua share', 'tăng share', 'buff share'],
+      subscribers: ['mua sub', 'tăng sub', 'buff sub', 'đăng ký kênh'],
+      live: ['mắt xem live', 'người xem live', 'buff live', 'viewer live'],
+      traffic: ['mua traffic', 'tăng truy cập', 'buff traffic'],
+    },
   },
 
   // ── 阿拉伯语（RTL）──────────────────────────────────────────────────
@@ -297,6 +336,19 @@ const C = {
       howToChooseText: 'اختر حسب الحجم ومستوى الجودة: للأحجام الكبيرة بنتائج سريعة استخدم مستوى سعر أعلى؛ جرّب كمية صغيرة قبل الزيادة. تحسب صفحة الطلب الإجمالي فورًا حسب الكمية المُدخلة.',
     },
     types: { fans: 'متابعون', likes: 'إعجابات', views: 'مشاهدات', comments: 'تعليقات', shares: 'مشاركات', traffic: 'زيارات', live: 'بث مباشر', subscribe: 'مشتركون', other: 'أخرى' },
+
+    // 🇸🇦 阿拉伯语同义词。阿拉伯语有方言差异，这里用海湾地区通用说法，
+    // 也是搜索量最大的那一套。RTL 语种，注意页面已有 dir="rtl"。
+    synonyms: {
+      fans: ['شراء متابعين', 'زيادة متابعين', 'متابعين حقيقيين', 'متابعين رخيصين', 'رفع متابعين', 'بيع متابعين'],
+      likes: ['شراء إعجابات', 'زيادة إعجابات', 'لايكات', 'إعجابات رخيصة'],
+      views: ['شراء مشاهدات', 'زيادة مشاهدات', 'مشاهدات فيديو', 'مشاهدات رخيصة'],
+      comments: ['شراء تعليقات', 'زيادة تعليقات', 'تعليقات رخيصة'],
+      shares: ['شراء مشاركات', 'زيادة مشاركات'],
+      subscribers: ['شراء مشتركين', 'زيادة مشتركين', 'اشتراكات'],
+      live: ['مشاهدين مباشر', 'حضور مباشر', 'زيادة مشاهدي البث'],
+      traffic: ['شراء زيارات', 'زيادة زيارات', 'زيارات موقع'],
+    },
   },
 
   // ── 俄语 ────────────────────────────────────────────────────────────
@@ -364,6 +416,19 @@ const C = {
       howToChooseText: 'Выбирайте по объёму и уровню качества: для больших объёмов с быстрым результатом берите более дорогой уровень; сначала протестируйте небольшое количество. Страница заказа сразу считает итог по введённому количеству.',
     },
     types: { fans: 'Подписчики', likes: 'Лайки', views: 'Просмотры', comments: 'Комментарии', shares: 'Репосты', traffic: 'Трафик', live: 'Прямой эфир', subscribe: 'Подписчики', other: 'Другое' },
+
+    // 🇷🇺 俄语同义词。「накрутка」（刷量）在俄语圈出现频率比「купить」（买）
+    // 还高，必须覆盖；否则只写「купить」会漏掉一大半搜索量。
+    synonyms: {
+      fans: ['купить подписчиков', 'накрутка подписчиков', 'подписчики дешево', 'накрутить подписчиков', 'живые подписчики', 'подписчики тик ток', 'продажа подписчиков'],
+      likes: ['купить лайки', 'накрутка лайков', 'лайки дешево', 'живые лайки'],
+      views: ['купить просмотры', 'накрутка просмотров', 'просмотры дешево', 'накрутить просмотры'],
+      comments: ['купить комментарии', 'накрутка комментариев', 'комментарии дешево'],
+      shares: ['купить репосты', 'накрутка репостов', 'репосты дешево'],
+      subscribers: ['купить подписчиков', 'накрутка подписчиков', 'подписчики канала'],
+      live: ['зрители в прямом эфире', 'накрутка зрителей', 'зрители стрима'],
+      traffic: ['купить трафик', 'накрутка трафика', 'посещаемость сайта'],
+    },
   },
 };
 

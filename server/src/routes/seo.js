@@ -1860,6 +1860,7 @@ ${langSwitcher(base, '/price')}
 /** 生成某语种的「平台页」正文 */
 const langPlatBody = (lang, brand, catalog, plat, base) => {
     const c = copyOfLang(lang).plat;
+    const syn = copyOfLang(lang).synonyms || {};
     const cheapest = per1000(plat.minPrice);
     const typeRows = (plat.types || []).filter((t) => t.label !== '其他' && t.label !== 'Other').map((t) => {
         const qty = (t.minQty > 0 && isFinite(t.minQty)) ? `${t.minQty}` : '—';
@@ -1868,11 +1869,41 @@ const langPlatBody = (lang, brand, catalog, plat, base) => {
     const faq = copyOfLang(lang).home.faq(cheapest, catalog.totalServices || 0).slice(0, 4);
     const otherLinks = catalog.platforms.filter((p) => p.label !== 'Other' && p.slug !== plat.slug)
         .slice(0, 10).map((p) => `<a href="${langPathOf(lang, `/c/${p.slug}`)}">${esc(p.label)}</a>`).join('');
+
+    // 同义词区块（2026-11-08）：各语种用户对同一服务的叫法差别很大，
+    // 标题只放最主流的两个，其余靠这一节承接长尾搜索。
+    // 按类型分组列出，读者能对号入座，搜索引擎也能匹配到具体词。
+    const SYN_LABEL = {
+        id: { head: 'Istilah lain yang sering dipakai', intro: (p) => `Orang menyebut layanan ${p} ini dengan banyak cara. Semuanya merujuk ke hal yang sama:` , typeNames: null },
+        pt: { head: 'Outros nomes para os mesmos serviços', intro: (p) => `As pessoas chamam esses serviços de ${p} de várias formas. Todos significam a mesma coisa:` },
+        vi: { head: 'Các cách gọi khác của cùng dịch vụ', intro: (p) => `Mọi người gọi các dịch vụ ${p} này theo nhiều cách. Tất cả đều là cùng một loại:` },
+        ar: { head: 'أسماء أخرى لنفس الخدمات', intro: (p) => `يسمي الناس خدمات ${p} هذه بأشكال مختلفة. كلها تعني الشيء نفسه:` },
+        ru: { head: 'Другие названия этих услуг', intro: (p) => `Эти услуги для ${p} называют по-разному. Всё это означает одно и то же:` },
+    };
+    const sl = SYN_LABEL[lang];
+    let synBlock = '';
+    if (sl && Object.keys(syn).length) {
+        const KEYMAP = { '订阅': 'subscribers', '粉丝': 'fans', '点赞': 'likes', '播放': 'views', '评论': 'comments', '分享': 'shares', '直播': 'live', '流量': 'traffic' };
+        const items = [];
+        for (const t of plat.types || []) {
+            const k = KEYMAP[String(t.label || '').trim()];
+            const words = k && syn[k];
+            if (!words || !words.length) continue;
+            items.push(`<li><b>${esc(typeLabelOf(lang, t.label))}</b>: ${words.map((w) => esc(w)).join(' · ')}</li>`);
+        }
+        if (items.length) {
+            synBlock = `<h2>${esc(sl.head)}</h2>
+<p>${esc(sl.intro(plat.label))}</p>
+<ul>${items.join('')}</ul>`;
+        }
+    }
+
     const body = `<div class="seo-wrap">${styleBlock}
 <h1>${esc(c.h1(brand.name, plat.label))}</h1>
 <p>${c.lede(esc(brand.name), esc(plat.label), plat.count, cheapest)}</p>
 <h2>${esc(c.typeTable)}</h2>
 <table class="seo-table"><thead><tr><th>${esc(c.typeHead)}</th><th>${esc(c.fromHead)}</th><th>${esc(c.thCount)}</th><th>${esc(c.thMinQty)}</th></tr></thead><tbody>${typeRows}</tbody></table>
+${synBlock}
 <h2>${esc(c.howToChoose(plat.label))}</h2>
 <p>${esc(c.howToChooseText)}</p>
 <h2>${esc(c.faqHead)}</h2>
