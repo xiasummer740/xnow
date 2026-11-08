@@ -746,8 +746,14 @@ router.get('/c/:slug/:type', async (req, res) => {
         const platCn = PLATFORM_CN[plat.label] || plat.label;
         const canonical = `https://${brand.host}/c/${plat.slug}/${tc.slug}`;
         const cheapest = per1000(t.minPrice);
-        const title = `${platCn} ${tc.name}服务 ${cheapest} 元起 · ${brand.name}`;
-        const desc = `${brand.name} 的 ${platCn} ${tc.name}服务：${t.count} 个档位可选，${cheapest} 元起 / 1000 个。${t.minQty > 0 ? `单次 ${t.minQty}–${t.maxQty} 个，` : ''}提交订单后自动开始处理，不需要账号密码。`;
+        // 🔑 标题用「动作词」而不是「类型名词」（2026-11-08）。
+        //   中文用户搜的是「TikTok 涨粉」「TikTok 刷赞」，不是「TikTok 粉丝服务」。
+        //   「粉丝」是名词（想了解这个东西），「涨粉」是动作（想买这个服务）——
+        //   搜索意图完全不同，标题里必须出现动作词才可能被搜到。
+        //   同时保留类型名词，覆盖「TikTok 粉丝」这类搜法。
+        const act = tc.action || tc.name;
+        const title = `${platCn} ${act}服务 ${cheapest} 元起 · ${tc.name}价格表 · ${brand.name}`;
+        const desc = `${brand.name} 提供 ${platCn} ${act}服务：${t.count} 个档位，${cheapest} 元起 / 1000 个。${t.minQty > 0 ? `单次 ${t.minQty}–${t.maxQty} 个，` : ''}提交订单后自动开始处理，不需要账号密码。`;
         const pc = copyOf(plat.label);
 
         const qty = t.minQty > 0 ? `${t.minQty}–${t.maxQty}` : '按需';
@@ -758,7 +764,7 @@ router.get('/c/:slug/:type', async (req, res) => {
 <nav style="font-size:13px;color:#94a3b8;margin-bottom:10px">
 <a href="/" style="color:#22d3ee">首页</a> › <a href="/c/${plat.slug}" style="color:#22d3ee">${esc(platCn)}</a> › ${esc(tc.name)}
 </nav>
-<h1>${esc(platCn)} ${esc(tc.name)}服务 · ${esc(brand.name)}</h1>
+<h1>${esc(platCn)} ${esc(tc.name)}服务 · ${esc(act)} ${esc(cheapest)} 元起 · ${esc(brand.name)}</h1>
 <p>${esc(tc.intro)}</p>
 <p>${esc(brand.name)} 现有 <b>${t.count}</b> 个 ${esc(platCn)} ${esc(tc.name)}档位，最低 <b>${cheapest} 元</b> / 1000 个，单次数量 ${esc(qty)}，提交订单后系统自动开始处理。</p>
 ${rows}
@@ -1387,8 +1393,12 @@ router.get('/c/:slug', async (req, res) => {
         const platCn = PLATFORM_CN[plat.label] || plat.label;
         const cheapest = per1000(plat.minPrice);
         const canonical = `https://${brand.host}/c/${plat.slug}`;
-        const title = `${platCn} 增长服务 ${cheapest} 元起 · ${brand.name}`;
-        const desc = `${brand.name} 提供 ${plat.count} 个 ${platCn} 增长服务：粉丝、点赞、播放、评论等，${cheapest} 元起 / 1000 个，自动交付，登录即可下单。`;
+        // 🔑 平台页标题要覆盖中文用户真实搜的那几个词（2026-11-08）：
+        //   「涨粉」「买粉」「平台」「刷赞」—— 竞品标题都是「XX涨粉投流平台」
+        //   「买粉平台」这种结构，我们原来写「增长服务」，一个都没打中。
+        //   同时保留「粉丝/点赞/播放」这些名词，覆盖另一种搜法。
+        const title = `${platCn} 涨粉平台 ${cheapest} 元起 · 粉丝/点赞/播放/评论 自助下单 · ${brand.name}`;
+        const desc = `${brand.name} 的 ${platCn} 涨粉平台：${plat.count} 个服务覆盖粉丝、点赞、播放、评论、分享，${cheapest} 元起 / 1000 个，自助下单自动交付，不需要账号密码。`;
         const extra = copyOf(plat.label);
         const faq = faqOf(brand, platCn, plat).concat(extra ? extra.faq : []);
 
@@ -1404,16 +1414,18 @@ router.get('/c/:slug', async (req, res) => {
 <p>按“数量 + 质量档位”选：量大、要求快的选高单价档；先小量测试再放量更稳。下单页会按你填的数量实时算出总价，不用自己换算。</p>`;
 
         const body = `<div class="seo-wrap">${styleBlock}
-<h1>${esc(platCn)} 增长服务 · ${esc(brand.name)}</h1>
+<h1>${esc(platCn)} 涨粉平台 · 粉丝/点赞/播放/评论 ${esc(cheapest)} 元起 · ${esc(brand.name)}</h1>
 ${extra ? `<p>${esc(extra.intro)}</p>` : ''}
-<p>${esc(brand.name)} 现有 <b>${plat.count}</b> 个 ${esc(platCn)} 相关服务，价格按每 1000 个计算，最低 <b>${cheapest} 元</b> 起，提交订单后系统自动开始处理。</p>
+<p>${esc(brand.name)} 是一个 ${esc(platCn)} 涨粉平台：现有 <b>${plat.count}</b> 个服务，覆盖涨粉（粉丝）、刷赞（点赞）、刷播放（播放量）、刷评论、刷分享，价格按每 1000 个计算，最低 <b>${cheapest} 元</b> 起。自助下单，提交后系统自动开始处理，不需要提供账号密码。</p>
 ${typeTable(platCn, plat.types)}
 ${(() => {
             const subs = plat.types
                 .filter((x) => x.label !== 'Other' && typeCopyOf(x.label) && x.count >= 3)
                 .map((x) => {
                     const xtc = typeCopyOf(x.label);
-                    return `<li><a href="/c/${plat.slug}/${xtc.slug}" style="color:#22d3ee">${esc(platCn)} ${esc(xtc.name)}服务</a>（${x.count} 个档位，${per1000(x.minPrice)} 元起）</li>`;
+                    // 子页链接文字同样用动作词，内链锚文本也参与关键词相关性
+                    const subAct = xtc.action || xtc.name;
+                    return `<li><a href="/c/${plat.slug}/${xtc.slug}" style="color:#22d3ee">${esc(platCn)} ${esc(subAct)}服务</a>（${esc(xtc.name)}，${x.count} 个档位，${per1000(x.minPrice)} 元起）</li>`;
                 });
             return subs.length ? `<h2>按${esc(platCn)}服务类型查看</h2>\n<ul>${subs.join('')}</ul>` : '';
         })()}
@@ -1924,7 +1936,7 @@ router.get('/en/c/:slug', async (req, res, next) => {
         const otherLinks = catalog.platforms.filter((p) => p.label !== 'Other' && p.slug !== plat.slug)
             .slice(0, 10).map((p) => `<a href="/en/c/${p.slug}">${esc(p.label)}</a>`).join('');
         const body = `<div class="seo-wrap">${styleBlock}
-<h1>${esc(plat.label)} Growth Services · ${esc(brand.name)}</h1>
+<h1>Buy ${esc(plat.label)} Followers, Likes &amp; Views · ${esc(brand.name)}</h1>
 <p>${esc(brand.name)} has <b>${plat.count}</b> ${esc(plat.label)} services: followers, likes, views, comments and more. Priced per 1,000 units from <b>¥${cheapest}</b>, processed automatically after you submit.</p>
 <h2>Service types</h2>
 <table class="seo-table"><thead><tr><th>Type</th><th>From</th><th>Options</th><th>Minimum</th></tr></thead><tbody>${typeRows}</tbody></table>
@@ -1946,8 +1958,10 @@ ${faqHtml(faqs)}
         if (!shell) return next();
         const html = injectIntoShell(shell, {
             head: headOf({
-                brand, title: `${plat.label} Growth Services from ¥${cheapest} · ${brand.name}`,
-                desc: `Buy ${plat.label} followers, likes and views from ¥${cheapest} per 1,000. ${plat.count} services, automatic delivery, no password required.`,
+                // 🔑 英文用户搜的是「buy tiktok followers」「tiktok smm panel」，
+                //   不是「TikTok Growth Services」。标题以 Buy 开头 + 带 SMM Panel。
+                brand, title: `Buy ${plat.label} Followers & Likes from ¥${cheapest} | SMM Panel · ${brand.name}`,
+                desc: `Buy ${plat.label} followers, likes, views and comments from ¥${cheapest} per 1,000. ${plat.count} services, automatic delivery, no password required. Cheapest SMM panel pricing, published openly.`,
                 canonical, ld, locale: 'en_US', ogImageAlt: `${brand.name} ${plat.label}`,
                 hreflangs: [
                     { lang: 'zh-CN', href: `${base}/c/${plat.slug}` },

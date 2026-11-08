@@ -33,7 +33,9 @@ const C = {
   // ── 印尼语 ──────────────────────────────────────────────────────────
   id: {
     home: {
-      title: (b) => `${b} - Panel Pertumbuhan Media Sosial, Harga Mulai ¥0,03`,
+      // 🔑 印尼语用户搜的是「jasa follower tiktok」（TikTok 粉丝服务）「beli follower」
+        //    （买粉丝），不是「增长面板」。标题必须含当地动作词才可能被搜到。
+        title: (b) => `Jasa Follower TikTok Murah - Beli Followers, Likes & Views Mulai ¥0,03 | ${b}`,
       h1: (b) => `${b} · Panel Pertumbuhan Media Sosial`,
       lede: (b, names, cheapest) =>
         `${b} menyediakan pengikut, suka, tayangan, dan komentar untuk ${names}. Harga mulai <b>¥${cheapest} per 1.000</b>, pengiriman otomatis, tanpa perlu kata sandi akun.`,
@@ -75,7 +77,8 @@ const C = {
       foot: (b) => `${b} · pengiriman otomatis · bayar sesuai pemakaian`,
     },
     plat: {
-      title: (b, p, c) => `Layanan ${p} Mulai ¥${c} · ${b}`,
+      // 平台页：当地用户搜「jasa follower tiktok」而不是「layanan tiktok」
+      title: (b, p, c) => `Jasa Follower ${p} Murah - Beli Followers & Likes Mulai ¥${c} | ${b}`,
       h1: (b, p) => `Layanan Pertumbuhan ${p} · ${b}`,
       lede: (b, p, count, cheapest) =>
         `${b} memiliki <b>${count}</b> layanan ${p}: pengikut, suka, tayangan, komentar, dan lainnya. Dihitung per 1.000 unit, mulai <b>¥${cheapest}</b>. Pesanan diproses otomatis setelah dikirim.`,
@@ -98,7 +101,8 @@ const C = {
   // ── 巴西葡语 ─────────────────────────────────────────────────────────
   pt: {
     home: {
-      title: (b) => `${b} - Painel de Crescimento em Redes Sociais, a partir de ¥0,03`,
+      // 🔑 巴西葡语真实搜法：「comprar seguidores tiktok」（买 TikTok 粉丝）
+        title: (b) => `Comprar Seguidores TikTok - Curtidas, Views e Comentários a partir de ¥0,03 | ${b}`,
       h1: (b) => `${b} · Painel de Crescimento em Redes Sociais`,
       lede: (b, names, cheapest) =>
         `A ${b} oferece seguidores, curtidas, visualizações e comentários para ${names}. Preços a partir de <b>¥${cheapest} por 1.000</b>, entrega automática e sem precisar da senha da conta.`,
@@ -140,7 +144,8 @@ const C = {
       foot: (b) => `${b} · entrega automática · pague conforme o uso`,
     },
     plat: {
-      title: (b, p, c) => `Serviços de ${p} a partir de ¥${c} · ${b}`,
+      // 「comprar seguidores tiktok」是巴西最高频搜法
+      title: (b, p, c) => `Comprar Seguidores ${p} - Curtidas e Views a partir de ¥${c} | ${b}`,
       h1: (b, p) => `Serviços de Crescimento em ${p} · ${b}`,
       lede: (b, p, count, cheapest) =>
         `A ${b} tem <b>${count}</b> serviços de ${p}: seguidores, curtidas, visualizações, comentários e mais. Cobrados por 1.000 unidades, a partir de <b>¥${cheapest}</b>. Os pedidos são processados automaticamente após o envio.`,
@@ -163,7 +168,8 @@ const C = {
   // ── 越南语 ──────────────────────────────────────────────────────────
   vi: {
     home: {
-      title: (b) => `${b} - Bảng điều khiển tăng trưởng mạng xã hội, từ ¥0,03`,
+      // 🔑 越南语真实搜法：「mua follower tiktok」（买 TikTok 粉丝）「tăng follow」
+        title: (b) => `Mua Follower TikTok Giá Rẻ - Tăng Like, View, Comment Từ ¥0,03 | ${b}`,
       h1: (b) => `${b} · Tăng trưởng mạng xã hội`,
       lede: (b, names, cheapest) =>
         `${b} cung cấp người theo dõi, lượt thích, lượt xem và bình luận cho ${names}. Giá từ <b>¥${cheapest} mỗi 1.000</b>, giao tự động, không cần mật khẩu tài khoản.`,
@@ -205,7 +211,8 @@ const C = {
       foot: (b) => `${b} · giao tự động · trả theo mức dùng`,
     },
     plat: {
-      title: (b, p, c) => `Dịch vụ ${p} từ ¥${c} · ${b}`,
+      // 「mua follower tiktok」是越南最高频搜法
+      title: (b, p, c) => `Mua Follower ${p} Giá Rẻ - Tăng Like, View Từ ¥${c} | ${b}`,
       h1: (b, p) => `Dịch vụ tăng trưởng ${p} · ${b}`,
       lede: (b, p, count, cheapest) =>
         `${b} có <b>${count}</b> dịch vụ ${p}: người theo dõi, lượt thích, lượt xem, bình luận và hơn thế. Tính theo 1.000 đơn vị, từ <b>¥${cheapest}</b>. Đơn hàng được xử lý tự động sau khi gửi.`,
@@ -228,7 +235,8 @@ const C = {
   // ── 阿拉伯语（RTL）──────────────────────────────────────────────────
   ar: {
     home: {
-      title: (b) => `${b} - لوحة نمو وسائل التواصل الاجتماعي، تبدأ من ¥0.03`,
+      // 🔑 阿拉伯语真实搜法：「شراء متابعين」（买粉丝）「زيادة متابعين」（涨粉）
+        title: (b) => `شراء متابعين تيك توك وانستقرام - إعجابات ومشاهدات تبدأ من ¥0.03 | ${b}`,
       h1: (b) => `${b} · نمو وسائل التواصل الاجتماعي`,
       lede: (b, names, cheapest) =>
         `تقدّم ${b} متابعين وإعجابات ومشاهدات وتعليقات لـ ${names}. الأسعار تبدأ من <b>¥${cheapest} لكل 1000</b>، مع تسليم تلقائي ودون الحاجة إلى كلمة مرور الحساب.`,
@@ -270,7 +278,8 @@ const C = {
       foot: (b) => `${b} · تسليم تلقائي · الدفع حسب الاستخدام`,
     },
     plat: {
-      title: (b, p, c) => `خدمات ${p} تبدأ من ¥${c} · ${b}`,
+      // 「شراء متابعين تيك توك」是阿语最高频搜法
+      title: (b, p, c) => `شراء متابعين ${p} - إعجابات ومشاهدات تبدأ من ¥${c} | ${b}`,
       h1: (b, p) => `خدمات نمو ${p} · ${b}`,
       lede: (b, p, count, cheapest) =>
         `لدى ${b} <b>${count}</b> خدمة ${p}: متابعون وإعجابات ومشاهدات وتعليقات والمزيد. تُحتسب لكل 1000 وحدة، من <b>¥${cheapest}</b>. تُنفَّذ الطلبات تلقائيًا بعد الإرسال.`,
@@ -293,7 +302,8 @@ const C = {
   // ── 俄语 ────────────────────────────────────────────────────────────
   ru: {
     home: {
-      title: (b) => `${b} - Панель роста в соцсетях, от ¥0,03`,
+      // 🔑 俄语真实搜法：「купить подписчиков」（买粉丝）「накрутка」（刷量）
+        title: (b) => `Купить подписчиков Тик Ток и Инстаграм - Лайки, просмотры от ¥0,03 | ${b}`,
       h1: (b) => `${b} · Рост в социальных сетях`,
       lede: (b, names, cheapest) =>
         `${b} предоставляет подписчиков, лайки, просмотры и комментарии для ${names}. Цены от <b>¥${cheapest} за 1000</b>, автоматическая выдача, пароль от аккаунта не требуется.`,
@@ -335,7 +345,8 @@ const C = {
       foot: (b) => `${b} · автоматическая выдача · оплата по факту`,
     },
     plat: {
-      title: (b, p, c) => `Услуги ${p} от ¥${c} · ${b}`,
+      // 「купить подписчиков тик ток」是俄语最高频搜法
+      title: (b, p, c) => `Купить подписчиков ${p} - Лайки и просмотры от ¥${c} | ${b}`,
       h1: (b, p) => `Услуги роста ${p} · ${b}`,
       lede: (b, p, count, cheapest) =>
         `У ${b} есть <b>${count}</b> услуг ${p}: подписчики, лайки, просмотры, комментарии и другое. Считаются за 1000 единиц, от <b>¥${cheapest}</b>. Заказы обрабатываются автоматически после отправки.`,

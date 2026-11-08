@@ -20,6 +20,8 @@ export const TYPE_COPY = {
     粉丝: {
         slug: 'fans',
         name: '粉丝',
+        action: '涨粉',
+        actionAlt: '买粉',
         intro: '给账号增加真实关注者，目标是让主页的粉丝数看起来有基础、并带来后续的自然触达。',
         metrics: [
             ['粉丝数', '主页显示的关注人数。它是公开数字，访客第一眼看到的就是它。'],
@@ -49,6 +51,8 @@ export const TYPE_COPY = {
     点赞: {
         slug: 'likes',
         name: '点赞',
+        action: '刷赞',
+        actionAlt: '点赞',
         intro: '给指定内容增加点赞数，提升单条内容的互动数据，影响平台对该内容的推荐判断。',
         metrics: [
             ['点赞数', '单条内容显示的喜欢数量，是平台判断内容质量的直接信号之一。'],
@@ -76,6 +80,8 @@ export const TYPE_COPY = {
     播放: {
         slug: 'views',
         name: '播放',
+        action: '刷播放',
+        actionAlt: '播放量',
         intro: '增加内容的播放/浏览次数，是曝光类指标，主要作用是让内容看起来有人看、并帮助跨过平台的初始推荐门槛。',
         metrics: [
             ['播放量', '内容被展示并计入的浏览次数。'],
@@ -103,6 +109,8 @@ export const TYPE_COPY = {
     评论: {
         slug: 'comments',
         name: '评论',
+        action: '刷评论',
+        actionAlt: '评论',
         intro: '增加内容下的评论数量，制造讨论氛围，影响访客对内容的观感和平台的互动判断。',
         metrics: [
             ['评论数', '内容下方显示的评论条数。'],
@@ -130,6 +138,8 @@ export const TYPE_COPY = {
     直播: {
         slug: 'live',
         name: '直播',
+        action: '直播人气',
+        actionAlt: '直播',
         intro: '增加直播间的观看人数、点赞或停留数据，用于提升直播间在平台内的曝光权重。',
         metrics: [
             ['在线人数', '直播间同时显示的观看人数，是访客判断直播间热度的第一指标。'],
@@ -157,6 +167,8 @@ export const TYPE_COPY = {
     分享: {
         slug: 'shares',
         name: '分享',
+        action: '刷分享',
+        actionAlt: '分享',
         intro: '增加内容的分享/转发次数，属于深度互动指标，对平台判断内容传播价值有一定影响。',
         metrics: [
             ['分享数', '内容被转发/分享的次数。'],
@@ -181,6 +193,8 @@ export const TYPE_COPY = {
     订阅: {
         slug: 'subscribers',
         name: '订阅',
+        action: '涨订阅',
+        actionAlt: '订阅',
         intro: '增加频道/账号的订阅者数量，是长期资产型指标，直接影响后续每条内容的初始触达。',
         metrics: [
             ['订阅数', '频道公开显示的订阅人数。'],
@@ -208,6 +222,8 @@ export const TYPE_COPY = {
     流量: {
         slug: 'traffic',
         name: '流量',
+        action: '刷流量',
+        actionAlt: '流量',
         intro: '给网站或指定页面带来访问量，用于提升站点的访问数据表现。',
         metrics: [
             ['访问量', '页面被访问的次数（PV）。'],
