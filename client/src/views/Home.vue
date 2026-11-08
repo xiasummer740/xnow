@@ -201,13 +201,16 @@
     </section>
 
     <!-- FAQ -->
-    <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq'), ...appStore.moduleStyle('faq') }" data-module="faq" class="site-section relative z-20 max-w-2xl mx-auto px-6 py-16">
+    <section v-if="appStore.moduleEnabled('faq')" :style="{ order: appStore.moduleOrder('faq'), ...appStore.moduleStyle('faq') }" data-module="faq" class="site-section relative z-20 max-w-4xl mx-auto px-6 py-16">
       <h2 class="text-center text-2xl font-black text-white mb-10 tracking-wider">{{ appStore.sectionTitle('faq') || (appStore.lang === 'zh' ? '❓ 常见问题' : '❓ FAQ') }}</h2>
-      <div class="space-y-3">
+      <!-- 🧱 2026-11-09：原来是 max-w-2xl + space-y-3 单列竖排，6 个问题占掉大半屏。
+           改成 max-w-4xl + 两列网格（移动端仍单列），高度直接砍一半。
+           items-start 防止某一条展开时把同一行另一条也拉伸。 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
         <div v-for="(faq, i) in visibleFaqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <button @click="faq.open = !faq.open" class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-800/30 transition">
             <span class="text-white font-bold text-sm">{{ faq[appStore.lang].q }}</span>
-            <span :class="['text-amber-400 transition-transform', faq.open ? 'rotate-45' : '']">+</span>
+            <span :class="['text-amber-400 transition-transform shrink-0 ml-3', faq.open ? 'rotate-45' : '']">+</span>
           </button>
           <div v-show="faq.open" class="px-5 pb-4 text-slate-400 text-sm leading-relaxed">{{ faq[appStore.lang].a }}</div>
         </div>

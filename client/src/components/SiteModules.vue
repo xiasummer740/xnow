@@ -52,7 +52,8 @@
       <!-- 教程 FAQ（实际由 Home.vue 渲染，这里保留兜底） -->
       <div v-else-if="m.key === 'faq'" class="relative z-20 w-full max-w-5xl mx-auto px-6 site-section mb-12" :style="{ order: m.order }">
         <h2 class="text-center text-xl font-black text-white mb-6 tracking-wider">{{ zh ? '❓ 常见问题' : '❓ FAQ' }}</h2>
-        <div class="space-y-2">
+        <!-- 同 Home.vue：单列竖排太占高度，改两列（移动端仍单列） -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 items-start">
           <details v-for="(f, i) in faqs" :key="i" class="site-card bg-slate-800/40 border border-slate-700/50 rounded-xl px-4 py-3">
             <summary class="text-white text-sm font-bold cursor-pointer">{{ f.q }}</summary>
             <p class="text-slate-400 text-xs leading-relaxed mt-2">{{ f.a }}</p>
