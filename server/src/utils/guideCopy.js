@@ -182,6 +182,23 @@ export const ARTICLES = [
             ['一个 30 天的节奏', '第 1 周：每天发，只看完播率不看别的。第 2 周：找出完播最高那条，做 3 条同类型的。第 3 周：开始在一小时内回评论，试一条直接回答搜索联想的内容。第 4 周：有单条破 5000 播放就做 5 个变体；一条都没有就改视觉风格，别改选题。看平台档位可以到 [TikTok 增长服务](/c/tiktok)，具体起价在[价格表](/price)。'],
             ['说清楚做不到的部分', '内容能不能爆，任何服务都保证不了 —— 我们也不做这个承诺。加速服务影响的是「账号看起来怎么样」和「分发基数」，改变不了内容本身好不好看。这一点在产品页和下单页都写了。'],
         ],
+        en: {
+            tag: 'Getting started',
+            title: 'Getting your first 1,000 followers: why two weeks of posting got you 200 views',
+            desc: 'New accounts plateau at 200-500 views, and it usually has nothing to do with content quality. The first distribution round goes to a tiny test pool; without engagement it stops there. Build account history first — 3-4 weeks, 20-40 posts.',
+            body: [
+                ['The short version', 'New accounts stuck at 200-500 views are, **in most cases, not a content problem**. The first distribution round for a small account is tiny by design; if engagement is weak, promotion stops right there. Build "account history" first — post consistently for 3-4 weeks, 20-40 posts total — then talk about content optimization. Skipping this step means guessing at answers in a place with no signal.'],
+                ['Why a new account gets 200 views', 'The platform does not know your account or who to show it to, so round one goes to a very small test pool. If completion rate and engagement miss the bar, promotion halts at that number. It is not a penalty, it is just how cold start works. The same video at the same quality can get tens of thousands of views on an account with 5,000 followers and 200 on a fresh one — the difference is the distribution base, not the content.'],
+                ['First: post consistently, do not stop', 'The algorithm needs history to learn what your account is about and who should see it. Post three videos and quit, and you never build that. The pattern I have seen is **20-40 posts** as the dividing line for most accounts — either something breaks out in that window, or you have clearly proven the topic has no audience. Both are useful information.'],
+                ['Second: one narrow topic only', 'A mixed feed teaches the algorithm nothing. Ten videos about desk organization get shown to people who watch desk organization content; ten videos about "my life" get shown to nobody. Narrow means identifiable. Broaden the topic after you have a base, not before.'],
+                ['Third: the first 2 seconds decide everything', 'Not the caption — the **visual**. Your video sits between fifty others in a feed, and if the first frame looks the same as the rest, the thumb keeps moving. Scroll your own feed and ask whether you would stop for your own video. That is a better read than any analytics dashboard.'],
+                ['Fourth: use the search bar as a topic list', 'Type your keyword into the platform search bar and look at the suggestions. Those are **real search volumes**. A video that answers a searched question keeps bringing views for months. A trend-chasing video is dead in 48 hours. This is the highest-leverage content type for a new account.'],
+                ['Fifth: reply to every comment for the first month', 'Comments are a distribution signal, and replies generate more of them. This is the cheapest growth lever that exists — zero cost, only time.'],
+                ['When acceleration is the right call', 'If what you need is **social proof** — a profile that looks like a real account to visitors, or numbers that do not read as a blank slate to a brand — starting with a base follower count is reasonable and cheap. If what you need is **real customers**, accelerated followers will not watch and will not buy, and content still does the work. Keeping those two goals separate is how you avoid buying the wrong thing. See [organic vs accelerated growth](/en/guide/organic-vs-accelerated).'],
+                ['A realistic 30-day rhythm', 'Week 1: post daily, look only at completion rate. Week 2: take the highest-completion video and make three more like it. Week 3: start replying to comments within the hour, and try one video that directly answers a search suggestion. Week 4: if a single video passed 5,000 views, make five variations; if none did, change the visual style, not the topic. Tiers and starting prices are on the [TikTok services page](/c/tiktok) and the [price list](/price).'],
+                ['What this cannot do', 'No service can guarantee a video will take off, and we do not promise it. Acceleration affects how the account looks and what its distribution base is; it does not make the content better. That is stated on the product page and at checkout as well.'],
+            ],
+        },
     },
     {
         slug: 'shopee-traffic-channels',
@@ -199,6 +216,21 @@ export const ARTICLES = [
             ['各渠道投入产出一览', '自然流量：零成本、3-6 周见效、长期有效。社媒引流：时间成本为主、2-4 周见效（前提是有基础粉）、长期有效。网红合作：几百到几千美金、1-2 周见效、单次性。付费广告：预算可控、即时见效、停投即停。涨粉加速：几十到几百元、几小时见效、只影响门面不影响销量。'],
             ['一个提醒', '所有渠道都有共同前提：**产品和页面得能承接流量**。流量进来发现主图差、详情页没说服力、没有评价，转化率会低到让所有渠道都亏。先把这步做好再买流量，顺序反了钱就是白花。'],
         ],
+        en: {
+            tag: 'Store operations',
+            title: 'Cross-border store traffic: five channels ranked by how fast they work',
+            desc: 'Organic marketplace traffic is slow but durable. Social traffic depends on where the account starts. Influencer deals cost more but convert best. Paid ads are fastest and easiest to lose money on. Acceleration only buys social proof.',
+            body: [
+                ['The short version', 'With a limited budget, the right order is: **fix titles and cover images first** (free, verifiable within a week) → **get the social account to a base follower count** → **post product content with links** → **test small paid campaigns** → **then approach influencers**. The most common waste is skipping step two: a zero-follower account posting product videos plateaus at 200-500 views and the effort is gone.'],
+                ['1. Marketplace organic traffic (slowest, most durable)', 'Search traffic on Shopee, Lazada, and Amazon comes down to product selection and keywords. Do not stuff titles with adjectives like "premium multi-function large-capacity storage box." Buyers search **specific scenarios**: `desk organizer cosmetics`, `travel pouch underwear`. Type a term into the marketplace search bar and read the suggestions — those are real volumes. Cover images often matter more than titles: the same product with a cleaner cover can double click-through. The cost is time: a new listing typically needs 3-6 weeks plus review accumulation before organic traffic stabilizes.'],
+                ['2. Social traffic (depends on where the account starts)', 'Linking TikTok, Instagram, or Pinterest to your store is popular, but there is a commonly skipped precondition: **the account needs a base follower count**. A zero-follower account posting product videos will not get pushed to strangers, so views stall. Do it in two steps: get the account to a few thousand followers (a distribution base), then start posting product content. Reverse the order and the first two weeks are wasted. See [getting your first 1,000 followers](/en/guide/first-1000-followers).'],
+                ['3. Influencer collaborations (costly, best conversion)', 'Vertical micro-influencers (10k-100k followers) beat large ones on value: big accounts charge more for a broader, less-targeted audience. What matters is sales ability, not follower count — a 30k account with 8% engagement routinely outperforms a 300k account at 0.5%. See [what engagement rate is normal](/en/guide/engagement-rate). Outreach usually goes through Instagram DMs or email; have samples and a price range ready and response rates improve noticeably.'],
+                ['4. Paid ads (fastest, requires arithmetic)', 'Meta and TikTok ads produce orders quickly and lose money just as quickly. Work out three numbers first: **average order value, gross margin, conversion rate**. At a $30 AOV and 40% margin, anything above $12 cost per order is a loss. A common beginner mistake is optimizing for conversions immediately — start with clicks or add-to-cart, and switch once the pixel has enough data.'],
+                ['5. Follower acceleration (contested, needs a straight answer)', 'Step two above says the account needs a base follower count, and many people buy it. **Whether it works depends entirely on what you want from it.** Using it to look established so visitors do not see a blank profile — yes, and it is cheap. Expecting those followers to engage or buy — no. They will not watch your content and will not order. All it changes is whether the account looks normal. The test is simple: **do you need social proof, or do you need actual customers?** Quality also varies wildly — two services both labelled "TikTok followers" can differ tenfold in drop rate. Check two things: whether drops are refilled, and whether pricing is stated per 1,000 rather than as an opaque package.'],
+                ['Cost and speed at a glance', 'Organic: no cash, 3-6 weeks to take effect, durable. Social: mostly time, 2-4 weeks (with a base already in place), durable. Influencers: hundreds to thousands of dollars, 1-2 weeks, one-off. Paid ads: controllable budget, immediate, stops when you stop. Acceleration: tens to hundreds of dollars, hours, affects presentation only.'],
+                ['One reminder', 'Every channel shares a precondition: **the product and the page have to be able to receive the traffic.** If visitors land on weak cover images, an unconvincing listing, and no reviews, conversion will be low enough to make every channel unprofitable. Fix that before buying traffic. Reversed order means the money is simply gone.'],
+            ],
+        },
     },
     {
         slug: 'engagement-rate',
@@ -215,6 +247,20 @@ export const ARTICLES = [
             ['什么时候该警惕', '三个信号：一是互动率突然掉到以前的三分之一以下且持续；二是播放量正常但点赞极少（说明被推给了不匹配的人）；三是评论里出现大量与内容无关的留言（可能是机器互动）。第一种看粉丝构成，第二种看选题，第三种不用管，平台会清。'],
             ['和订单核对', '如果同期做过增长服务，把订单的「下单数量」和后台实际增数对一下，差额就是掉粉量。这个数字结合互动率一起看，能判断是「粉没进去」还是「进去了但都是低质粉」。核对方法见[怎么判断一次增长服务是否真的执行了](/guide/how-to-verify)。'],
         ],
+        en: {
+            tag: 'Reading data',
+            title: 'What engagement rate is normal: the formula, per-platform baselines, and reading follower quality',
+            desc: 'Engagement rate = (likes + comments + shares + saves) ÷ views (or followers). TikTok divides by views, Instagram by followers — two different baselines, and mixing them produces wrong conclusions. Below half the baseline, suspect follower quality first.',
+            body: [
+                ['The short version', 'Engagement rate = **(likes + comments + shares + saves) ÷ views**. TikTok divides by views; Instagram and YouTube are commonly calculated against followers — **these baselines are not the same, and mixing them gives completely wrong answers**. Rough ranges: TikTok 3%-8% is normal, Instagram 1%-3% (against followers), YouTube 2%-5%. Below half the baseline, look at follower quality or content-audience fit before blaming a shadowban.'],
+                ['Calculating for TikTok', 'The denominator is **views**, not followers: `(likes + comments + shares) ÷ views`. Below 3% means the content did not provoke a reaction. 5%-8% is a healthy range. Above 10% usually means the video got shown to precisely the right audience. Note that ratios distort at very low view counts (a few hundred) — wait until a video has at least a few thousand before reading it.'],
+                ['Calculating for Instagram', 'The industry convention divides by **followers**: `(likes + comments + saves) ÷ followers`. 1%-3% is the usual range; Reels watch numbers are better read separately. An inflated follower count (from a past purchase, for instance) will push this ratio down hard — in that case a low number does not necessarily mean weak content, it may just be the denominator.'],
+                ['Why this number reveals follower quality', 'Real followers watch and engage. Inactive followers only increase the denominator without adding to the numerator — so **engagement rate necessarily falls after buying followers**. That is arithmetic, not a platform penalty. If you just ran a growth service and engagement dropped, check whether the denominator grew before attributing it to content or throttling.'],
+                ['A more reliable method', 'Do not just read ratios — read **absolute numbers over time**. How much does a video gain between day 3 and day 7? Organic traffic usually decays to near zero within 48-72 hours. If a video is still climbing after a week, that is search or long-tail recommendation traffic, and the content is stronger than the surface numbers suggest.'],
+                ['When to worry', 'Three signals. One: engagement drops below a third of its previous level and stays there. Two: views look normal but likes are abnormally low — meaning it was shown to the wrong audience. Three: comments are full of irrelevant replies, which is usually bot engagement and the platform will clean it up on its own.'],
+                ['Cross-checking against orders', 'If you ran a growth service in the same period, compare the ordered quantity against the actual follower increase in the backend. The gap is the drop-off. Read that number alongside engagement rate to distinguish "followers never arrived" from "followers arrived but were low quality": the first shows up as an order still marked in progress, the second shows up as delivered quantity holding while your ratio falls.'],
+            ],
+        },
     },
     {
         slug: 'organic-vs-accelerated',
@@ -231,6 +277,20 @@ export const ARTICLES = [
             ['一个容易被忽略的账', '很多人只算「买粉多少钱」，没算「买错了损失什么」。如果买来的粉质量太差导致互动率崩了、账号被降权，恢复成本远高于省下的钱。所以选档位看三个东西：**价格是否明显低于同类**（低得离谱通常有原因）、**有没有留存保障**、**起量速度是否合理**（几分钟暴涨几千的，后续掉得也猛）。这三条是不可能三角 —— 便宜、快、不掉，只能占两个。'],
             ['看完之后', '判断自己属于「需要门面」那类，可以直接看[价格表](/price)对比各平台起价；属于「需要真实客户」，先按内容那两篇做一个月再说。两种选择都没有对错，只有适用场景的区别。'],
         ],
+        en: {
+            tag: 'Strategy',
+            title: 'Organic growth vs accelerated growth: when to use which, and what each really costs',
+            desc: 'They are not alternatives, they are sequential: acceleration solves the starting point, content solves conversion. A zero-follower account posting content is talking to itself in a pool with no distribution.',
+            body: [
+                ['The short version', 'These are **not a choice between two options — they are sequential**. Acceleration answers "does the account have a starting point"; content answers "will followers buy." A zero-follower account posting content is talking to itself in a pool with no distribution base. An account with followers but no content is luring strangers in and offering them nothing. Correct order: establish the base, then use content to earn real customers.'],
+                ['What organic growth actually costs', 'Cash cost is close to zero; **time cost is high**. At 1-2 posts a day for 3-4 weeks, that is roughly 30-60 hours before clearing the cold-start period. Success is not guaranteed — if the topic is wrong, 40 posts later there may still be nothing, and that is normal. The upside is that followers who stay engage, convert, and refer others.'],
+                ['What acceleration actually costs', 'Tens to hundreds of dollars (priced per 1,000), with **almost no time cost**. Minutes to hours. The downside is clear: those followers do not engage and do not convert, and engagement rate falls as a result (bigger denominator, unchanged numerator). What you are buying is social proof, not customers.'],
+                ['Working out which situation you are in', 'Ask one question: **do you lack looking credible, or do you lack people actually buying?** Lacking credibility (closing brand deals, driving store traffic, having a profile that does not read as blank) → acceleration solves it immediately. Lacking sales → acceleration does not help; content and product selection do. If you lack both, buy credibility first (fast, cheap), then spend time on content.'],
+                ['How to combine them', 'Step one: use acceleration to get the account to a few thousand followers (distribution base plus presentation). Step two: follow the rhythm in [getting your first 1,000 followers](/en/guide/first-1000-followers) — content now reaches more people because the base exists. Step three: start attaching product links once numbers stabilize. About a month end to end, faster than pure organic and more effective than pure purchasing.'],
+                ['The cost nobody calculates', 'Most people only compute "what the followers cost," not "what buying the wrong ones costs." If low-quality followers crater your engagement rate and the account gets downranked, recovery costs far more than what you saved. So check three things when choosing a tier: **is the price obviously below comparable listings** (suspiciously cheap usually has a reason), **is there retention or refill coverage**, and **is the delivery speed plausible** (thousands appearing in minutes also disappear fast). This is an impossible triangle — cheap, fast, and no drops: pick two.'],
+                ['After reading this', 'If you decided you need presentation, compare starting prices on the [price list](/price). If you need real customers, spend a month on the content articles first. Neither choice is wrong; they simply apply to different situations.'],
+            ],
+        },
     },
     {
         slug: 'instagram-growth',
@@ -249,6 +309,22 @@ export const ARTICLES = [
             ['数据怎么看', 'IG 的互动率惯例按**粉丝数**算（分母不是播放量，这点和 TikTok 不同），1%-3% 是常见区间。如果你刚做过增长服务导致粉丝数变大，互动率会掉，那是分母的问题不是内容的问题。具体算法见[互动率多少算正常](/guide/engagement-rate)。'],
             ['看档位', 'IG 的粉丝、点赞、播放、故事浏览是分开计价的，档位差异主要在起量速度和留存。可以到 [Instagram 增长服务](/c/instagram) 看当前有哪些类型和起价。'],
         ],
+        en: {
+            tag: 'Getting started',
+            title: 'Instagram growth: Reels and feed posts are two different games',
+            desc: 'Instagram has two separate traffic entries — Reels ride the recommendation feed, feed posts rely on Explore and hashtags. Running the same content through both usually means neither works. And hashtags do not do what they did in 2019.',
+            body: [
+                ['The short version', 'Instagram has **two independent traffic entries**: Reels go through the recommendation feed, which behaves a lot like TikTok. Feed posts and carousels go through Explore, hashtags, and profile visits. **The distribution mechanics are not the same.** Running identical content through both usually means mediocre numbers on both. Pick one to lead with before you start.'],
+                ['How Reels get distributed', 'Closest to TikTok: completion rate, replays, and shares are the main signals. The first three seconds decide whether it gets pushed. The difference is that Instagram weights **shares to DMs** much higher than likes. "Worth sending to a friend" beats "looks nice."'],
+                ['How feed posts get distributed', 'Feed posts do not enter the recommendation feed. They rely on **Explore and hashtag pages**, which are driven by who has engaged with similar posts and by engagement velocity — likes and comments in the first 30 minutes matter a lot. That makes posting timing far more important for feed posts than for Reels.'],
+                ['Do hashtags still work', 'Yes, but the role changed. It used to be "more tags, more reach." Now it is **how the algorithm classifies your content**. 10-15 specific tags usually beat 30 generic ones, because generic tags are too competitive to rank in. Location tags still work for local businesses.'],
+                ['Choosing between the two', 'Want fast growth and can produce video consistently → lead with Reels. Selling a product, need to show detail and layout → feed posts and carousels, which also get **more saves**, and saves are a favorable signal for conversion-oriented content. With enough resources, split the work: Reels for reach, feed for conversion.'],
+                ['Common mistakes', 'Three: uploading TikTok videos to Reels with the watermark still on (gets downranked, and the pacing is wrong anyway); posting the same thing as both a Reel and a feed post; and ignoring comments — Instagram weighs comments heavily, especially in the first 30 minutes.'],
+                ['Why follower count matters more here', 'Instagram depends on existing followers more than TikTok does. New accounts get a smaller initial Reels pool, and feed posts rely almost entirely on current followers engaging. That is why people often start with a base follower count on IG — not to make the numbers look good, but to give new posts **an initial engagement pool**. See [organic vs accelerated growth](/en/guide/organic-vs-accelerated).'],
+                ['Reading the numbers', 'Instagram engagement rate is conventionally calculated against **follower count**, not views — this is the opposite of TikTok. 1%-3% is a normal range. If you recently ran a growth service and follower count jumped, engagement rate will drop. That is the denominator, not your content. See [what engagement rate is normal](/en/guide/engagement-rate).'],
+                ['Pricing', 'On Instagram, followers, likes, views, and story views are priced separately. Tiers differ mainly in delivery speed and retention. You can check current types and starting prices on the [Instagram services page](/c/instagram).'],
+            ],
+        },
     },
     {
         slug: 'youtube-subscribers',
@@ -266,6 +342,21 @@ export const ARTICLES = [
             ['数据基准', 'YouTube 的互动率惯例按**播放量**算，2%-5% 是常见区间。更该看的是「平均观看时长占比」——超过 50% 说明内容对路，低于 30% 说明标题骗了人或者内容拖沓，两种情况处理方式完全不同。'],
             ['看档位', 'YouTube 的订阅、播放、点赞、观看时长是不同服务，价格差异大（订阅通常比播放贵）。可以到 [YouTube 增长服务](/c/youtube) 看当前类型和起价，或者直接看[价格表](/price)对比。'],
         ],
+        en: {
+            tag: 'Getting started',
+            title: 'Growing on YouTube: it is a search engine, not a recommendation feed',
+            desc: 'YouTube grows almost opposite to TikTok. TikTok runs on recommendations; YouTube runs on search. Title and thumbnail decide click-through, watch time decides promotion, and subscriber count is an outcome rather than a lever.',
+            body: [
+                ['The short version', '**Most YouTube traffic comes from search and suggested videos, not the home feed.** That means picking topics by "what will people search for," not "what will go viral." Taking the TikTok playbook — chase trends, optimize the first 3 seconds — to YouTube usually fails, because the entries are fundamentally different.'],
+                ['Start with search intent', 'Type your keyword into the YouTube search bar and look at the suggestions plus the "people also search for" panel. Those are real search volumes. A video that answers a searched question keeps bringing views for two years. A trend-chasing video is dead in two weeks. That longevity is YouTube\'s biggest asset and the most commonly ignored one.'],
+                ['Title and thumbnail decide click-through', 'YouTube shows a thumbnail and a title, and users actively choose what to watch. Within the same set of recommendations, a 2x difference in CTR is common — and CTR directly determines promotion. Keep text off the thumbnail (unreadable on phones) and put the keyword early in the title (search results truncate).'],
+                ['Watch time decides promotion', 'The signal YouTube cares about most is **average view duration and completion rate**, not likes. An 8-minute video watched for 6 minutes beats a 20-minute video watched for 3. So do not make long videos as a new channel — keep them short, get completion up, then extend.'],
+                ['Subscribers are a result, not a lever', 'The intuition is "grow subscribers first, then views." It is actually the reverse: **views bring subscribers.** A video that takes off pulls subscribers with it. Subscribers gained without content that people watch will not bring you views. Do not treat subscriber count as the goal.'],
+                ['When acceleration makes sense', 'YouTube has a specific threshold: **1,000 subscribers plus 4,000 watch hours** before monetization. Many channels stall exactly there. If the goal is monetization eligibility or making the channel look established, a subscriber service clears that step. Same caveat as everywhere else — accelerated subscribers do not watch, do not contribute watch hours, and channel growth still depends on content.'],
+                ['Baselines', 'YouTube engagement rate is conventionally calculated against **views**; 2%-5% is a common range. The more useful number is average view duration as a percentage — above 50% means the content fits, below 30% means either the title oversold or the video drags. Those two problems need opposite fixes.'],
+                ['Pricing', 'Subscribers, views, likes, and watch hours are separate services on YouTube, and the price gap is large — subscribers typically cost several times what views do, because delivering them is harder. Check the [YouTube services page](/c/youtube) or the [full price list](/price).'],
+            ],
+        },
     },
     {
         slug: 'influencer-pricing',
@@ -283,6 +374,21 @@ export const ARTICLES = [
             ['几个实操细节', '一是在私信里就给清楚：产品是什么、要几条内容、能不能挂链接、什么时候要。二是明确「内容保留期」（有些网红一个月后删视频，那你的流量就断了）。三是合同里写清数据反馈义务，不然合作完拿不到数据。'],
             ['替代方案：自己做账号', '如果预算有限，把同样的钱用在自己账号上往往更划算 —— 网红合作是**一次性流量**，自己账号的粉丝是**可复用资产**。自己起号的节奏见[新号前 1000 粉怎么来](/guide/first-1000-followers)，整个渠道排序见[跨境店铺引流](/guide/shopee-traffic-channels)。'],
         ],
+        en: {
+            tag: 'Store operations',
+            title: 'Negotiating influencer rates: flat fee, CPM, CPS, or product-only',
+            desc: 'Four common pricing models, and picking the wrong one hurts more than overpaying. The anchor for a fair rate is not follower count — it is historical engagement and comparable rates in your niche.',
+            body: [
+                ['The short version', 'Four models: **flat fee** (simplest, all the risk on you), **CPM / pay per view** (risk shared), **CPS / revenue share** (fairest, hardest to negotiate), and **product-only** (no cash, works for micro-influencers). Choosing the wrong model costs more than paying a high rate — a $500 flat fee on a video that gets 2,000 views works out to a $250 CPM, which is absurd.'],
+                ['Do not anchor on follower count', 'Many influencers quote by follower count ("10k followers = $100"), which is a crude formula. Look at **historical engagement** instead: ask for screenshots of the backend numbers on their last three videos. Two accounts with the same 10k followers can differ 8x in actual reach depending on whether engagement is 8% or 1%.'],
+                ['Check the rate yourself', 'Work out the CPM: **rate ÷ (estimated views ÷ 1,000)**. For fast-moving consumer goods, influencer video CPM typically lands between $10 and $40. Above $60 is worth scrutinizing. Do not trust their estimate of views — take the median of their last five.'],
+                ['Where flat fees bite', 'The risk is entirely yours: you pay, and whatever happens happens. Flat fees make sense for influencers with **proven sales ability** — someone you have worked with, or who has a clear case study. Do not use a flat fee for a first collaboration, and especially do not prepay in full.'],
+                ['Why CPS is hard to negotiate', 'Revenue share is fair to both sides, but influencers resist it because conversion depends on your product and landing page, not on anything they control. To sell CPS you need to offer two things: **a competitive share** (15%-30% for consumer goods) and **an existing conversion case** so they believe it can sell.'],
+                ['When product-only works', 'Zero cash, sample only, suitable for micro-influencers under 3,000 followers. Response rates are actually decent — plenty of people will trade a post for a product. The downside is uncontrolled quality, and some are just after free stuff. Send to 10-20 at once and see whose output is actually usable.'],
+                ['Practical details', 'State it all in the first message: what the product is, how many posts, whether links are allowed, and the deadline. Specify a **content retention period** — some influencers delete videos after a month, which cuts off your traffic. Put a data reporting obligation in the agreement, or you will not get numbers afterward.'],
+                ['The alternative: build your own account', 'If budget is tight, spending the same money on your own account is often the better trade. Influencer collaborations are **one-time traffic**; your own followers are a **reusable asset**. See [getting your first 1,000 followers](/en/guide/first-1000-followers) and the full channel ranking in [cross-border store traffic](/en/guide/shopee-traffic-channels).'],
+            ],
+        },
     },
     {
         slug: 'platform-differences',
@@ -301,7 +407,55 @@ export const ARTICLES = [
             ['实操建议', '预算和精力有限的话，**先做一个平台做透**，别五个平台平均用力。判断标准：你的产品是「冲动消费」→ TikTok/IG Reels；是「搜索解决需求」→ YouTube；是「需要信任和长期关系」→ Telegram 频道。做完一个再加下一个，顺序反了每个都做不深。'],
             ['各平台的档位差异', '不同平台的同类服务价格差很大（比如 YouTube 订阅通常比 TikTok 粉丝贵数倍），因为交付难度不同。想横向对比可以看[价格表](/price)，按每 1000 个统一口径列出来了。'],
         ],
+        en: {
+            tag: 'Strategy',
+            title: 'Five platforms, five completely different growth mechanics',
+            desc: 'TikTok runs on recommendations, YouTube on search, Instagram on two parallel entries, X on the repost chain, Telegram on group spread. Copy-pasting the same content everywhere usually means it underperforms everywhere.',
+            body: [
+                ['The short version', '**Each platform has a different traffic entry, so "what works" is different too.** A video that takes off on TikTok might get a few dozen views posted as-is on YouTube. The content is not bad; the entry is wrong. Before going multi-platform, figure out how each one distributes — adjusting format is cheaper than changing topics.'],
+                ['TikTok: pure recommendation', 'Content enters a test pool regardless of follower count. Good numbers mean more distribution. New accounts can break out, at the cost of **having to hook people in the first 3 seconds**. Followers mainly raise your initial view floor; they do not come back to watch on their own. See [getting your first 1,000 followers](/en/guide/first-1000-followers).'],
+                ['YouTube: search plus suggested', 'Most traffic is search and "up next" — users actively choose. So **pick topics by search intent, let title and thumbnail drive CTR, and let watch time drive promotion**. New channels start slowly (no search ranking yet), but a well-targeted video brings traffic for two years. See [growing on YouTube](/en/guide/youtube-subscribers).'],
+                ['Instagram: two entries in parallel', 'Reels ride the recommendation feed (close to TikTok); feed posts rely on Explore and hashtags (close to Pinterest). The optimization differs, and **mixing them usually means neither works**. See [Instagram growth](/en/guide/instagram-growth).'],
+                ['X (Twitter): repost chain plus recency', 'The core signal is **reposts and quote tweets**, not likes. Content lifespan is very short — hours to a day — but one repost from a large account can cause a spike. X suits opinionated, quotable, timely content, not polished long-form. The key is **volume plus catching the day\'s conversation**.'],
+                ['Telegram: group spread plus search', 'Not a recommendation platform — a distribution channel. Growth comes from being forwarded into other groups and from Telegram\'s internal search (t.me links are indexable). So channel content must be **worth forwarding**, and the channel name and bio need searchable keywords. Lists and resource dumps travel fastest on Telegram.'],
+                ['A side-by-side', 'TikTok: recommendation / first 3 seconds / new accounts viable / content lifespan 2-3 days. YouTube: search / title and thumbnail / slow start / lifespan 1-2 years. Instagram: dual entry / separate optimization / depends on base followers / lifespan 3-7 days. X: repost chain / recency / needs volume / lifespan hours. Telegram: group spread / worth forwarding / search-driven / long-lived.'],
+                ['What to actually do', 'With limited time and budget, **pick one platform and go deep** rather than spreading thin across five. Rule of thumb: impulse purchases → TikTok or IG Reels; demand solved by search → YouTube; trust and long-term relationships → Telegram channels. Add the next platform after the first one works; the reverse order means none of them get deep enough.'],
+                ['Pricing across platforms', 'The same nominal service costs very different amounts across platforms — YouTube subscribers typically cost several times TikTok followers because delivery is harder. The [price list](/price) normalizes everything per 1,000 for comparison.'],
+            ],
+        },
     },
 ];
 
 export const articleOf = (slug) => ARTICLES.find((a) => a.slug === slug) || null;
+
+/**
+ * 取某语种下的文章：有对应翻译就用翻译，没有就回退中文。
+ *
+ * 为什么要回退：18 篇里目前只有运营指南那 8 篇有英文版（下单说明类英文
+ * 搜索量低、优先级不高）。回退让 /en/guide/:slug 对任何 slug 都返回 200，
+ * 不会出现 404 —— 只是没翻译的那几篇内容是中文。
+ *
+ * 返回的对象字段名统一成 title/desc/body，渲染层不用关心语言。
+ */
+export const articleOfLang = (slug, lang = 'zh') => {
+    const a = articleOf(slug);
+    if (!a) return null;
+    const t = lang === 'en' && a.en ? a.en : null;
+    if (!t) return a;
+    return {
+        ...a,
+        title: t.title || a.title,
+        desc: t.desc || a.desc,
+        body: t.body || a.body,
+        tag: t.tag || a.tag,
+        // 标记这篇到底有没有真正翻译，列表页可以据此只展示有翻译的
+        translated: true,
+    };
+};
+
+/** 该文章是否有指定语种的翻译 */
+export const hasLang = (slug, lang) => {
+    const a = articleOf(slug);
+    if (!a) return false;
+    return !!(lang === 'en' && a.en);
+};

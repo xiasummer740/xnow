@@ -27,7 +27,7 @@ import { Service, SiteServicePrice, Config, VpnProduct } from '../models/index.j
 import { platformOf, slugOf, labelOfSlug, PLATFORM_CN, typeOf, per1000, PLATFORM_LABELS } from '../utils/platform.js';
 import { copyOf } from '../utils/platformCopy.js';
 import { typeCopyOf, TYPE_COPY } from '../utils/typeCopy.js';
-import { ARTICLES, articleOf } from '../utils/guideCopy.js';
+import { ARTICLES, articleOf, articleOfLang, hasLang } from '../utils/guideCopy.js';
 import { LANGS, LANG_ORDER, copyOfLang, typeLabelOf } from '../utils/langCopy.js';
 
 const router = express.Router();
@@ -481,6 +481,22 @@ router.get('/sitemap.xml', async (req, res) => {
         for (const a of ARTICLES) {
             urls.push({ loc: `${base}/guide/${a.slug}`, pri: '0.7' });
         }
+        // 英文知识库（2026-11-08）：只收录真正有英文翻译的那几篇 + 列表页。
+        // 没翻译的走回退会显示中文，那种页面不该以 en 身份出现在 sitemap 里。
+        if (!brand.isSubsite) {
+            const enArticles = ARTICLES.filter((a) => a.en);
+            if (enArticles.length) {
+                const altKb = (slug) => [
+                    { lang: 'zh-CN', href: `${base}/guide${slug ? '/' + slug : ''}` },
+                    { lang: 'en', href: `${base}/en/guide${slug ? '/' + slug : ''}` },
+                    { lang: 'x-default', href: `${base}/guide${slug ? '/' + slug : ''}` },
+                ];
+                urls.push({ loc: `${base}/en/guide`, pri: '0.8', alt: altKb('') });
+                for (const a of enArticles) {
+                    urls.push({ loc: `${base}/en/guide/${a.slug}`, pri: '0.7', alt: altKb(a.slug) });
+                }
+            }
+        }
         // 安全节点（2026-11-07 起服务端渲染，分站不卖这个，只主站出）
         if (!brand.isSubsite) {
             urls.push({ loc: `${base}/vpn`, pri: '0.8' });
@@ -845,147 +861,225 @@ const guideFaqLd = (a) => ({
     })),
 });
 
-router.get('/guide', async (req, res) => {
-    try {
-        const catalog = await loadCatalog(req.site);
-        const brand = brandOf(req, catalog);
-        const base = `https://${brand.host}`;
-        const canonical = `${base}/guide`;
-        // 知识库分两块：运营方法（起号/引流/看数据）和下单说明（怎么填、怎么选）。
-        // 前者拿搜索词，后者降售后问题，两类读者其实是同一批人的不同阶段。
-        const OPS_TAGS = ['起号实操', '店铺运营', '数据判断', '策略选择', '运营方法'];
-        const opsArticles = ARTICLES.filter((a) => OPS_TAGS.includes(a.tag));
-        const orderArticles = ARTICLES.filter((a) => !OPS_TAGS.includes(a.tag));
-        const title = `社媒增长知识库 · 起号、引流、看数据、下单说明 ${ARTICLES.length} 篇 · ${brand.name}`;
-        const desc = `新号为什么只有 200 播放、跨境店铺五个引流渠道怎么排、互动率多少算正常、自然涨粉和加速涨粉什么时候用哪个，以及下单前必看的链接格式、档位选择、掉粉判断 —— ${ARTICLES.length} 篇实操说明，不给形容词只给判断标准。`;
 
-        const cardOf = (a) => `<li style="margin:14px 0">
-<a href="/guide/${a.slug}" style="color:#22d3ee;font-weight:700;font-size:16px">${esc(a.title)}</a>
-<div style="color:#94a3b8;font-size:14px;margin-top:4px">${esc(a.desc)}</div>
-<div style="color:#64748b;font-size:12px;margin-top:4px">${esc(a.tag)} · 更新于 ${esc(a.updated)}</div>
+// ── 知识库（中 / 英共用同一套渲染，2026-11-08）──────────────────────────
+// 抽成函数而不是复制两份：中文 18 篇、英文 8 篇（其余回退中文），
+// 如果按语种各写一套路由，加第 3 个语种时又要复制一遍。
+const GUIDE_UI = {
+    zh: {
+        home: '首页', kb: '知识库', related: '相关阅读', next: '下一步',
+        nextText: '看完了就可以去下单。不确定选哪个档位，先在对应平台页看各类型服务的起价和档位说明。',
+        cta: '去下单 →', foot: '自动交付 · 在线充值', svc: '增长服务',
+        notFound: '没有找到这篇。', backKb: '回知识库',
+        h1: '社媒增长知识库',
+        intro: '分两部分：<b>运营方法</b>讲怎么起号、怎么引流、数据怎么看；<b>下单说明</b>讲链接怎么填、档位怎么选、出了问题怎么判断。都是实操里真会遇到的事，不给形容词只给判断标准。',
+        opsHead: '运营方法', orderHead: '下单说明', priceHead: '价格与平台',
+        priceText: '所有服务按每 1000 个计价，全平台明码标价，不用注册就能看：',
+        priceLink: '完整价格表', docs: (n) => `${n} 篇`,
+        listTitle: (n, b) => `社媒增长知识库 · 起号、引流、看数据、下单说明 ${n} 篇 · ${b}`,
+        listDesc: (n) => `新号为什么只有 200 播放、跨境店铺五个引流渠道怎么排、互动率多少算正常、自然涨粉和加速涨粉什么时候用哪个，以及下单前必看的链接格式、档位选择、掉粉判断 —— ${n} 篇实操说明，不给形容词只给判断标准。`,
+        updated: '更新于', locale: 'zh_CN',
+    },
+    en: {
+        home: 'Home', kb: 'Guides', related: 'Related reading', next: 'Next step',
+        nextText: 'Ready to order? If you are unsure which tier to pick, check the starting prices and tier notes on the relevant platform page first.',
+        cta: 'Start an order →', foot: 'automatic delivery · pay as you go', svc: 'services',
+        notFound: 'This article does not exist.', backKb: 'Back to guides',
+        h1: 'Growth knowledge base',
+        intro: 'Two sections: <b>operating methods</b> covers getting an account started, driving traffic, and reading the numbers; <b>ordering notes</b> covers link formats, tier selection, and diagnosing problems. All of it comes from actual practice — thresholds rather than adjectives.',
+        opsHead: 'Operating methods', orderHead: 'Ordering notes', priceHead: 'Pricing and platforms',
+        priceText: 'Everything is priced per 1,000 units, published openly across all platforms — no signup required:',
+        priceLink: 'Full price list', docs: (n) => `${n} articles`,
+        listTitle: (n, b) => `Growth knowledge base · ${n} practical guides on account setup, traffic and pricing · ${b}`,
+        listDesc: (n) => `Why a new account plateaus at 200 views, how to rank five traffic channels for a cross-border store, what engagement rate is normal, when to use organic growth versus acceleration, plus link formats, tier selection and drop-off diagnosis — ${n} practical guides with thresholds instead of adjectives.`,
+        updated: 'Updated', locale: 'en_US',
+    },
+};
+
+const GUIDE_OPS_TAGS = ['起号实操', '店铺运营', '数据判断', '策略选择', '运营方法', 'Getting started', 'Store operations', 'Reading data', 'Strategy'];
+
+/** 知识库列表页（中 / 英） */
+const renderGuideList = async (req, res, lang) => {
+    const ui = GUIDE_UI[lang];
+    const isEn = lang === 'en';
+    const catalog = await loadCatalog(req.site);
+    const brand = brandOf(req, catalog);
+    const base = `https://${brand.host}`;
+    const canonical = `${base}${isEn ? '/en' : ''}/guide`;
+
+    // 英文列表只展示真正翻译过的文章，避免把 10 篇中文混进英文页面
+    const pool = isEn ? ARTICLES.filter((a) => a.en) : ARTICLES;
+    const ops = pool.filter((a) => GUIDE_OPS_TAGS.includes(a.tag));
+    const ord = pool.filter((a) => !GUIDE_OPS_TAGS.includes(a.tag));
+    const view = (a) => (isEn ? articleOfLang(a.slug, 'en') : a);
+
+    const cardOf = (a) => {
+        const v = view(a);
+        return `<li style="margin:14px 0">
+<a href="${isEn ? '/en' : ''}/guide/${a.slug}" style="color:#22d3ee;font-weight:700;font-size:16px">${esc(v.title)}</a>
+<div style="color:#94a3b8;font-size:14px;margin-top:4px">${esc(v.desc)}</div>
+<div style="color:#64748b;font-size:12px;margin-top:4px">${esc(v.tag)} · ${esc(ui.updated)} ${esc(a.updated)}</div>
 </li>`;
+    };
+    const plats = [...catalog.platforms].filter((p) => p.count && p.label !== 'Other').slice(0, 6);
+    const platHead = (p) => (isEn ? p.label : (PLATFORM_CN[p.label] || p.label));
 
-        const body = `<div class="seo-wrap">${styleBlock}
-<h1>社媒增长知识库</h1>
-<p>分两部分：<b>运营方法</b>讲怎么起号、怎么引流、数据怎么看；<b>下单说明</b>讲链接怎么填、档位怎么选、出了问题怎么判断。都是实操里真会遇到的事，不给形容词只给判断标准。</p>
-<h2>运营方法（${opsArticles.length} 篇）</h2>
-<ul style="list-style:none;padding:0">${opsArticles.map(cardOf).join('')}</ul>
-<h2>下单说明（${orderArticles.length} 篇）</h2>
-<ul style="list-style:none;padding:0">${orderArticles.map(cardOf).join('')}</ul>
-<h2>价格与平台</h2>
-<p>所有服务按每 1000 个计价，全平台明码标价，不用注册就能看：</p>
+    const body = `<div class="seo-wrap">${styleBlock}
+<h1>${esc(ui.h1)}</h1>
+<p>${ui.intro}</p>
+<h2>${esc(ui.opsHead)}（${ui.docs(ops.length)}）</h2>
+<ul style="list-style:none;padding:0">${ops.map(cardOf).join('')}</ul>
+${ord.length ? `<h2>${esc(ui.orderHead)}（${ui.docs(ord.length)}）</h2>
+<ul style="list-style:none;padding:0">${ord.map(cardOf).join('')}</ul>` : ''}
+<h2>${esc(ui.priceHead)}</h2>
+<p>${esc(ui.priceText)}</p>
 <ul>
-<li><a href="/price" style="color:#22d3ee">完整价格表</a></li>
-${[...catalog.platforms].filter((p) => p.count && p.label !== 'Other').slice(0, 6)
-    .map((p) => `<li><a href="/c/${p.slug}" style="color:#22d3ee">${esc(PLATFORM_CN[p.label] || p.label)} 增长服务</a></li>`).join('')}
+<li><a href="${isEn ? '/en' : ''}/price" style="color:#22d3ee">${esc(ui.priceLink)}</a></li>
+${plats.map((p) => `<li><a href="${isEn ? '/en' : ''}/c/${p.slug}" style="color:#22d3ee">${esc(platHead(p))} ${esc(ui.svc)}</a></li>`).join('')}
 </ul>
-<a class="seo-cta" href="/order">去下单 →</a>
-<div class="seo-foot">${esc(brand.name)} · 自动交付 · 在线充值</div>
+<a class="seo-cta" href="/order">${esc(ui.cta)}</a>
+<div class="seo-foot">${esc(brand.name)} · ${esc(ui.foot)}</div>
 </div>`;
 
-        const ld = [
-            {
-                '@context': 'https://schema.org',
-                '@type': 'CollectionPage',
-                name: title,
-                description: desc,
-                url: canonical,
-                inLanguage: 'zh-CN',
-            },
-            {
-                '@context': 'https://schema.org',
-                '@type': 'ItemList',
-                itemListElement: ARTICLES.map((a, i) => ({
-                    '@type': 'ListItem',
-                    position: i + 1,
-                    name: a.title,
-                    url: `${base}/guide/${a.slug}`,
-                })),
-            },
-        ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+    const ld = [{
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: ui.h1,
+        description: ui.listDesc(pool.length),
+        inLanguage: isEn ? 'en' : 'zh-CN',
+        url: canonical,
+        hasPart: pool.map((a) => ({
+            '@type': 'Article',
+            headline: view(a).title,
+            url: `${base}${isEn ? '/en' : ''}/guide/${a.slug}`,
+        })),
+    }].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
 
-        const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
-        if (!shell) return res.status(503).type('text/plain').send('building');
-        res.type('text/html; charset=utf-8')
-            .set('Cache-Control', 'public, max-age=1800')
-            .send(injectIntoShell(shell, { head: headOf({ brand, title, desc, canonical, ld }), body }));
-    } catch (e) {
-        console.error('[seo] 知识库列表失败', e.message);
-        res.status(500).type('text/plain').send('error');
+    const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
+    if (!shell) return res.status(503).type('text/plain').send('building');
+    let html = injectIntoShell(shell, {
+        head: headOf({
+            brand, title: ui.listTitle(pool.length, brand.name), desc: ui.listDesc(pool.length),
+            canonical, ld, locale: ui.locale,
+            hreflangs: [
+                { lang: 'zh-CN', href: `${base}/guide` },
+                { lang: 'en', href: `${base}/en/guide` },
+                { lang: 'x-default', href: `${base}/guide` },
+            ],
+        }),
+        body,
+    });
+    if (isEn) html = setHtmlLang(html, 'en');
+    res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=1800').send(html);
+};
+
+/** 知识库详情页（中 / 英） */
+const renderGuideArticle = async (req, res, lang) => {
+    const ui = GUIDE_UI[lang];
+    const isEn = lang === 'en';
+    const a = articleOfLang(req.params.slug, lang);
+    if (!a) {
+        return res.status(404).type('text/html; charset=utf-8').send(
+            `<!doctype html><meta charset="utf-8"><title>404</title><meta name="robots" content="noindex"><div style="font:16px system-ui;padding:40px">${esc(ui.notFound)} <a href="${isEn ? '/en' : ''}/guide">${esc(ui.backKb)}</a></div>`
+        );
     }
-});
+    const catalog = await loadCatalog(req.site);
+    const brand = brandOf(req, catalog);
+    const base = `https://${brand.host}`;
+    const pfx = isEn ? '/en' : '';
+    const canonical = `${base}${pfx}/guide/${a.slug}`;
+    // 相关阅读：英文只推有英文版的，避免点了跳到中文
+    const related = ARTICLES
+        .filter((x) => x.slug !== a.slug && (!isEn || x.en))
+        .slice(0, 4)
+        .map((x) => (isEn ? articleOfLang(x.slug, 'en') : x));
+    const plats = [...catalog.platforms].filter((p) => p.count && p.label !== 'Other').slice(0, 6);
+    const platHead = (p) => (isEn ? p.label : (PLATFORM_CN[p.label] || p.label));
 
-router.get('/guide/:slug', async (req, res) => {
-    try {
-        const a = articleOf(req.params.slug);
-        if (!a) {
-            return res.status(404).type('text/html; charset=utf-8').send(
-                `<!doctype html><meta charset="utf-8"><title>页面不存在</title><meta name="robots" content="noindex"><div style="font:16px system-ui;padding:40px">没有找到这篇。 <a href="/guide">回知识库</a></div>`
-            );
-        }
-        const catalog = await loadCatalog(req.site);
-        const brand = brandOf(req, catalog);
-        const base = `https://${brand.host}`;
-        const canonical = `${base}/guide/${a.slug}`;
-        const related = ARTICLES.filter((x) => x.slug !== a.slug).slice(0, 4);
-
-        const body = `<div class="seo-wrap">${styleBlock}
+    const body = `<div class="seo-wrap">${styleBlock}
 <nav style="font-size:13px;color:#94a3b8;margin-bottom:10px">
-<a href="/" style="color:#22d3ee">首页</a> › <a href="/guide" style="color:#22d3ee">知识库</a> › ${esc(a.tag)}
+<a href="${pfx}/" style="color:#22d3ee">${esc(ui.home)}</a> › <a href="${pfx}/guide" style="color:#22d3ee">${esc(ui.kb)}</a> › ${esc(a.tag)}
 </nav>
 <h1>${esc(a.title)}</h1>
 <p style="color:#cbd5e1">${esc(a.desc)}</p>
-<div style="color:#64748b;font-size:12px;margin:8px 0 18px">${esc(a.tag)} · 更新于 ${esc(a.updated)}</div>
+<div style="color:#64748b;font-size:12px;margin:8px 0 18px">${esc(a.tag)} · ${esc(ui.updated)} ${esc(a.updated)}</div>
 ${guideBody(a)}
-<h2>相关阅读</h2>
-<ul>${related.map((x) => `<li><a href="/guide/${x.slug}" style="color:#22d3ee">${esc(x.title)}</a></li>`).join('')}</ul>
-<h2>下一步</h2>
-<p>看完了就可以去下单。不确定选哪个档位，先在对应平台页看各类型服务的起价和档位说明。</p>
-<ul>${[...catalog.platforms].filter((p) => p.count && p.label !== 'Other').slice(0, 6)
-                .map((p) => `<li><a href="/c/${p.slug}" style="color:#22d3ee">${esc(PLATFORM_CN[p.label] || p.label)} 增长服务</a></li>`).join('')}</ul>
-<a class="seo-cta" href="/order">去下单 →</a>
-<div class="seo-foot">${esc(brand.name)} · 自动交付 · 在线充值</div>
+<h2>${esc(ui.related)}</h2>
+<ul>${related.map((x) => `<li><a href="${pfx}/guide/${x.slug}" style="color:#22d3ee">${esc(x.title)}</a></li>`).join('')}</ul>
+<h2>${esc(ui.next)}</h2>
+<p>${esc(ui.nextText)}</p>
+<ul>${plats.map((p) => `<li><a href="${pfx}/c/${p.slug}" style="color:#22d3ee">${esc(platHead(p))} ${esc(ui.svc)}</a></li>`).join('')}</ul>
+<a class="seo-cta" href="/order">${esc(ui.cta)}</a>
+<div class="seo-foot">${esc(brand.name)} · ${esc(ui.foot)}</div>
 </div>`;
 
-        const ld = [
-            {
-                '@context': 'https://schema.org',
-                '@type': 'Article',
-                headline: a.title,
-                description: a.desc,
-                datePublished: a.updated,
-                dateModified: a.updated,
-                inLanguage: 'zh-CN',
-                author: { '@type': 'Organization', name: brand.name, url: `${base}/` },
-                publisher: { '@type': 'Organization', name: brand.name, url: `${base}/` },
-                mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
-                image: `${base}/og.png`,
-            },
-            {
-                '@context': 'https://schema.org',
-                '@type': 'BreadcrumbList',
-                itemListElement: [
-                    { '@type': 'ListItem', position: 1, name: brand.name, item: `${base}/` },
-                    { '@type': 'ListItem', position: 2, name: '知识库', item: `${base}/guide` },
-                    { '@type': 'ListItem', position: 3, name: a.title, item: canonical },
-                ],
-            },
-            guideFaqLd(a),
-        ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+    // 只有真正有英文版的文章才声明 en 的 hreflang；没翻译的回退页不参与互指，
+    // 否则会出现「两个 URL 同一种语言」的重复内容信号。
+    const trans = hasLang(a.slug, 'en');
+    const alt = trans ? [
+        { lang: 'zh-CN', href: `${base}/guide/${a.slug}` },
+        { lang: 'en', href: `${base}/en/guide/${a.slug}` },
+        { lang: 'x-default', href: `${base}/guide/${a.slug}` },
+    ] : [];
 
-        const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
-        if (!shell) return res.status(503).type('text/plain').send('building');
-        res.type('text/html; charset=utf-8')
-            .set('Cache-Control', 'public, max-age=1800')
-            .send(injectIntoShell(shell, {
-                head: headOf({ brand, title: `${a.title} · ${brand.name}`, desc: a.desc, canonical, ld }),
-                body,
-            }));
-    } catch (e) {
-        console.error('[seo] 知识库详情失败', e.message);
-        res.status(500).type('text/plain').send('error');
-    }
-});
+    const ld = [
+        {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            headline: a.title,
+            description: a.desc,
+            datePublished: a.updated,
+            dateModified: a.updated,
+            inLanguage: isEn ? 'en' : 'zh-CN',
+            author: { '@type': 'Organization', name: brand.name, url: `${base}/` },
+            publisher: { '@type': 'Organization', name: brand.name, url: `${base}/` },
+            mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+            image: `${base}/og.png`,
+        },
+        {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+                { '@type': 'ListItem', position: 1, name: brand.name, item: `${base}/` },
+                { '@type': 'ListItem', position: 2, name: ui.kb, item: `${base}${pfx}/guide` },
+                { '@type': 'ListItem', position: 3, name: a.title, item: canonical },
+            ],
+        },
+        guideFaqLd(a),
+    ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+
+    const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
+    if (!shell) return res.status(503).type('text/plain').send('building');
+    let html = injectIntoShell(shell, {
+        head: headOf({
+            brand, title: `${a.title} · ${brand.name}`, desc: a.desc, canonical, ld,
+            locale: ui.locale, hreflangs: alt,
+        }),
+        body,
+    });
+    if (isEn) html = setHtmlLang(html, 'en');
+    res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=1800').send(html);
+};
+
+router.get('/guide', (req, res) => renderGuideList(req, res, 'zh').catch((e) => {
+    console.error('[seo] 知识库列表失败', e.message);
+    res.status(500).type('text/plain').send('error');
+}));
+
+router.get('/guide/:slug', (req, res) => renderGuideArticle(req, res, 'zh').catch((e) => {
+    console.error('[seo] 知识库详情失败', e.message);
+    res.status(500).type('text/plain').send('error');
+}));
+
+router.get('/en/guide', (req, res) => renderGuideList(req, res, 'en').catch((e) => {
+    console.error('[seo] /en/guide 列表失败', e.message);
+    res.status(500).type('text/plain').send('error');
+}));
+
+router.get('/en/guide/:slug', (req, res) => renderGuideArticle(req, res, 'en').catch((e) => {
+    console.error('[seo] /en/guide 详情失败', e.message);
+    res.status(500).type('text/plain').send('error');
+}));
 
 // ── GET /vpn（全球安全节点，2026-11-07）────────────────────────────────────
 // 之前这个页面是 client/public/vpn.html 一个 2.9KB 的手写壳，<div id="app"> 全空、
