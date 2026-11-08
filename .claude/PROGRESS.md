@@ -2343,3 +2343,78 @@ AI 爬虫放行、英文正文）都做完了。剩下的三件事只能靠人�
 > 否则空壳页会长期以 HTTP 200 混在索引里，从状态码完全看不出来。
 
 **三方同步**：本地 `feat/sites` = `5f8063ad` = 生产 `/var/www/xnow`（已推送）。
+
+---
+
+## 2026-11-08/09 全球获客工程（SEO 从技术层推到内容+外链层）
+
+**起点**：祥哥问「全球用户搜关键词能不能容易搜到我的网站」。当时站内技术层已经做完
+（7 语种 199 页、结构化数据、llms.txt），但**没有内容、没有外链、没有主动提交**。
+
+### 这一轮做完的
+
+**① 三条主动提交通道全部自动化**（之前只有 sitemap 等自然抓取）
+· IndexNow —— Bing/Yandex/Seznam/Naver，不限量，cron 3:20
+· Google Indexing API —— 200/天，cron 4:00（实测配额按**太平洋时间**重置，
+  即北京时间 16:00，所以凌晨 4:00 跑时配额是满的）
+· Bing URL Submission —— **实测 100/天**（官方博客写 10000，是错的），cron 4:30
+· 三个脚本都零依赖：Google 用 Node 内置 crypto 签 RS256 JWT，不装 google-auth
+
+**② 知识库从 10 篇 → 22 篇**（中 22 / 英 12）
+· 运营方法 12 篇：起号、引流、互动率、自然vs加速、TikTok Shop、直播带货、
+  独立站、东南亚本地化、Instagram、YouTube、网红报价、平台差异
+· 下单说明 10 篇（原有）
+· 第一篇做到 17 小节 / 1.6 万字符，含 2 个表格、10 个提示框、8 个 h3
+· 渲染层升级：mdBlock 支持表格、有序/无序列表、提示框（`>` 开头）、h3
+
+**③ 标题全部改用用户真实搜索词**（这是最大的一个发现）
+原来 7 个语种的标题全是「增长面板」这类产品自述，用户搜的是「动作」：
+· 中文：`TikTok 增长服务` → `TikTok 涨粉平台 … 自助下单`
+  （「涨粉」在 /c/tiktok 出现次数 0 → 8）
+· 印尼 `Jasa Follower TikTok`／巴西 `Comprar Seguidores TikTok`／
+  越南 `Mua Follower TikTok`／阿语 `شراء متابعين`／俄语 `Купить подписчиков`
+· 英文 `Buy TikTok Followers … | SMM Panel`
+
+**④ 同义词覆盖 245 个**
+· 中文 79 个（8 类服务）：涨粉/买粉/涨粉丝/刷粉/加粉/涨关注/真人粉丝/活粉/
+  粉丝量/刷赞/买赞/刷播放/涨订阅/刷评论/直播人气/场观/刷流量…
+· 外语 166 个（5 语种 × 8 类）：印尼 jasa follower/beli follower/follower murah；
+  越南 **mua fl / buff fl**（当地大量用缩写）；俄语 **накрутка**（刷量，比「买」还高频）
+· 渲染在类型子页「还有哪些叫法」+ 平台页「这些词说的都是同一批服务」两处
+
+**⑤ 外链从 0 → 10 条**（实测 rel 属性后修正过）
+· Dev.to（DA 90）文章 2 篇 + 资料页 = **3 条 dofollow**（唯一有效的）
+· GitHub（DA 100）README 4 条 —— **nofollow**
+· Telegraph（DA 90）3 条 —— **nofollow**
+· 踩坑：README 改在 feat/sites 上等于没做，默认分支是 main，
+  `github.com` 首页渲染的是 main 的 README
+
+### 两个我自己造的故障（都记下来）
+
+**🔴 SSR 落地页全部跳登录页**
+`client/src/router/index.ts` 的白名单只有 `['/', '/en', '/vpn', '/login', '/showcase']`，
+这轮加的 /guide、/price、/id、/ar… 全都不在里面，真实用户一访问就被踢回 /login。
+**爬虫不执行 JS，所以 curl 完全看不出来。**
+修法：拆成 PUBLIC_EXACT（19 条）+ PUBLIC_PREFIX（7 组）。
+
+**🔴 Vue 挂载把 SSR 内容整个抹掉**
+`app.mount('#app')` 会清空容器再渲染，而这些路径在 Vue Router 里没有对应路由，
+结果是空白页。修法：后端给 #app 打 `data-ssr="1"`，main.ts 见到就不挂载。
+
+**🔴 给平台页加 hreflang 时用了不存在的 `base` 变量，105 个页面全部 500**
+`/c/:slug` 这个路由作用域里没有 base（该路由一律用 brand.host）。
+ReferenceError 被 catch 吞掉返回 500 纯文本。
+抽测时刚好撞上 600 秒缓存拿到旧响应，差点漏掉。
+**教训：改完必须扫全站 199 条，不能抽测。**
+
+### 三方同步
+本地 `feat/sites` = `17dc01dc` = 生产 `/var/www/xnow`（17 个关键文件 MD5 逐个比对一致）
+main = `72f8e16a`（只有 README 外链 + gitignore 凭据规则）
+⚠️ 生产 git HEAD 仍停在 `1f49b8bb`（历史一贯 scp 部署），**不是漂移**。
+
+### 还没做的（下一步）
+· Google/Bing 配额今晚满，明天 cron 自动全量推 199 条
+· 知识库剩余 17 篇按第一篇的深度重写（第 3-5 批）
+· 外链：SaaSHub（hCaptcha 需人工点）、Blogger（需 Google 密码）、
+  Hashnode（服务端 500）；Dev.to 是唯一验证过 dofollow 且能自动发的通道
+· **最该做的：等两天看 GSC/Bing 实际收录数据，再决定往哪投精力**
