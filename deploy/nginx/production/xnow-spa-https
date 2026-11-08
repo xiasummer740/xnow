@@ -117,6 +117,10 @@ server {
     # 那份只有 <head> 元信息 + 空 <div id="app">，正文约 599 字节、0 个 h1，
     # 搜索引擎抓到的是空壳。加这条后才走得到 seo.js 的 GET /en 渲染。
     # 后端挂了回落到静态 en.html（旧行为，至少页面还能开）。
+    #
+    # ⚠️ 必须同时兜住带尾斜杠的 `/en/`：用户手输或外部链接常带斜杠，
+    #    而 `location = /en` 是精确匹配，`/en/` 会漏到通用 location / →
+    #    try_files 去找 en/.html → 404。2026-11-08 实测踩到。
     location = /en {
         proxy_pass http://127.0.0.1:3000/en;
         proxy_http_version 1.1;
@@ -127,6 +131,23 @@ server {
         proxy_read_timeout 30s;
         proxy_intercept_errors on;
         error_page 502 504 @spa_en_home;
+    }
+
+    location = /en/ {
+        proxy_pass http://127.0.0.1:3000/en;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+        proxy_intercept_errors on;
+        error_page 502 504 @spa_en_home;
+    }
+
+    location @spa_en_home {
+        root /var/www/xnow/client/dist;
+        try_files /en.html =503;
     }
 
     location @spa_en_home {

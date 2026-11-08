@@ -557,7 +557,20 @@ server {
 
     # 英文首页：同样交给后端 SSR（2026-11-08）。
     # 之前落到通用 location / → 静态 en.html（只有 head 元信息、正文空壳）。
+    # ⚠️ 必须同时兜住带尾斜杠的 /en/，否则用户手输带斜杠的 URL 会 404。
     location = /en {
+        proxy_pass http://127.0.0.1:3000/en;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+        proxy_intercept_errors on;
+        error_page 502 504 @spa_en_home;
+    }
+
+    location = /en/ {
         proxy_pass http://127.0.0.1:3000/en;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
