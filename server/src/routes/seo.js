@@ -347,6 +347,13 @@ const styleBlock = `<style>
 .seo-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
 .seo-table th,.seo-table td{border-bottom:1px solid #334155;padding:8px 6px;text-align:start}
 .seo-table th{color:#94a3b8;font-weight:600;font-size:13px}
+/* 正文里 h3 是二级小标题（h2 是一级），字号递减但保持层次 */
+.seo-wrap h3{font-size:15px;margin:20px 0 6px;font-weight:700;color:#e2e8f0}
+.seo-wrap ol{margin:8px 0;margin-inline-start:22px;color:#cbd5e1}
+.seo-wrap ol li{margin:6px 0}
+.seo-wrap ul li{margin:6px 0}
+/* 强调块：正文里以 > 开头的行 */
+.seo-note{margin:14px 0;padding:12px 14px;background:#0f2033;border-inline-start:3px solid #06b6d4;border-radius:0 8px 8px 0;color:#cbd5e1;font-size:14px;line-height:1.7}
 .seo-links{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
 .seo-links a{color:#22d3ee;text-decoration:none;border:1px solid #334155;border-radius:999px;padding:4px 12px;font-size:13px}
 .seo-faq dt{font-weight:700;margin-top:12px;color:#f1f5f9}
@@ -848,8 +855,6 @@ const mdInline = (s) => esc(s)
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#f1f5f9">$1</strong>')
     .replace(/\[([^\]\n]+)\]\((\/[^)\s]*)\)/g, '<a href="$2" style="color:#22d3ee">$1</a>');
 
-const guideBody = (a) => a.body.map(([h, p]) => `<h2>${esc(h)}</h2>\n<p>${mdInline(p)}</p>`).join('\n');
-
 // 把正文 markdown 去掉标记，变成纯文本（给 JSON-LD 用）
 // ⚠️ 原来只 replace(/`/g,'')，漏了 ** 粗体和 [文字](/path) 链接 ——
 //    结果 FAQ 结构化数据里塞的是 `**绝大多数情况不是内容问题**` 这种带标记的
@@ -858,15 +863,122 @@ const mdPlain = (s) => String(s || '')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^[-*]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    .replace(/^>\s+/gm, '')
+    .replace(/^\|/gm, '')
+    .replace(/\|/g, ' ')
+    .replace(/\n+/g, ' ')
     .trim();
 
-// 正文本身就是「小标题 + 说明」，前四段直接做成 FAQ 结构化数据
+/**
+ * 正文块解析：一段文字里支持多行结构。
+ *
+ * 2026-11-08 升级：原来每个小节只能是「标题 + 一整段话」，撑不起「全面讲解」
+ * 那种密度。现在同一段文本里可以混排：
+ *
+ *   普通段落文字，可以换行但会被合并成一段
+ *   - 无序列表项
+ *   - 另一项
+ *   1. 有序步骤
+ *   2. 第二步
+ *   > 需要强调的提醒，渲染成高亮框
+ *   | 表头 | 表头 |
+ *   |---|---|
+ *   | 单元格 | 单元格 |
+ *
+ * 小标题用 '### ' 开头会渲染成 h3（二级小标题），否则是 h2。
+ */
+const mdBlock = (text) => {
+    const lines = String(text || '').split('\n');
+    const out = [];
+    let i = 0;
+    const isTableSep = (s) => /^\|[\s:|-]+\|$/.test(s);
+    while (i < lines.length) {
+        const t = lines[i].trim();
+        if (!t) { i++; continue; }
+
+        // 表格：当前行以 | 开头，下一行是分隔行
+        if (t.startsWith('|') && i + 1 < lines.length && isTableSep(lines[i + 1].trim())) {
+            const head = t.split('|').slice(1, -1).map((x) => x.trim());
+            i += 2;
+            const rows = [];
+            while (i < lines.length && lines[i].trim().startsWith('|')) {
+                rows.push(lines[i].trim().split('|').slice(1, -1).map((x) => x.trim()));
+                i++;
+            }
+            out.push(`<div style="overflow-x:auto"><table class="seo-table"><thead><tr>${
+                head.map((h) => `<th>${mdInline(h)}</th>`).join('')
+            }</tr></thead><tbody>${
+                rows.map((r) => `<tr>${r.map((c) => `<td>${mdInline(c)}</td>`).join('')}</tr>`).join('')
+            }</tbody></table></div>`);
+            continue;
+        }
+
+        // 无序列表
+        if (/^[-*]\s+/.test(t)) {
+            const items = [];
+            while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+                items.push(`<li>${mdInline(lines[i].trim().replace(/^[-*]\s+/, ''))}</li>`);
+                i++;
+            }
+            out.push(`<ul>${items.join('')}</ul>`);
+            continue;
+        }
+
+        // 有序列表（步骤）
+        if (/^\d+\.\s+/.test(t)) {
+            const items = [];
+            while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+                items.push(`<li>${mdInline(lines[i].trim().replace(/^\d+\.\s+/, ''))}</li>`);
+                i++;
+            }
+            out.push(`<ol>${items.join('')}</ol>`);
+            continue;
+        }
+
+        // 强调块
+        if (/^>\s+/.test(t)) {
+            const buf = [];
+            while (i < lines.length && /^>\s+/.test(lines[i].trim())) {
+                buf.push(lines[i].trim().replace(/^>\s+/, ''));
+                i++;
+            }
+            out.push(`<div class="seo-note">${mdInline(buf.join(' '))}</div>`);
+            continue;
+        }
+
+        // 普通段落
+        const para = [];
+        while (i < lines.length) {
+            const cur = lines[i].trim();
+            if (!cur) break;
+            if (/^([-*]\s|\d+\.\s|>|\|)/.test(cur)) break;
+            para.push(cur);
+            i++;
+        }
+        if (para.length) out.push(`<p>${mdInline(para.join(' '))}</p>`);
+    }
+    return out.join('\n');
+};
+
+const guideBody = (a) => a.body.map(([h, p]) => {
+    const isSub = /^###\s+/.test(h);
+    const title = h.replace(/^###\s+/, '');
+    const tag = isSub ? 'h3' : 'h2';
+    return `<${tag}>${esc(title)}</${tag}>\n${mdBlock(p)}`;
+}).join('\n');
+
+// FAQ 结构化数据：取正文前四节的问题 + 答案（去掉 markdown 标记）
+// ⚠️ 必须用 mdPlain 清干净：原来只清反引号，导致 JSON-LD 里塞的是
+//    `**加粗**` 和 `[文字](/path)` 这种原始 markdown，Google 和 AI 摘录时
+//    读到的就是带符号的脏文本。
 const guideFaqLd = (a) => ({
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
     mainEntity: a.body.slice(0, 4).map(([h, p]) => ({
         '@type': 'Question',
-        name: h,
+        name: h.replace(/^###\s+/, ''),
         acceptedAnswer: { '@type': 'Answer', text: mdPlain(p) },
     })),
 });
