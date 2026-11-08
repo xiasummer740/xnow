@@ -28,6 +28,7 @@ import { platformOf, slugOf, labelOfSlug, PLATFORM_CN, typeOf, per1000, PLATFORM
 import { copyOf } from '../utils/platformCopy.js';
 import { typeCopyOf, TYPE_COPY } from '../utils/typeCopy.js';
 import { ARTICLES, articleOf } from '../utils/guideCopy.js';
+import { LANGS, LANG_ORDER, copyOfLang, typeLabelOf } from '../utils/langCopy.js';
 
 const router = express.Router();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -45,7 +46,12 @@ const hostOf = (req) => {
 // ── 模板（HTML 壳）：按 mtime 缓存，重新部署后自动刷新 ──────────────────────
 const tplCache = new Map();
 const readTemplate = (kind) => {
-    // kind: 'main' → index.html（中文首页）、'site' → site.html（分站）、'en' → en.html（英文首页）
+    // kind: 'main' → index.html（中文首页）、'site' → site.html（分站）、
+    //       'en' → en.html（英文首页）
+    // ⚠️ 新增语种（id / pt）**没有各自的 HTML 壳** —— prerender 只生成
+    //    index/en/vpn/site 四份。语言页复用 index.html 的壳（壳里只有
+    //    `<div id="app">` + 资源引用，正文与 head 全部由 SSR 注入），
+    //    所以它们都传 'main'。别为每个语种凭空造一个壳，构建脚本不产出就 404。
     const file = path.join(DIST, kind === 'site' ? 'site.html' : kind === 'en' ? 'en.html' : 'index.html');
     try {
         const st = fs.statSync(file);
@@ -413,18 +419,30 @@ router.get('/sitemap.xml', async (req, res) => {
         const brand = brandOf(req, catalog);
         const base = `https://${brand.host}`;
         const now = new Date().toISOString().slice(0, 10);
-        // 语言互指（hreflang）：主站的首页和中英文页互为 alternate。
-        // 之前完全不声明，导致 /en 做了内容却永远进不了英文索引。
-        const ALT_ZH_EN = [
+        // 语言互指（hreflang）：4 个语种的首页互为 alternate。
+        // ⚠️ 必须**每个语言页都把全部语言列全**（含自己），否则 Google 会
+        //    判定 hreflang 簇不完整而整体忽略 —— 这是最常见的 hreflang 坑。
+        const ALT_HOME = [
             { lang: 'zh-CN', href: `${base}/` },
             { lang: 'en', href: `${base}/en` },
+            { lang: 'id', href: `${base}/id` },
+            { lang: 'pt-BR', href: `${base}/pt` },
             { lang: 'x-default', href: `${base}/` },
+        ];
+        const ALT_PRICE = [
+            { lang: 'zh-CN', href: `${base}/price` },
+            { lang: 'en', href: `${base}/en/price` },
+            { lang: 'id', href: `${base}/id/price` },
+            { lang: 'pt-BR', href: `${base}/pt/price` },
+            { lang: 'x-default', href: `${base}/price` },
         ];
         const urls = brand.isSubsite
             ? [{ loc: `${base}/`, pri: '1.0' }]
             : [
-                { loc: `${base}/`, pri: '1.0', alt: ALT_ZH_EN },
-                { loc: `${base}/en`, pri: '0.9', alt: ALT_ZH_EN },
+                { loc: `${base}/`, pri: '1.0', alt: ALT_HOME },
+                { loc: `${base}/en`, pri: '0.9', alt: ALT_HOME },
+                { loc: `${base}/id`, pri: '0.9', alt: ALT_HOME },
+                { loc: `${base}/pt`, pri: '0.9', alt: ALT_HOME },
             ];
         const ordered = [...catalog.platforms].sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
         for (const p of ordered) {
@@ -433,6 +451,23 @@ router.get('/sitemap.xml', async (req, res) => {
             // 拿它做落地页既没有搜索词，内容也杂，不放进 sitemap。
             if (p.label === 'Other') continue;
             urls.push({ loc: `${base}/c/${p.slug}`, pri: p === ordered[0] ? '0.9' : '0.8' });
+            // 多语种平台页（2026-11-08）：id / pt。分站不做。
+            // 类型子页暂不做多语种 —— 内容量不够，宁缺毋滥（低质量页会拖整体）。
+            if (!brand.isSubsite) {
+                for (const l of ['id', 'pt']) {
+                    urls.push({
+                        loc: `${base}${LANGS[l].path}/c/${p.slug}`,
+                        pri: '0.8',
+                        alt: [
+                            { lang: 'zh-CN', href: `${base}/c/${p.slug}` },
+                            { lang: 'en', href: `${base}/en/c/${p.slug}` },
+                            { lang: 'id', href: `${base}/id/c/${p.slug}` },
+                            { lang: 'pt-BR', href: `${base}/pt/c/${p.slug}` },
+                            { lang: 'x-default', href: `${base}/c/${p.slug}` },
+                        ],
+                    });
+                }
+            }
             // 类型子页（平台 × 服务类型）。档位太少的不进 sitemap —— 内容撑不起来。
             for (const t of p.types) {
                 const tc = typeCopyOf(t.label);
@@ -443,9 +478,11 @@ router.get('/sitemap.xml', async (req, res) => {
         }
         // 价格表（2026-11-08）：拿 `smm panel price list` / `cheapest smm panel`
         // 这类高购买意图商用词。多数同行不公开价格，这是我们的天然优势。
-        urls.push({ loc: `${base}/price`, pri: '0.9' });
+        urls.push({ loc: `${base}/price`, pri: '0.9', alt: ALT_PRICE });
         if (!brand.isSubsite) {
-            urls.push({ loc: `${base}/en/price`, pri: '0.9' });
+            urls.push({ loc: `${base}/en/price`, pri: '0.9', alt: ALT_PRICE });
+            urls.push({ loc: `${base}/id/price`, pri: '0.9', alt: ALT_PRICE });
+            urls.push({ loc: `${base}/pt/price`, pri: '0.9', alt: ALT_PRICE });
         }
         // 知识库：拿问答词，页面数 +1 列表 +N 篇
         urls.push({ loc: `${base}/guide`, pri: '0.8' });
@@ -1427,6 +1464,244 @@ router.get('/en/price', async (req, res, next) => {
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
     } catch (e) {
         console.error('[seo] /en/price 失败', e.message);
+        next();
+    }
+});
+
+// ── 多语种落地页（id / pt，2026-11-08）───────────────────────────────────
+// 为什么做：`jasa follower tiktok`（印尼）、`comprar seguidores tiktok`（巴西）
+// 这类本地语言搜索词，竞争几乎为零 —— 全球 SMM 站绝大多数只做英文。
+// 这是唯一「站内就能完成、且几周内可能见效」的获客路径。
+//
+// 结构：/{lang}  首页、/{lang}/price 价格表、/{lang}/c/{slug} 平台页。
+// 渲染逻辑与中文/英文版**共用同一份** loadCatalog / headOf / injectIntoShell，
+// 文案差异全部落在 utils/langCopy.js，这里只做组装，避免又多两份重复代码。
+const langPathOf = (lang, suffix = '') => `${LANGS[lang].path}${suffix}`;
+
+/** 各语种的完整 hreflang 集合（所有语言互指，x-default 指向中文首页） */
+const hreflangsFor = (base, suffix = '') => LANG_ORDER.map((l) => ({
+    lang: LANGS[l].code, href: `${base}${LANGS[l].path}${suffix}`,
+})).concat([{ lang: 'x-default', href: `${base}/` }]);
+
+/** 把 SSR 出来的 <html lang> 改成目标语种 */
+const setHtmlLang = (html, code) => html.replace(/<html lang="[^"]*"/i, `<html lang="${code}"`);
+
+/** 语言切换器：放在正文尾部，方便用户和爬虫发现其它语种版本 */
+const langSwitcher = (base, suffix = '') => {
+    const items = LANG_ORDER.map((l) => {
+        const name = { zh: '中文', en: 'English', id: 'Bahasa Indonesia', pt: 'Português' }[l];
+        return `<a href="${base}${LANGS[l].path}${suffix}" hreflang="${LANGS[l].code}">${name}</a>`;
+    }).join(' · ');
+    return `<div class="seo-links">${items}</div>`;
+};
+
+/** 生成某语种的「首页」正文 */
+const langHomeBody = (lang, brand, catalog, base) => {
+    const c = copyOfLang(lang).home;
+    const ordered = [...catalog.platforms].filter((p) => p.label !== 'Other' && p.count > 0)
+        .sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
+    const top = ordered.slice(0, 8);
+    const names = top.map((p) => p.label).join(', ');
+    const cheapest = ordered.length ? per1000(Math.min(...ordered.map((p) => p.minPrice))) : '—';
+    const total = catalog.totalServices || 0;
+    const rows = top.map((p) => `<tr><td><a href="${langPathOf(lang, `/c/${p.slug}`)}" style="color:#22d3ee">${esc(p.label)}</a></td><td>¥${per1000(p.minPrice)}</td><td>${p.count}</td></tr>`).join('');
+    const faq = c.faq(cheapest, total);
+    const body = `<div class="seo-wrap">${styleBlock}
+<h1>${esc(c.h1(brand.name))}</h1>
+<p>${c.lede(esc(brand.name), esc(names), cheapest)}</p>
+<h2>${esc(c.platformsHead)}</h2>
+<table class="seo-table"><thead><tr><th>${esc(c.thPlatform)}</th><th>${esc(c.thFrom)}</th><th>${esc(c.thServices)}</th></tr></thead><tbody>${rows}</tbody></table>
+<h2>${esc(c.faqHead)}</h2>
+${faqHtml(faq)}
+${langSwitcher(base)}
+<a class="seo-cta" href="/order">${esc(c.cta)}</a>
+<div class="seo-foot">${esc(c.foot(brand.name))}</div>
+</div>`;
+    const ld = [
+        { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: brand.name, url: `${base}${langPathOf(lang)}`, applicationCategory: 'BusinessApplication', operatingSystem: 'Web Application', inLanguage: LANGS[lang].code, description: c.lede(brand.name, names, cheapest).replace(/<[^>]*>/g, '') },
+        { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
+    ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+    return {
+        title: c.title(brand.name), desc: c.lede(brand.name, names, cheapest).replace(/<[^>]*>/g, ''), body, ld,
+        canonical: `${base}${langPathOf(lang)}`,
+    };
+};
+
+/** 生成某语种的「价格表」正文 */
+const langPriceBody = (lang, brand, catalog, base) => {
+    const c = copyOfLang(lang).price;
+    const ordered = [...catalog.platforms].filter((p) => p.label !== 'Other' && p.count > 0)
+        .sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
+    const cheapest = ordered.length ? per1000(Math.min(...ordered.map((p) => p.minPrice))) : '—';
+    const total = catalog.totalServices || 0;
+    const rows = ordered.map((p) => {
+        const types = (p.types || []).filter((t) => t.label && t.label !== '其他' && t.label !== 'Other')
+            .slice(0, 6).map((t) => typeLabelOf(lang, t.label)).join(' / ');
+        return `<tr><td><a href="${langPathOf(lang, `/c/${p.slug}`)}" style="color:#22d3ee">${esc(p.label)}</a></td><td>¥${per1000(p.minPrice)}</td><td>${p.count}</td><td>${esc(types)}</td></tr>`;
+    }).join('');
+    const body = `<div class="seo-wrap">${styleBlock}
+<h1>${esc(c.h1(brand.name))}</h1>
+<p>${c.lede(esc(brand.name), cheapest, total, ordered.length)}</p>
+<h2>${esc(c.tableHead)}</h2>
+<table class="seo-table"><thead><tr><th>${esc(c.thPlatform)}</th><th>${esc(c.thFrom)}</th><th>${esc(c.thServices)}</th><th>${esc(c.thTypes)}</th></tr></thead><tbody>${rows}</tbody></table>
+<h2>${esc(c.rulesHead)}</h2>
+<ol>${c.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ol>
+${langSwitcher(base, '/price')}
+<a class="seo-cta" href="/order">${esc(c.cta)}</a>
+<div class="seo-foot">${esc(c.foot(brand.name))}</div>
+</div>`;
+    const ld = [
+        { '@context': 'https://schema.org', '@type': 'ItemList', name: c.h1(brand.name), numberOfItems: ordered.length, itemListElement: ordered.slice(0, 20).map((p, i) => ({ '@type': 'ListItem', position: i + 1, name: `${p.label} - ¥${per1000(p.minPrice)} / 1000`, url: `${base}${langPathOf(lang, `/c/${p.slug}`)}` })) },
+    ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+    return {
+        title: c.title(brand.name, cheapest),
+        desc: c.lede(brand.name, cheapest, total, ordered.length).replace(/<[^>]*>/g, ''),
+        body, ld, canonical: `${base}${langPathOf(lang)}/price`,
+    };
+};
+
+/** 生成某语种的「平台页」正文 */
+const langPlatBody = (lang, brand, catalog, plat, base) => {
+    const c = copyOfLang(lang).plat;
+    const cheapest = per1000(plat.minPrice);
+    const typeRows = (plat.types || []).filter((t) => t.label !== '其他' && t.label !== 'Other').map((t) => {
+        const qty = (t.minQty > 0 && isFinite(t.minQty)) ? `${t.minQty}` : '—';
+        return `<tr><td>${esc(typeLabelOf(lang, t.label))}</td><td>¥${per1000(t.minPrice)}</td><td>${t.count}</td><td>${esc(qty)}</td></tr>`;
+    }).join('');
+    const faq = copyOfLang(lang).home.faq(cheapest, catalog.totalServices || 0).slice(0, 4);
+    const otherLinks = catalog.platforms.filter((p) => p.label !== 'Other' && p.slug !== plat.slug)
+        .slice(0, 10).map((p) => `<a href="${langPathOf(lang, `/c/${p.slug}`)}">${esc(p.label)}</a>`).join('');
+    const body = `<div class="seo-wrap">${styleBlock}
+<h1>${esc(c.h1(brand.name, plat.label))}</h1>
+<p>${c.lede(esc(brand.name), esc(plat.label), plat.count, cheapest)}</p>
+<h2>${esc(c.typeTable)}</h2>
+<table class="seo-table"><thead><tr><th>${esc(c.typeHead)}</th><th>${esc(c.fromHead)}</th><th>${esc(c.thCount)}</th><th>${esc(c.thMinQty)}</th></tr></thead><tbody>${typeRows}</tbody></table>
+<h2>${esc(c.howToChoose(plat.label))}</h2>
+<p>${esc(c.howToChooseText)}</p>
+<h2>${esc(c.faqHead)}</h2>
+${faqHtml(faq)}
+<h2>${esc(c.otherHead)}</h2>
+<div class="seo-links">${otherLinks}</div>
+${langSwitcher(base, `/c/${plat.slug}`)}
+<a class="seo-cta" href="/order">${esc(c.cta)}</a>
+<div class="seo-foot">${esc(c.foot(brand.name))}</div>
+</div>`;
+    const ld = [
+        { '@context': 'https://schema.org', '@type': 'Service', name: `${plat.label} growth services`, provider: { '@type': 'Organization', name: brand.name, url: `${base}/` }, areaServed: 'Worldwide', offers: { '@type': 'Offer', price: cheapest, priceCurrency: 'CNY' } },
+        { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
+    ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+    return {
+        title: c.title(brand.name, plat.label, cheapest),
+        desc: c.lede(brand.name, plat.label, plat.count, cheapest).replace(/<[^>]*>/g, ''),
+        body, ld, canonical: `${base}${langPathOf(lang)}/c/${plat.slug}`,
+    };
+};
+
+/** 统一的语种页渲染出口 */
+const renderLangPage = async (req, res, next, lang, kind, slug) => {
+    try {
+        const catalog = await loadCatalog(req.site);
+        const brand = brandOf(req, catalog);
+        if (brand.isSubsite) return next();          // 分站不出多语种页，避免串站
+        const base = `https://${brand.host}`;
+        let page;
+        if (kind === 'home') page = langHomeBody(lang, brand, catalog, base);
+        else if (kind === 'price') page = langPriceBody(lang, brand, catalog, base);
+        else {
+            const label = labelOfSlug(slug);
+            const plat = label ? catalog.platforms.find((p) => p.label === label) : null;
+            if (!plat || !plat.count) return res.status(404).type('text/plain').send('Not found');
+            page = langPlatBody(lang, brand, catalog, plat, base);
+        }
+        const shell = readTemplate('main');
+        if (!shell) return res.status(503).type('text/plain').send('building');
+        const html = setHtmlLang(injectIntoShell(shell, {
+            head: headOf({
+                brand, title: page.title, desc: page.desc, canonical: page.canonical, ld: page.ld,
+                locale: LANGS[lang].locale,
+                ogImageAlt: `${brand.name}`,
+                hreflangs: hreflangsFor(base, kind === 'price' ? '/price' : kind === 'plat' ? `/c/${slug}` : ''),
+            }),
+            body: page.body,
+        }), LANGS[lang].code);
+        res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
+    } catch (e) {
+        console.error(`[seo] /${lang} ${kind} 失败`, e.message);
+        next();
+    }
+};
+
+// 印尼语
+router.get('/id', (req, res, next) => renderLangPage(req, res, next, 'id', 'home'));
+router.get('/id/price', (req, res, next) => renderLangPage(req, res, next, 'id', 'price'));
+router.get('/id/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'id', 'plat', req.params.slug));
+// 巴西葡语
+router.get('/pt', (req, res, next) => renderLangPage(req, res, next, 'pt', 'home'));
+router.get('/pt/price', (req, res, next) => renderLangPage(req, res, next, 'pt', 'price'));
+router.get('/pt/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'pt', 'plat', req.params.slug));
+// 英文平台页（2026-11-08）：之前 /en/c/:slug 是 404，但 hreflang 簇里要指它，
+// 且英文用户搜 "tiktok followers" 时应落到平台页。复用同一套渲染器。
+router.get('/en/c/:slug', async (req, res, next) => {
+    try {
+        const catalog = await loadCatalog(req.site);
+        const brand = brandOf(req, catalog);
+        if (brand.isSubsite) return next();
+        const label = labelOfSlug(req.params.slug);
+        const plat = label ? catalog.platforms.find((p) => p.label === label) : null;
+        if (!plat || !plat.count) return next();      // 没有就走静态兜底 → 404
+        const base = `https://${brand.host}`;
+        const cheapest = per1000(plat.minPrice);
+        const typeRows = (plat.types || []).filter((t) => t.label !== '其他' && t.label !== 'Other').map((t) => {
+            const qty = (t.minQty > 0 && isFinite(t.minQty)) ? `${t.minQty}` : '—';
+            return `<tr><td>${esc(t.label)}</td><td>¥${per1000(t.minPrice)}</td><td>${t.count}</td><td>${esc(qty)}</td></tr>`;
+        }).join('');
+        const faqs = [
+            { q: `How much do ${plat.label} services cost?`, a: `Prices start at ¥${cheapest} per 1,000 units. There are currently ${plat.count} ${plat.label} services available, and the exact total is shown on the order page before you submit.` },
+            { q: `Do I need to provide my ${plat.label} password?`, a: 'No. Only a public profile link or username is required. We never ask for login credentials.' },
+            { q: 'How fast does delivery start?', a: 'Orders are processed automatically after submission. You can track each order in your order history.' },
+            { q: 'What happens if an order is not completed?', a: 'If an order is cancelled or only partially completed, the corresponding amount is credited back to your balance automatically.' },
+        ];
+        const otherLinks = catalog.platforms.filter((p) => p.label !== 'Other' && p.slug !== plat.slug)
+            .slice(0, 10).map((p) => `<a href="/en/c/${p.slug}">${esc(p.label)}</a>`).join('');
+        const body = `<div class="seo-wrap">${styleBlock}
+<h1>${esc(plat.label)} Growth Services · ${esc(brand.name)}</h1>
+<p>${esc(brand.name)} has <b>${plat.count}</b> ${esc(plat.label)} services: followers, likes, views, comments and more. Priced per 1,000 units from <b>¥${cheapest}</b>, processed automatically after you submit.</p>
+<h2>Service types</h2>
+<table class="seo-table"><thead><tr><th>Type</th><th>From</th><th>Options</th><th>Minimum</th></tr></thead><tbody>${typeRows}</tbody></table>
+<h2>How to choose ${esc(plat.label)} services</h2>
+<p>Choose by volume and quality tier: for large volume with fast results, take a higher-priced tier; test a small quantity before scaling up. The order page shows the total as you type the quantity.</p>
+<h2>Frequently asked questions</h2>
+${faqHtml(faqs)}
+<h2>Other platforms</h2>
+<div class="seo-links">${otherLinks}</div>
+<a class="seo-cta" href="/order">Start an order →</a>
+<div class="seo-foot">${esc(brand.name)} · automatic delivery</div>
+</div>`;
+        const canonical = `${base}/en/c/${plat.slug}`;
+        const ld = [
+            { '@context': 'https://schema.org', '@type': 'Service', name: `${plat.label} growth services`, provider: { '@type': 'Organization', name: brand.name, url: `${base}/` }, areaServed: 'Worldwide', offers: { '@type': 'Offer', price: cheapest, priceCurrency: 'CNY' } },
+            { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
+        ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+        const shell = readTemplate('en');
+        if (!shell) return next();
+        const html = injectIntoShell(shell, {
+            head: headOf({
+                brand, title: `${plat.label} Growth Services from ¥${cheapest} · ${brand.name}`,
+                desc: `Buy ${plat.label} followers, likes and views from ¥${cheapest} per 1,000. ${plat.count} services, automatic delivery, no password required.`,
+                canonical, ld, locale: 'en_US', ogImageAlt: `${brand.name} ${plat.label}`,
+                hreflangs: [
+                    { lang: 'zh-CN', href: `${base}/c/${plat.slug}` },
+                    { lang: 'en', href: `${base}/en/c/${plat.slug}` },
+                    { lang: 'id', href: `${base}/id/c/${plat.slug}` },
+                    { lang: 'pt-BR', href: `${base}/pt/c/${plat.slug}` },
+                    { lang: 'x-default', href: `${base}/c/${plat.slug}` },
+                ],
+            }),
+            body,
+        });
+        res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
+    } catch (e) {
+        console.error('[seo] /en/c 失败', e.message);
         next();
     }
 });

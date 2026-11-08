@@ -596,6 +596,28 @@ server {
         proxy_read_timeout 30s;
     }
 
+    # 多语种落地页（2026-11-08）：印尼 /id、巴西葡语 /pt。
+    location ~ ^/(id|pt)(/|$) {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+    }
+
+    # 英文平台页 /en/c/:slug
+    location ~ ^/en/c/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+    }
+
     # 后端挂了也不能首页白屏：回落到静态 index.html（内容和以前一样，只是没有 SSR 元信息）
     location @spa_home {
         root /var/www/xnow/client/dist;
