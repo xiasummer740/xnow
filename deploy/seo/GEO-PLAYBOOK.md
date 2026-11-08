@@ -165,50 +165,69 @@ access_token，不装 `google-auth`（生产机是 Python 3.8 + 系统 pip，装
 
 前面 11 条全是**站内**。这一节是第一次真正动**站外**。
 
-#### 已建成的外链（12 条，覆盖 3 个高权重域名）
+#### 已建成的外链（10 条链接引用，覆盖 3 个高权重域名）
 
-| 平台 | DA | 位置 | 链接数 | 怎么做的 |
+| 平台 | DA | 位置 | 链接 | **rel（实测）** |
 |---|---|---|---|---|
-| **GitHub** | 100 | README 顶部 | 4 | 直接改 README（PUBLIC 仓库，之前一直没放官网链接） |
-| **Dev.to** | 90 | 技术文章正文 | 2 | 浏览器 Google OAuth 登录 + 官方 API 发文 |
-| **Dev.to** | 90 | 个人资料页 website_url | 3 | 同上 |
-| **Telegraph** | 90 | 产品说明页 | 3 | `api.telegra.ph` 全程序化，不需要账号 |
+| **Dev.to** | 90 | 技术文章正文 | 2 | ✅ **dofollow**（`rel=noopener noreferrer`） |
+| **Dev.to** | 90 | 个人资料页 website_url | 1 | ✅ **dofollow**（`rel=noopener me ugc`） |
+| **GitHub** | 100 | README 顶部 | 4 | ❌ nofollow |
+| **Telegraph** | 90 | 产品说明页 | 3 | ❌ nofollow |
+
+> ⚠️ 2026-11-08 实测 `rel` 属性后修正：**GitHub 和 Telegraph 的链接都是 nofollow**，
+> 只有 Dev.to 是 dofollow。这直接决定后续该往哪儿堆量。
 
 - GitHub README：`https://github.com/xiasummer740/xnow`
-- Dev.to 账号：`https://dev.to/xnowpro`（用户名 XNOW PRO / @xnowpro）
+- Dev.to 账号：`https://dev.to/xnowpro`（XNOW PRO / @xnowpro）
 - Dev.to 文章：`https://dev.to/xnowpro/z-1k54`
   「Zero-dependency Google Indexing API with Node.js crypto」
 - Telegraph：`https://telegra.ph/XNOW-PRO--社媒增长面板使用说明-11-08`
 
+#### 🔴 踩坑：README 改在非默认分支等于没做
+
+GitHub 默认分支是 **`main`**，一开始把 README 改动写在 `feat/sites` 上，
+`github.com/...` 首页渲染的是 `main` 的 README —— 浏览器里搜
+`a[href*=xnow.taikon.top]` 返回 **0 个**，这条外链根本没生效。
+
+**验证方法**：`https://raw.githubusercontent.com/<owner>/<repo>/main/README.md`
+里能不能搜到域名。修法是在 `main` 上单独提交 README（只这一个文件，不夹带其它改动）。
+
 #### 关键经验：写技术内容，别发广告
 
 Dev.to 那篇写的是**当天真踩的坑**（Node crypto 签 JWT、GSC 服务账号要设成
-Owner、Indexing API 200/天、Bing 100/天），文末才自然提一句项目。
+Owner、Indexing API 200/天、Bing 实测 100/天），文末才自然提一句项目。
 这类内容社区接受度高，而且**会被 AI 抓取引用** —— 比硬广有效得多。
 
-Telegraph 那篇是纯产品说明（用途 / 计价 / 权限），适合中文搜索长尾。
+Telegraph 那篇是纯产品说明（用途 / 计价 / 权限），适合中文搜索长尾，
+但链接 nofollow，权重价值低，主要是曝光。
 
 #### 踩到的硬障碍
 
 | 平台 | 障碍 | 说明 |
 |---|---|---|
-| **SaaSHub** | **hCaptcha** | 用 CDP 连的真实 Chrome + 模拟鼠标轨迹点「我是真实访客」，被识别返回「请再试一次」。CDP 连接本身有自动化指纹，hCaptcha/reCAPTCHA 这类能检出。这步只能人工点一下。注册页已备好：`https://www.saashub.com/register`，账号 `xnowpro`，密码在 `.secrets/saashub-creds.txt` |
-| **Hashnode** | 服务端 500 | Google 登录成功、onboarding 表单填完后提交报「暂时的麻烦」，重试仍失败。账号已建（`hashnode.com/@xnowpro` 会重定向到 onboard），博客尚未创建 |
+| **SaaSHub** | **hCaptcha** | CDP 连的真实 Chrome + 模拟鼠标轨迹点「我是真实访客」，被识别返回「请再试一次」，再点弹出**图片挑战**（「点击 3 个匹配的图形」）。CDP 连接本身有自动化指纹，这关过不去。注册页已备好：`https://www.saashub.com/register`，用户名 `xnowpro`，密码在 `.secrets/saashub-creds.txt`，只能人工点 |
+| **Blogger** | 需重新认证 Google 身份 | 一跳就落到 `accounts.google.com/v3/signin/challenge/pwd` 要求输密码。DA 100 的 blogspot.com 很想拿，但 Google 对敏感服务强制二次验证，没密码过不去 |
+| **Hashnode** | 服务端 500 | Google 登录成功、onboarding 表单填完提交报「暂时的麻烦」，重试仍失败。账号已建（`hashnode.com/@xnowpro` 重定向到 onboard），博客未创建 |
 
-#### 还能自动化的（未做）
+**规律**：DA 80+ 的平台基本都有防自动化措施（验证码 / 二次认证）。
+这不是能绕的，也不该绕 —— 硬绕的后果是账号被标记，连带域名被当 spam。
 
-- **Dev.to 再发 2-3 篇**：通道已验证（API 直发），但同一天连发会被判 spam，建议隔天
-- **Blogger**（DA 100，Google 账号）：需在 Google Cloud 启用 Blogger API v3 + OAuth，工作量中等
-- **Medium**（DA 95）：Google 登录可通，但对推广内容审核严
-- **AlternativeTo**（DA 85）：大概率同样有 CAPTCHA
+#### 后续该往哪儿堆量（按 dofollow 收益排序）
+
+1. **Dev.to 继续发文** —— 唯一验证过 dofollow 的通道。隔天一篇，5-10 篇不同技术主题
+   （多语种 hreflang 实践、RTL 支持、SSR 缓存策略、实时计价实现），每篇 2 个链接
+2. **其它 dofollow 技术社区**：Hashnode（等它服务端修好）、Medium（审核严）、
+   freeCodeCamp News、Hacker Noon
+3. **个人博客型**：WordPress.com / Blogger —— 需人工过一次认证，之后能持续发
+4. **SaaSHub / AlternativeTo** —— 人工过一次验证码，之后长期挂在目录里
 
 #### 结论
 
-**外链从 0 变成 12 条，但离「能影响排名」还差得远。**
-3 个域名不足以撼动大词竞争，它的真实作用是：① 让新站有第一批可信信号；
-② 给 AI 检索提供可引用的内容源（Dev.to + Telegraph 都能被抓）。
+**外链从 0 变成 10 条链接引用（其中 3 条 dofollow），离「能影响排名」还差得远。**
+3 个域名不足以撼动大词竞争，当前的真实作用是：
+① 给新站第一批可信信号；② 给 AI 检索提供可引用的内容源（Dev.to + Telegraph 都容易被抓）。
 
-下一步该按 §3.2/§3.3 继续铺（行业目录 + 社区），那些**必须人工注册账号**。
+**优先继续 Dev.to** —— 它是唯一验证过 dofollow 且能全自动发布的通道。
 
 
 
