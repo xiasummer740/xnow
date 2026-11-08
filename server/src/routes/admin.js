@@ -1008,8 +1008,25 @@ router.post('/orders/refund', authenticate, async (req, res) => {
 
     await t.commit();
 
-    await logAudit(req, 'order_refund', 'order', orderId, { order_no: order.order_no, amount: refundAmount, site_refunded: siteRefunded });
-    sendTgMessage('💳 [管理员退款]\n📦 订单: <code>' + order.order_no + '</code>\n👤 UID: <code>' + user.id + '</code>\n💵 金额: ¥' + refundAmount + (siteRefunded > 0 ? '\n🏬 站长成本已退: ¥' + siteRefunded : ''));
+    // 🚫 退款成功后自动取消上游那一单 —— 事务外调用，绝不持锁。
+    //    以前只退本站的钱，上游单还在继续跑、成本照扣，得人工去上游点取消。
+    //    取消失败不回滚退款（钱已到客户账上），只记日志 + 由定时任务重试。
+    //    ⚠️ customerReason / refund_reason 是给客户看的，不写内部字眼。
+    let cancelNote = '';
+    try {
+      const { cancelUpstreamAfterRefund } = await import('../utils/upstreamCancel.js');
+      const cancelRes = await cancelUpstreamAfterRefund(order, { reason: '管理员退款' });
+      cancelNote = cancelRes.ok ? '\n🚫 上游单已同步取消' : `\n⚠️ 上游单取消失败：${String(cancelRes.reason || '').slice(0, 60)}`;
+      if (!cancelRes.ok) {
+        console.warn(`[admin/refund] 退款已完成但上游取消失败 order=${order.order_no}: ${cancelRes.reason}`);
+      }
+    } catch (e) {
+      cancelNote = '\n⚠️ 上游单取消步骤异常，将由定时任务重试';
+      console.warn(`[admin/refund] 上游取消步骤异常（不影响退款）order=${order.order_no}:`, (e && e.message) || e);
+    }
+
+    await logAudit(req, 'order_refund', 'order', orderId, { order_no: order.order_no, amount: refundAmount, site_refunded: siteRefunded, upstream_cancelled: !cancelNote.includes('失败') && !cancelNote.includes('异常') });
+    sendTgMessage('💳 [管理员退款]\n📦 订单: <code>' + order.order_no + '</code>\n👤 UID: <code>' + user.id + '</code>\n💵 金额: ¥' + refundAmount + (siteRefunded > 0 ? '\n🏬 站长成本已退: ¥' + siteRefunded : '') + cancelNote);
 
     res.json({ status: 'success', message: '退款成功', data: { amount: refundAmount, site_refunded: siteRefunded } });
   } catch (e) { await t.rollback().catch(() => {}); res.status(500).json({ status: 'error', message: e.message }); }

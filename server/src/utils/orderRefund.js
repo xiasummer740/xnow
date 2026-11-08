@@ -55,6 +55,17 @@ export async function refundOrderFully(orderId, { reason = '订单未提交成�
     if (customerReason || reason) o.refund_reason = String(customerReason || reason).slice(0, 255);
     await o.save({ transaction: t });
     await t.commit();
+
+    // 🚫 事务提交之后再取消上游单：放在事务内会让 axios 的 15 秒
+    //    一直锁着客户余额行；取消失败也不回滚（钱已退，回滚就是烂账）。
+    //    覆盖所有走本函数的自动退款：下单失败补偿、僵尸单清扫等。
+    try {
+      const { cancelUpstreamAfterRefund } = await import('./upstreamCancel.js');
+      await cancelUpstreamAfterRefund(o);
+    } catch (e) {
+      console.warn(`[refundOrderFully] 上游取消步骤异常（不影响退款）order=${o.order_no}:`, (e && e.message) || e);
+    }
+
     return { ok: true, amount };
   } catch (e) {
     await t.rollback().catch(() => {});

@@ -146,6 +146,11 @@ export const autoSyncOrders = async () => {
                 await locked.save({ transaction: t });
                 await t.commit();
 
+                // ⚠️ 这里**故意不调** upstreamCancel：本分支是「上游自己把单取消了，
+                //    本站跟着退款」，上游那单已经是 Canceled，再反向 cancel 既多余
+                //    也可能回 error。需要自动取消的是「本站管理员主动退款」那条链路
+                //    （见 admin.js /orders/refund 与 refundOrderFully）。
+
                 // 📣 上游取消 / 部分完成 = 已经动了客户的钱，必须播报。
                 //    以前这些单在后台静默变成「已取消」，客户来问才知道，
                 //    财务对账时也看不出是哪一单退的钱。
@@ -234,5 +239,16 @@ export const autoSyncOrders = async () => {
     }
   } catch (err) {
     console.error('❌ [OrderSync] 同步状态失败:', err.message);
+  }
+
+  // 🚫 兜底：重试那些「本站已退款、但上游取消当时失败/没跑到」的单。
+  //    退款接口是事务外调上游的，网络抖动一下就会漏；这里每分钟补一次，
+  //    直到订单备注被标上「上游单已自动取消」。放在 finally 语义的位置，
+  //    即使上面的状态同步抛错也照常跑 —— 两件事互不影响。
+  try {
+    const { sweepPendingCancellations } = await import('./upstreamCancel.js');
+    await sweepPendingCancellations(20);
+  } catch (e) {
+    console.warn('[OrderSync] 上游取消兜底步骤异常:', (e && e.message) || e);
   }
 };
