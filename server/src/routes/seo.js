@@ -323,13 +323,16 @@ const styleBlock = `<style>
 .seo-wrap h1{font-size:26px;line-height:1.35;margin:0 0 12px;font-weight:800}
 .seo-wrap h2{font-size:17px;margin:26px 0 8px;font-weight:700}
 .seo-wrap p{margin:8px 0;color:#cbd5e1}
-.seo-wrap ul{margin:8px 0 8px 20px;color:#cbd5e1}
+/* 方向性样式统一用逻辑属性（margin-inline-start / text-align:start），
+   这样阿拉伯语 <html dir="rtl"> 下会自动镜像，不用为 RTL 单独写一份 CSS。 */
+.seo-wrap ul{margin:8px 0;margin-inline-start:20px;color:#cbd5e1}
+.seo-wrap ol{margin:8px 0;margin-inline-start:20px;color:#cbd5e1}
 .seo-wrap li{margin:4px 0}
 .seo-wrap dl{margin:10px 0}
 .seo-wrap dt{font-weight:700;color:#e2e8f0;margin-top:12px}
 .seo-wrap dd{margin:2px 0 0;color:#cbd5e1}
 .seo-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
-.seo-table th,.seo-table td{border-bottom:1px solid #334155;padding:8px 6px;text-align:left}
+.seo-table th,.seo-table td{border-bottom:1px solid #334155;padding:8px 6px;text-align:start}
 .seo-table th{color:#94a3b8;font-weight:600;font-size:13px}
 .seo-links{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
 .seo-links a{color:#22d3ee;text-decoration:none;border:1px solid #334155;border-radius:999px;padding:4px 12px;font-size:13px}
@@ -419,30 +422,22 @@ router.get('/sitemap.xml', async (req, res) => {
         const brand = brandOf(req, catalog);
         const base = `https://${brand.host}`;
         const now = new Date().toISOString().slice(0, 10);
-        // 语言互指（hreflang）：4 个语种的首页互为 alternate。
+        // 语言互指（hreflang）：全部语种的首页/价格页/平台页互为 alternate。
         // ⚠️ 必须**每个语言页都把全部语言列全**（含自己），否则 Google 会
         //    判定 hreflang 簇不完整而整体忽略 —— 这是最常见的 hreflang 坑。
-        const ALT_HOME = [
-            { lang: 'zh-CN', href: `${base}/` },
-            { lang: 'en', href: `${base}/en` },
-            { lang: 'id', href: `${base}/id` },
-            { lang: 'pt-BR', href: `${base}/pt` },
-            { lang: 'x-default', href: `${base}/` },
-        ];
-        const ALT_PRICE = [
-            { lang: 'zh-CN', href: `${base}/price` },
-            { lang: 'en', href: `${base}/en/price` },
-            { lang: 'id', href: `${base}/id/price` },
-            { lang: 'pt-BR', href: `${base}/pt/price` },
-            { lang: 'x-default', href: `${base}/price` },
-        ];
+        // 用 LANG_ORDER 动态生成，加语种时不用再改这里。
+        const altFor = (suffix) => LANG_ORDER
+            .map((l) => ({ lang: LANGS[l].code, href: `${base}${LANGS[l].path}${suffix}` }))
+            .concat([{ lang: 'x-default', href: `${base}${suffix}` }]);
+        const ALT_HOME = altFor('');
+        const ALT_PRICE = altFor('/price');
         const urls = brand.isSubsite
             ? [{ loc: `${base}/`, pri: '1.0' }]
             : [
                 { loc: `${base}/`, pri: '1.0', alt: ALT_HOME },
-                { loc: `${base}/en`, pri: '0.9', alt: ALT_HOME },
-                { loc: `${base}/id`, pri: '0.9', alt: ALT_HOME },
-                { loc: `${base}/pt`, pri: '0.9', alt: ALT_HOME },
+                ...LANG_ORDER.filter((l) => l !== 'zh').map((l) => ({
+                    loc: `${base}${LANGS[l].path}`, pri: '0.9', alt: ALT_HOME,
+                })),
             ];
         const ordered = [...catalog.platforms].sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
         for (const p of ordered) {
@@ -451,20 +446,14 @@ router.get('/sitemap.xml', async (req, res) => {
             // 拿它做落地页既没有搜索词，内容也杂，不放进 sitemap。
             if (p.label === 'Other') continue;
             urls.push({ loc: `${base}/c/${p.slug}`, pri: p === ordered[0] ? '0.9' : '0.8' });
-            // 多语种平台页（2026-11-08）：id / pt。分站不做。
+            // 多语种平台页（2026-11-08）：en / id / pt / vi / ar / ru。分站不做。
             // 类型子页暂不做多语种 —— 内容量不够，宁缺毋滥（低质量页会拖整体）。
             if (!brand.isSubsite) {
-                for (const l of ['id', 'pt']) {
+                for (const l of LANG_ORDER.filter((x) => x !== 'zh')) {
                     urls.push({
                         loc: `${base}${LANGS[l].path}/c/${p.slug}`,
                         pri: '0.8',
-                        alt: [
-                            { lang: 'zh-CN', href: `${base}/c/${p.slug}` },
-                            { lang: 'en', href: `${base}/en/c/${p.slug}` },
-                            { lang: 'id', href: `${base}/id/c/${p.slug}` },
-                            { lang: 'pt-BR', href: `${base}/pt/c/${p.slug}` },
-                            { lang: 'x-default', href: `${base}/c/${p.slug}` },
-                        ],
+                        alt: altFor(`/c/${p.slug}`),
                     });
                 }
             }
@@ -480,9 +469,9 @@ router.get('/sitemap.xml', async (req, res) => {
         // 这类高购买意图商用词。多数同行不公开价格，这是我们的天然优势。
         urls.push({ loc: `${base}/price`, pri: '0.9', alt: ALT_PRICE });
         if (!brand.isSubsite) {
-            urls.push({ loc: `${base}/en/price`, pri: '0.9', alt: ALT_PRICE });
-            urls.push({ loc: `${base}/id/price`, pri: '0.9', alt: ALT_PRICE });
-            urls.push({ loc: `${base}/pt/price`, pri: '0.9', alt: ALT_PRICE });
+            for (const l of LANG_ORDER.filter((x) => x !== 'zh')) {
+                urls.push({ loc: `${base}${LANGS[l].path}/price`, pri: '0.9', alt: ALT_PRICE });
+            }
         }
         // 知识库：拿问答词，页面数 +1 列表 +N 篇
         urls.push({ loc: `${base}/guide`, pri: '0.8' });
@@ -1483,13 +1472,21 @@ const hreflangsFor = (base, suffix = '') => LANG_ORDER.map((l) => ({
     lang: LANGS[l].code, href: `${base}${LANGS[l].path}${suffix}`,
 })).concat([{ lang: 'x-default', href: `${base}/` }]);
 
-/** 把 SSR 出来的 <html lang> 改成目标语种 */
-const setHtmlLang = (html, code) => html.replace(/<html lang="[^"]*"/i, `<html lang="${code}"`);
+/** 把 SSR 出来的 <html> 开标签改成目标语种，并按需加 dir="rtl" */
+const setHtmlLang = (html, code, dir = 'ltr') => {
+    // ⚠️ 直接替换整个 <html ...> 开标签，不要用「往 lang 前面插 dir」的正则 ——
+    //    index.html 里是 <html lang="zh-CN">，没有别的属性，那种正则匹配不到，
+    //    结果 dir 静默丢失、阿拉伯语按 LTR 排版（第一版就踩了这个坑）。
+    return html.replace(/<html\b[^>]*>/i, () => `<html lang="${code}"${dir === 'rtl' ? ' dir="rtl"' : ''}>`);
+};
 
 /** 语言切换器：放在正文尾部，方便用户和爬虫发现其它语种版本 */
 const langSwitcher = (base, suffix = '') => {
     const items = LANG_ORDER.map((l) => {
-        const name = { zh: '中文', en: 'English', id: 'Bahasa Indonesia', pt: 'Português' }[l];
+        const name = {
+            zh: '中文', en: 'English', id: 'Bahasa Indonesia', pt: 'Português',
+            vi: 'Tiếng Việt', ar: 'العربية', ru: 'Русский',
+        }[l];
         return `<a href="${base}${LANGS[l].path}${suffix}" hreflang="${LANGS[l].code}">${name}</a>`;
     }).join(' · ');
     return `<div class="seo-links">${items}</div>`;
@@ -1623,7 +1620,7 @@ const renderLangPage = async (req, res, next, lang, kind, slug) => {
                 hreflangs: hreflangsFor(base, kind === 'price' ? '/price' : kind === 'plat' ? `/c/${slug}` : ''),
             }),
             body: page.body,
-        }), LANGS[lang].code);
+        }), LANGS[lang].code, LANGS[lang].dir);
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
     } catch (e) {
         console.error(`[seo] /${lang} ${kind} 失败`, e.message);
@@ -1639,6 +1636,18 @@ router.get('/id/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'id
 router.get('/pt', (req, res, next) => renderLangPage(req, res, next, 'pt', 'home'));
 router.get('/pt/price', (req, res, next) => renderLangPage(req, res, next, 'pt', 'price'));
 router.get('/pt/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'pt', 'plat', req.params.slug));
+// 越南语
+router.get('/vi', (req, res, next) => renderLangPage(req, res, next, 'vi', 'home'));
+router.get('/vi/price', (req, res, next) => renderLangPage(req, res, next, 'vi', 'price'));
+router.get('/vi/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'vi', 'plat', req.params.slug));
+// 阿拉伯语（RTL）
+router.get('/ar', (req, res, next) => renderLangPage(req, res, next, 'ar', 'home'));
+router.get('/ar/price', (req, res, next) => renderLangPage(req, res, next, 'ar', 'price'));
+router.get('/ar/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'ar', 'plat', req.params.slug));
+// 俄语
+router.get('/ru', (req, res, next) => renderLangPage(req, res, next, 'ru', 'home'));
+router.get('/ru/price', (req, res, next) => renderLangPage(req, res, next, 'ru', 'price'));
+router.get('/ru/c/:slug', (req, res, next) => renderLangPage(req, res, next, 'ru', 'plat', req.params.slug));
 // 英文平台页（2026-11-08）：之前 /en/c/:slug 是 404，但 hreflang 簇里要指它，
 // 且英文用户搜 "tiktok followers" 时应落到平台页。复用同一套渲染器。
 router.get('/en/c/:slug', async (req, res, next) => {

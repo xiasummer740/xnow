@@ -20,10 +20,14 @@ export const LANGS = {
   en: { code: 'en', locale: 'en_US', dir: 'ltr', path: '/en' },
   id: { code: 'id', locale: 'id_ID', dir: 'ltr', path: '/id' },
   pt: { code: 'pt-BR', locale: 'pt_BR', dir: 'ltr', path: '/pt' },
+  vi: { code: 'vi', locale: 'vi_VN', dir: 'ltr', path: '/vi' },
+  // ⚠️ 阿拉伯语是 RTL：<html dir="rtl">，页面样式也要跟着镜像。
+  ar: { code: 'ar', locale: 'ar_SA', dir: 'rtl', path: '/ar' },
+  ru: { code: 'ru', locale: 'ru_RU', dir: 'ltr', path: '/ru' },
 };
 
 /** 支持的语言顺序（hreflang 里按这个顺序输出） */
-export const LANG_ORDER = ['zh', 'en', 'id', 'pt'];
+export const LANG_ORDER = ['zh', 'en', 'id', 'pt', 'vi', 'ar', 'ru'];
 
 const C = {
   // ── 印尼语 ──────────────────────────────────────────────────────────
@@ -154,6 +158,201 @@ const C = {
       howToChooseText: 'Escolha pelo volume e pelo nível de qualidade: para grandes volumes com resultado rápido, use um nível de preço mais alto; teste uma quantidade pequena antes de aumentar. A página do pedido calcula o total na hora conforme a quantidade informada.',
     },
     types: { fans: 'Seguidores', likes: 'Curtidas', views: 'Visualizações', comments: 'Comentários', shares: 'Compartilhamentos', traffic: 'Tráfego', live: 'Ao vivo', subscribe: 'Inscritos', other: 'Outros' },
+  },
+
+  // ── 越南语 ──────────────────────────────────────────────────────────
+  vi: {
+    home: {
+      title: (b) => `${b} - Bảng điều khiển tăng trưởng mạng xã hội, từ ¥0,03`,
+      h1: (b) => `${b} · Tăng trưởng mạng xã hội`,
+      lede: (b, names, cheapest) =>
+        `${b} cung cấp người theo dõi, lượt thích, lượt xem và bình luận cho ${names}. Giá từ <b>¥${cheapest} mỗi 1.000</b>, giao tự động, không cần mật khẩu tài khoản.`,
+      platformsHead: 'Nền tảng và giá khởi điểm',
+      thPlatform: 'Nền tảng',
+      thFrom: 'Từ',
+      thServices: 'Dịch vụ',
+      faqHead: 'Câu hỏi thường gặp',
+      cta: 'Bắt đầu đặt hàng →',
+      foot: (b) => `${b} · giao tự động · trả theo mức dùng`,
+      thTypes: 'Loại',
+      faq: (cheapest, total) => [
+        { q: 'Giá được tính như thế nào?', a: `Mọi dịch vụ tính theo 1.000 đơn vị. Nhập số lượng bạn cần, trang đặt hàng sẽ hiển thị tổng tiền trước khi bạn gửi. Giá từ ¥${cheapest} mỗi 1.000 và khác nhau theo chất lượng và tốc độ.` },
+        { q: 'Có cần cung cấp mật khẩu tài khoản không?', a: 'Không. Chỉ cần liên kết hồ sơ công khai hoặc tên người dùng. Chúng tôi không bao giờ yêu cầu thông tin đăng nhập.' },
+        { q: 'Đơn hàng bắt đầu xử lý khi nào?', a: 'Đơn hàng được xử lý tự động sau khi gửi. Bạn có thể theo dõi từng đơn trong lịch sử đơn hàng, và các đơn chưa hoàn thành sẽ được hoàn tiền.' },
+        { q: 'Hỗ trợ những nền tảng nào?', a: 'TikTok, Instagram, YouTube, Telegram, Facebook, X (Twitter) và nhiều nền tảng khác. Mỗi trang nền tảng liệt kê các loại dịch vụ và số lượng tối thiểu.' },
+        { q: 'Nếu đơn hàng không hoàn thành thì sao?', a: 'Nếu đơn bị huỷ hoặc chỉ hoàn thành một phần, số tiền tương ứng sẽ tự động trả về số dư của bạn và có thể dùng cho đơn mới.' },
+      ],
+    },
+    price: {
+      title: (b, c) => `${b} - Bảng giá tất cả nền tảng từ ¥${c} mỗi 1.000`,
+      h1: (b) => `${b} · Bảng giá`,
+      lede: (b, cheapest, total, plats) =>
+        `Mọi dịch vụ tính theo 1.000 đơn vị. Giá khởi điểm thấp nhất là <b>¥${cheapest}</b>. Hiện có <b>${total}</b> dịch vụ trên ${plats} nền tảng. Tổng tiền chính xác được hiển thị ở trang đặt hàng trước khi bạn gửi.`,
+      tableHead: 'Giá khởi điểm theo nền tảng',
+      thPlatform: 'Nền tảng',
+      thFrom: 'Từ (mỗi 1.000)',
+      thServices: 'Dịch vụ',
+      thTypes: 'Loại',
+      rulesHead: 'Cách tính giá',
+      rules: [
+        'Mỗi dịch vụ được báo theo 1.000 đơn vị, nên đơn giá không đổi theo số lượng.',
+        'Nhập số lượng bạn cần; trang đặt hàng nhân với đơn giá và hiển thị tổng tiền.',
+        'Mức chất lượng cao hơn và giao nhanh hơn có giá cao hơn; bảng này hiển thị mức giá thấp nhất của mỗi nền tảng.',
+        'Nếu đơn bị huỷ hoặc hoàn thành một phần, số tiền tương ứng sẽ trả về số dư của bạn.',
+      ],
+      faqHead: 'Câu hỏi thường gặp',
+      cta: 'Bắt đầu đặt hàng →',
+      foot: (b) => `${b} · giao tự động · trả theo mức dùng`,
+    },
+    plat: {
+      title: (b, p, c) => `Dịch vụ ${p} từ ¥${c} · ${b}`,
+      h1: (b, p) => `Dịch vụ tăng trưởng ${p} · ${b}`,
+      lede: (b, p, count, cheapest) =>
+        `${b} có <b>${count}</b> dịch vụ ${p}: người theo dõi, lượt thích, lượt xem, bình luận và hơn thế. Tính theo 1.000 đơn vị, từ <b>¥${cheapest}</b>. Đơn hàng được xử lý tự động sau khi gửi.`,
+      typeTable: 'Loại dịch vụ',
+      typeHead: 'Loại',
+      fromHead: 'Giá từ',
+      faqHead: 'Câu hỏi thường gặp',
+      otherHead: 'Nền tảng khác',
+      cta: 'Bắt đầu đặt hàng →',
+      foot: (b) => `${b} · giao tự động`,
+      thCount: 'Lựa chọn',
+      thMinQty: 'Tối thiểu',
+      subHead: (p) => `Xem dịch vụ ${p} theo loại`,
+      howToChoose: (p) => `Cách chọn dịch vụ ${p}`,
+      howToChooseText: 'Chọn theo số lượng và mức chất lượng: với số lượng lớn cần kết quả nhanh, hãy chọn mức giá cao hơn; nên thử số lượng nhỏ trước khi tăng. Trang đặt hàng tính tổng tiền ngay theo số lượng bạn nhập.',
+    },
+    types: { fans: 'Người theo dõi', likes: 'Lượt thích', views: 'Lượt xem', comments: 'Bình luận', shares: 'Chia sẻ', traffic: 'Truy cập', live: 'Trực tiếp', subscribe: 'Đăng ký', other: 'Khác' },
+  },
+
+  // ── 阿拉伯语（RTL）──────────────────────────────────────────────────
+  ar: {
+    home: {
+      title: (b) => `${b} - لوحة نمو وسائل التواصل الاجتماعي، تبدأ من ¥0.03`,
+      h1: (b) => `${b} · نمو وسائل التواصل الاجتماعي`,
+      lede: (b, names, cheapest) =>
+        `تقدّم ${b} متابعين وإعجابات ومشاهدات وتعليقات لـ ${names}. الأسعار تبدأ من <b>¥${cheapest} لكل 1000</b>، مع تسليم تلقائي ودون الحاجة إلى كلمة مرور الحساب.`,
+      platformsHead: 'المنصات والأسعار الابتدائية',
+      thPlatform: 'المنصة',
+      thFrom: 'تبدأ من',
+      thServices: 'الخدمات',
+      faqHead: 'الأسئلة الشائعة',
+      cta: 'ابدأ الطلب ←',
+      foot: (b) => `${b} · تسليم تلقائي · الدفع حسب الاستخدام`,
+      thTypes: 'النوع',
+      faq: (cheapest, total) => [
+        { q: 'كيف يتم حساب السعر؟', a: `تُحتسب جميع الخدمات لكل 1000 وحدة. أدخل الكمية المطلوبة وستعرض صفحة الطلب الإجمالي قبل الإرسال. تبدأ الأسعار من ¥${cheapest} لكل 1000 وتختلف حسب الجودة والسرعة.` },
+        { q: 'هل أحتاج إلى إعطاء كلمة مرور الحساب؟', a: 'لا. يكفي رابط الملف الشخصي العام أو اسم المستخدم. لا نطلب بيانات تسجيل الدخول أبدًا.' },
+        { q: 'متى يبدأ تنفيذ الطلب؟', a: 'تُنفَّذ الطلبات تلقائيًا بعد الإرسال. يمكنك متابعة حالة كل طلب في سجل الطلبات، ويُعاد المبلغ للطلبات غير المكتملة.' },
+        { q: 'ما المنصات المدعومة؟', a: 'تيك توك، إنستغرام، يوتيوب، تيليجرام، فيسبوك، إكس (تويتر) وغيرها. تعرض كل صفحة منصة أنواع الخدمات والحد الأدنى للكمية.' },
+        { q: 'ماذا يحدث إذا لم يكتمل الطلب؟', a: 'إذا أُلغي الطلب أو اكتمل جزئيًا، يُعاد المبلغ المقابل تلقائيًا إلى رصيدك ويمكن استخدامه في طلب جديد.' },
+      ],
+    },
+    price: {
+      title: (b, c) => `${b} - قائمة أسعار جميع المنصات من ¥${c} لكل 1000`,
+      h1: (b) => `${b} · قائمة الأسعار`,
+      lede: (b, cheapest, total, plats) =>
+        `تُحتسب جميع الخدمات لكل 1000 وحدة. أقل سعر ابتدائي هو <b>¥${cheapest}</b>. يتوفر حاليًا <b>${total}</b> خدمة على ${plats} منصة. يظهر الإجمالي الدقيق في صفحة الطلب قبل الإرسال.`,
+      tableHead: 'السعر الابتدائي حسب المنصة',
+      thPlatform: 'المنصة',
+      thFrom: 'تبدأ من (لكل 1000)',
+      thServices: 'الخدمات',
+      thTypes: 'النوع',
+      rulesHead: 'كيف يُحسب السعر',
+      rules: [
+        'يُسعَّر كل خدمة لكل 1000 وحدة، لذا لا يتغير سعر الوحدة بتغير الكمية.',
+        'أدخل الكمية المطلوبة؛ تضربها صفحة الطلب في سعر الوحدة وتعرض الإجمالي.',
+        'مستويات الجودة الأعلى والتسليم الأسرع تكلف أكثر؛ يعرض هذا الجدول أقل سعر لكل منصة.',
+        'إذا أُلغي الطلب أو اكتمل جزئيًا، يُعاد المبلغ المقابل إلى رصيدك.',
+      ],
+      faqHead: 'الأسئلة الشائعة',
+      cta: 'ابدأ الطلب ←',
+      foot: (b) => `${b} · تسليم تلقائي · الدفع حسب الاستخدام`,
+    },
+    plat: {
+      title: (b, p, c) => `خدمات ${p} تبدأ من ¥${c} · ${b}`,
+      h1: (b, p) => `خدمات نمو ${p} · ${b}`,
+      lede: (b, p, count, cheapest) =>
+        `لدى ${b} <b>${count}</b> خدمة ${p}: متابعون وإعجابات ومشاهدات وتعليقات والمزيد. تُحتسب لكل 1000 وحدة، من <b>¥${cheapest}</b>. تُنفَّذ الطلبات تلقائيًا بعد الإرسال.`,
+      typeTable: 'أنواع الخدمات',
+      typeHead: 'النوع',
+      fromHead: 'السعر من',
+      faqHead: 'الأسئلة الشائعة',
+      otherHead: 'منصات أخرى',
+      cta: 'ابدأ الطلب ←',
+      foot: (b) => `${b} · تسليم تلقائي`,
+      thCount: 'الخيارات',
+      thMinQty: 'الحد الأدنى',
+      subHead: (p) => `اعرض خدمات ${p} حسب النوع`,
+      howToChoose: (p) => `كيف تختار خدمات ${p}`,
+      howToChooseText: 'اختر حسب الحجم ومستوى الجودة: للأحجام الكبيرة بنتائج سريعة استخدم مستوى سعر أعلى؛ جرّب كمية صغيرة قبل الزيادة. تحسب صفحة الطلب الإجمالي فورًا حسب الكمية المُدخلة.',
+    },
+    types: { fans: 'متابعون', likes: 'إعجابات', views: 'مشاهدات', comments: 'تعليقات', shares: 'مشاركات', traffic: 'زيارات', live: 'بث مباشر', subscribe: 'مشتركون', other: 'أخرى' },
+  },
+
+  // ── 俄语 ────────────────────────────────────────────────────────────
+  ru: {
+    home: {
+      title: (b) => `${b} - Панель роста в соцсетях, от ¥0,03`,
+      h1: (b) => `${b} · Рост в социальных сетях`,
+      lede: (b, names, cheapest) =>
+        `${b} предоставляет подписчиков, лайки, просмотры и комментарии для ${names}. Цены от <b>¥${cheapest} за 1000</b>, автоматическая выдача, пароль от аккаунта не требуется.`,
+      platformsHead: 'Площадки и стартовые цены',
+      thPlatform: 'Площадка',
+      thFrom: 'От',
+      thServices: 'Услуги',
+      faqHead: 'Частые вопросы',
+      cta: 'Оформить заказ →',
+      foot: (b) => `${b} · автоматическая выдача · оплата по факту`,
+      thTypes: 'Тип',
+      faq: (cheapest, total) => [
+        { q: 'Как рассчитывается цена?', a: `Все услуги считаются за 1000 единиц. Укажите нужное количество — страница заказа покажет итог до отправки. Цены начинаются от ¥${cheapest} за 1000 и зависят от качества и скорости.` },
+        { q: 'Нужно ли передавать пароль от аккаунта?', a: 'Нет. Достаточно публичной ссылки на профиль или имени пользователя. Мы никогда не запрашиваем данные для входа.' },
+        { q: 'Когда начинается выполнение заказа?', a: 'Заказы обрабатываются автоматически после отправки. Статус каждого заказа виден в истории, а незавершённые заказы возвращаются на баланс.' },
+        { q: 'Какие площадки поддерживаются?', a: 'TikTok, Instagram, YouTube, Telegram, Facebook, X (Twitter) и другие. На каждой странице площадки перечислены типы услуг и минимальное количество.' },
+        { q: 'Что если заказ не выполнен?', a: 'Если заказ отменён или выполнен частично, соответствующая сумма автоматически возвращается на ваш баланс и может быть использована для нового заказа.' },
+      ],
+    },
+    price: {
+      title: (b, c) => `${b} - Прайс-лист всех площадок от ¥${c} за 1000`,
+      h1: (b) => `${b} · Прайс-лист`,
+      lede: (b, cheapest, total, plats) =>
+        `Все услуги считаются за 1000 единиц. Минимальная стартовая цена — <b>¥${cheapest}</b>. Сейчас доступно <b>${total}</b> услуг на ${plats} площадках. Точная сумма показывается на странице заказа до отправки.`,
+      tableHead: 'Стартовая цена по площадкам',
+      thPlatform: 'Площадка',
+      thFrom: 'От (за 1000)',
+      thServices: 'Услуги',
+      thTypes: 'Тип',
+      rulesHead: 'Как считается цена',
+      rules: [
+        'Каждая услуга оценивается за 1000 единиц, поэтому цена за единицу не меняется от объёма.',
+        'Укажите нужное количество — страница заказа умножит его на цену за единицу и покажет итог.',
+        'Более высокое качество и быстрая выдача стоят дороже; в таблице указана минимальная цена каждой площадки.',
+        'Если заказ отменён или выполнен частично, соответствующая сумма возвращается на баланс.',
+      ],
+      faqHead: 'Частые вопросы',
+      cta: 'Оформить заказ →',
+      foot: (b) => `${b} · автоматическая выдача · оплата по факту`,
+    },
+    plat: {
+      title: (b, p, c) => `Услуги ${p} от ¥${c} · ${b}`,
+      h1: (b, p) => `Услуги роста ${p} · ${b}`,
+      lede: (b, p, count, cheapest) =>
+        `У ${b} есть <b>${count}</b> услуг ${p}: подписчики, лайки, просмотры, комментарии и другое. Считаются за 1000 единиц, от <b>¥${cheapest}</b>. Заказы обрабатываются автоматически после отправки.`,
+      typeTable: 'Типы услуг',
+      typeHead: 'Тип',
+      fromHead: 'Цена от',
+      faqHead: 'Частые вопросы',
+      otherHead: 'Другие площадки',
+      cta: 'Оформить заказ →',
+      foot: (b) => `${b} · автоматическая выдача`,
+      thCount: 'Варианты',
+      thMinQty: 'Минимум',
+      subHead: (p) => `Услуги ${p} по типам`,
+      howToChoose: (p) => `Как выбрать услуги ${p}`,
+      howToChooseText: 'Выбирайте по объёму и уровню качества: для больших объёмов с быстрым результатом берите более дорогой уровень; сначала протестируйте небольшое количество. Страница заказа сразу считает итог по введённому количеству.',
+    },
+    types: { fans: 'Подписчики', likes: 'Лайки', views: 'Просмотры', comments: 'Комментарии', shares: 'Репосты', traffic: 'Трафик', live: 'Прямой эфир', subscribe: 'Подписчики', other: 'Другое' },
   },
 };
 

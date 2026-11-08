@@ -596,8 +596,9 @@ server {
         proxy_read_timeout 30s;
     }
 
-    # 多语种落地页（2026-11-08）：印尼 /id、巴西葡语 /pt。
-    location ~ ^/(id|pt)(/|$) {
+    # 多语种落地页（2026-11-08）：印尼 /id、巴西葡语 /pt、越南 /vi、
+    # 阿拉伯 /ar、俄语 /ru。
+    location ~ ^/(id|pt|vi|ar|ru)(/|$) {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
