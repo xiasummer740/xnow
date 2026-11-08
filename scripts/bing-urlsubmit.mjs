@@ -45,17 +45,23 @@ const SUBMITTED_FILE = path.join(ROOT, '.bing-submitted');
 
 /**
  * 优先级打分：数字小的先提交。
- * 配额只有 100/天，必须把「用户最可能落地 + 商业价值最高」的排在前面。
+ * 配额只有 100/天，必须把「最可能带来自然流量 + 商业价值最高」的排在前面。
+ *
+ * 2026-11-08 调整：知识库文章（/guide/）提到第 3 档。
+ * 产品页吃的是现成的品牌搜索，而新写的运营指南拿的是「新号怎么涨粉」
+ * 「店铺怎么引流」这类搜索量更大的词 —— 越早进索引越值。
  */
 function priority(url) {
     const p = url.replace(/^https?:\/\/[^/]+/, '');
     if (p === '/' || p === '') return 0;              // 各语种首页
     if (p === '/price' || /^\/(en|id|pt|vi|ar|ru)$/.test(p)) return 1;
     if (p.endsWith('/price')) return 2;               // 各语种价格表
-    if (/^\/c\/[^/]+$/.test(p)) return 3;             // 平台页
-    if (/^\/(en|id|pt|vi|ar|ru)\/c\/[^/]+$/.test(p)) return 4;
-    if (/^\/c\/[^/]+\/[^/]+$/.test(p)) return 5;      // 类型子页
-    return 6;
+    if (/^\/guide\/[^/]+$/.test(p)) return 3;         // 知识库文章（新内容优先）
+    if (/^\/c\/[^/]+$/.test(p)) return 4;             // 平台页
+    if (/^\/(en|id|pt|vi|ar|ru)\/c\/[^/]+$/.test(p)) return 5;
+    if (p === '/guide') return 5;                     // 知识库首页
+    if (/^\/c\/[^/]+\/[^/]+$/.test(p)) return 6;      // 类型子页
+    return 7;
 }
 
 function readKey() {
