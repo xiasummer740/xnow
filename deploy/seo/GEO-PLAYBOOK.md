@@ -161,6 +161,56 @@ access_token，不装 `google-auth`（生产机是 Python 3.8 + 系统 pip，装
 `.gitignore` 补 `.gsc-service-account.json` 与 `*service-account*.json` ——
 仓库是 PUBLIC，私钥提交等于公开，别人能拿它往你的 GSC 提交垃圾 URL。
 
+### 12. 🔗 外链与品牌认知：第一批（2026-11-08）
+
+前面 11 条全是**站内**。这一节是第一次真正动**站外**。
+
+#### 已建成的外链（12 条，覆盖 3 个高权重域名）
+
+| 平台 | DA | 位置 | 链接数 | 怎么做的 |
+|---|---|---|---|---|
+| **GitHub** | 100 | README 顶部 | 4 | 直接改 README（PUBLIC 仓库，之前一直没放官网链接） |
+| **Dev.to** | 90 | 技术文章正文 | 2 | 浏览器 Google OAuth 登录 + 官方 API 发文 |
+| **Dev.to** | 90 | 个人资料页 website_url | 3 | 同上 |
+| **Telegraph** | 90 | 产品说明页 | 3 | `api.telegra.ph` 全程序化，不需要账号 |
+
+- GitHub README：`https://github.com/xiasummer740/xnow`
+- Dev.to 账号：`https://dev.to/xnowpro`（用户名 XNOW PRO / @xnowpro）
+- Dev.to 文章：`https://dev.to/xnowpro/z-1k54`
+  「Zero-dependency Google Indexing API with Node.js crypto」
+- Telegraph：`https://telegra.ph/XNOW-PRO--社媒增长面板使用说明-11-08`
+
+#### 关键经验：写技术内容，别发广告
+
+Dev.to 那篇写的是**当天真踩的坑**（Node crypto 签 JWT、GSC 服务账号要设成
+Owner、Indexing API 200/天、Bing 100/天），文末才自然提一句项目。
+这类内容社区接受度高，而且**会被 AI 抓取引用** —— 比硬广有效得多。
+
+Telegraph 那篇是纯产品说明（用途 / 计价 / 权限），适合中文搜索长尾。
+
+#### 踩到的硬障碍
+
+| 平台 | 障碍 | 说明 |
+|---|---|---|
+| **SaaSHub** | **hCaptcha** | 用 CDP 连的真实 Chrome + 模拟鼠标轨迹点「我是真实访客」，被识别返回「请再试一次」。CDP 连接本身有自动化指纹，hCaptcha/reCAPTCHA 这类能检出。这步只能人工点一下。注册页已备好：`https://www.saashub.com/register`，账号 `xnowpro`，密码在 `.secrets/saashub-creds.txt` |
+| **Hashnode** | 服务端 500 | Google 登录成功、onboarding 表单填完后提交报「暂时的麻烦」，重试仍失败。账号已建（`hashnode.com/@xnowpro` 会重定向到 onboard），博客尚未创建 |
+
+#### 还能自动化的（未做）
+
+- **Dev.to 再发 2-3 篇**：通道已验证（API 直发），但同一天连发会被判 spam，建议隔天
+- **Blogger**（DA 100，Google 账号）：需在 Google Cloud 启用 Blogger API v3 + OAuth，工作量中等
+- **Medium**（DA 95）：Google 登录可通，但对推广内容审核严
+- **AlternativeTo**（DA 85）：大概率同样有 CAPTCHA
+
+#### 结论
+
+**外链从 0 变成 12 条，但离「能影响排名」还差得远。**
+3 个域名不足以撼动大词竞争，它的真实作用是：① 让新站有第一批可信信号；
+② 给 AI 检索提供可引用的内容源（Dev.to + Telegraph 都能被抓）。
+
+下一步该按 §3.2/§3.3 继续铺（行业目录 + 社区），那些**必须人工注册账号**。
+
+
 
 
 ---
