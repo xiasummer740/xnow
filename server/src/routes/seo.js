@@ -380,6 +380,30 @@ const typeTable = (platCn, types) => {
     return `<table class="seo-table"><thead><tr><th>服务类型</th><th>起价</th><th>可选档位</th><th>最小数量</th></tr></thead><tbody>${rows}</tbody></table>`;
 };
 
+/**
+ * 平台页的同义词汇总（2026-11-08）
+ *
+ * 一个平台页要覆盖「涨粉 / 刷赞 / 刷播放 / 涨订阅…」这一整片搜索词，
+ * 光靠标题不够。这里把所有类型下的叫法聚成一段自然文字，
+ * 既让人看懂「这些都指同一批服务」，也让长尾词在页面里有落点。
+ */
+const platformSynonyms = (platCn, types) => {
+    const buckets = [];
+    for (const t of types || []) {
+        const tc = typeCopyOf(t.label);
+        if (!tc || !Array.isArray(tc.aliases)) continue;
+        buckets.push({ name: tc.name, aliases: tc.aliases.filter((x) => x && x !== tc.name) });
+    }
+    if (buckets.length < 2) return '';
+    const lines = buckets.map((b) =>
+        `<li><b>${esc(b.name)}</b>：${b.aliases.map((x) => esc(x)).join('、')}</li>`
+    ).join('');
+    return `<h2>这些词说的都是同一批服务</h2>
+<p>${esc(platCn)} 上不同的人对这些服务有不同叫法。按你习惯的说法对号入座就行，交付内容是一样的：</p>
+<ul>${lines}</ul>
+<p>不管搜的是哪个词，下单流程都一样：选类型、填目标链接或用户名、填数量，页面按每 1000 个实时算出总价。</p>`;
+};
+
 const faqHtml = (faq) => `<dl class="seo-faq">${faq.map((f) => `<dt>${esc(f.q)}</dt><dd>${esc(f.a)}</dd>`).join('')}</dl>`;
 
 // ── GET /<key>.txt（IndexNow 密钥校验文件）─────────────────────────────────
@@ -774,6 +798,18 @@ ${rows}
 <ul>${tc.scenes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
 <h2>最容易踩的坑</h2>
 <ul>${tc.pitfalls.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+${(() => {
+                // 🔑 同义词覆盖（2026-11-08）：用户对这个服务的叫法有几十种，
+                //   标题只能挑最主流的两个。把其余叫法自然列成一节，
+                //   页面就能匹配大量长尾搜索词 —— 这是抓长尾最有效的做法，
+                //   而且对读者也有用（他可能就是搜另一个词进来的）。
+                const al = Array.isArray(tc.aliases) ? tc.aliases.filter((x) => x && x !== tc.name) : [];
+                if (al.length < 3) return '';
+                return `<h2>${esc(tc.name)}服务还有哪些叫法</h2>
+<p>不同平台、不同地区的人对同一件事的叫法不一样。你搜到的下面这些词，说的都是同一类服务 —— 给${esc(platCn)}账号增加${esc(tc.name)}：</p>
+<p style="color:#cbd5e1">${al.map((x) => esc(x)).join('、')}。</p>
+<p>叫法不同不影响交付内容，最终看的还是同一个东西：<b>数量、质量档位、起量速度</b>。下单时按需求填数量，页面会按每 1000 个实时算出总价，不用自己换算。</p>`;
+            })()}
 <h2>${esc(platCn)} ${esc(tc.name)}怎么选</h2>
 <p>${esc(tc.choose)}</p>
 ${pc ? `<h2>为什么在 ${esc(platCn)} 上做增长</h2><p>${esc(pc.intro)}</p>` : ''}
@@ -1429,6 +1465,7 @@ ${(() => {
                 });
             return subs.length ? `<h2>按${esc(platCn)}服务类型查看</h2>\n<ul>${subs.join('')}</ul>` : '';
         })()}
+${platformSynonyms(platCn, plat.types)}
 ${deep}
 <h2>常见问题</h2>
 ${faqHtml(faq)}
