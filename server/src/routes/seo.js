@@ -305,7 +305,7 @@ const headOf = ({ brand, title, desc, canonical, ld, hreflangs, locale = 'zh_CN'
 ${(hreflangs || []).map((h) => `<link rel="alternate" hreflang="${esc(h.lang)}" href="${esc(h.href)}" />`).join('\n')}
 <meta name="robots" content="index, follow, max-image-preview:large" />
 <!-- Bing Webmaster 站点验证（2026-11-08）。Bing 只校验首页，但全站带上更省事。
-     ⚠️ 验证成功后也**不能删**，否则 Bing 会取消已验证状态。 -->
+     ⚠️ 验证成功后千万不要删，否则 Bing 会取消已验证状态。 -->
 <meta name="msvalidate.01" content="A7003F7341A3B427C0759A2603DF6916" />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="${esc(title)}" />
@@ -813,18 +813,35 @@ ${linksTo(brand, catalog.platforms, plat.slug)}
 // 产品页拿交易词，这里拿问答词。AI 引擎被问到「买粉丝会掉吗」时，
 // 引用的是有明确判断标准的那一段 —— 这就是这一层存在的意义。
 // 正文里的 `反引号` 渲染成 <code>，其余按纯文本转义。
-const mdInline = (s) => esc(s).replace(/`([^`]+)`/g, '<code style="background:#152036;padding:1px 5px;border-radius:4px;font-size:.92em">$1</code>');
+// 正文行内 markdown：`代码`、**粗体**、[文字](/站内路径)
+// ⚠️ 链接只允许站内相对路径（以 / 开头）。esc() 已经把 < > & 转义了，
+//    再限制 href 不能是 javascript:/http: —— 文章内容虽然是自家写的，
+//    但没有理由给它开一个能注入外链或脚本的口子。
+const mdInline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, '<code style="background:#152036;padding:1px 5px;border-radius:4px;font-size:.92em">$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#f1f5f9">$1</strong>')
+    .replace(/\[([^\]\n]+)\]\((\/[^)\s]*)\)/g, '<a href="$2" style="color:#22d3ee">$1</a>');
 
 const guideBody = (a) => a.body.map(([h, p]) => `<h2>${esc(h)}</h2>\n<p>${mdInline(p)}</p>`).join('\n');
 
-// 正文本身就是「小标题 + 说明」，前两段直接做成 FAQ 结构化数据
+// 把正文 markdown 去掉标记，变成纯文本（给 JSON-LD 用）
+// ⚠️ 原来只 replace(/`/g,'')，漏了 ** 粗体和 [文字](/path) 链接 ——
+//    结果 FAQ 结构化数据里塞的是 `**绝大多数情况不是内容问题**` 这种带标记的
+//    脏文本，Google 和 AI 摘录时读到的是原始 markdown。所有文章的 FAQ 都受影响。
+const mdPlain = (s) => String(s || '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .trim();
+
+// 正文本身就是「小标题 + 说明」，前四段直接做成 FAQ 结构化数据
 const guideFaqLd = (a) => ({
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
     mainEntity: a.body.slice(0, 4).map(([h, p]) => ({
         '@type': 'Question',
         name: h,
-        acceptedAnswer: { '@type': 'Answer', text: p.replace(/`/g, '') },
+        acceptedAnswer: { '@type': 'Answer', text: mdPlain(p) },
     })),
 });
 
@@ -834,19 +851,34 @@ router.get('/guide', async (req, res) => {
         const brand = brandOf(req, catalog);
         const base = `https://${brand.host}`;
         const canonical = `${base}/guide`;
-        const title = `社媒增长知识库 · 下单前必看的 ${ARTICLES.length} 个问题 · ${brand.name}`;
-        const desc = `涨粉会不会掉、为什么必须填主页链接、档位怎么选、直播间场观和在线人数有什么区别 —— ${ARTICLES.length} 篇实操说明，下单前先看一遍能避开大部分失败原因。`;
+        // 知识库分两块：运营方法（起号/引流/看数据）和下单说明（怎么填、怎么选）。
+        // 前者拿搜索词，后者降售后问题，两类读者其实是同一批人的不同阶段。
+        const OPS_TAGS = ['起号实操', '店铺运营', '数据判断', '策略选择', '运营方法'];
+        const opsArticles = ARTICLES.filter((a) => OPS_TAGS.includes(a.tag));
+        const orderArticles = ARTICLES.filter((a) => !OPS_TAGS.includes(a.tag));
+        const title = `社媒增长知识库 · 起号、引流、看数据、下单说明 ${ARTICLES.length} 篇 · ${brand.name}`;
+        const desc = `新号为什么只有 200 播放、跨境店铺五个引流渠道怎么排、互动率多少算正常、自然涨粉和加速涨粉什么时候用哪个，以及下单前必看的链接格式、档位选择、掉粉判断 —— ${ARTICLES.length} 篇实操说明，不给形容词只给判断标准。`;
 
-        const cards = ARTICLES.map((a) => `<li style="margin:14px 0">
+        const cardOf = (a) => `<li style="margin:14px 0">
 <a href="/guide/${a.slug}" style="color:#22d3ee;font-weight:700;font-size:16px">${esc(a.title)}</a>
 <div style="color:#94a3b8;font-size:14px;margin-top:4px">${esc(a.desc)}</div>
 <div style="color:#64748b;font-size:12px;margin-top:4px">${esc(a.tag)} · 更新于 ${esc(a.updated)}</div>
-</li>`).join('');
+</li>`;
 
         const body = `<div class="seo-wrap">${styleBlock}
 <h1>社媒增长知识库</h1>
-<p>下单前先看这几篇。都是实际遇到的问题 —— 填错链接、重复下单、档位选错、预期不符，看完能避开大部分。</p>
-<ul style="list-style:none;padding:0">${cards}</ul>
+<p>分两部分：<b>运营方法</b>讲怎么起号、怎么引流、数据怎么看；<b>下单说明</b>讲链接怎么填、档位怎么选、出了问题怎么判断。都是实操里真会遇到的事，不给形容词只给判断标准。</p>
+<h2>运营方法（${opsArticles.length} 篇）</h2>
+<ul style="list-style:none;padding:0">${opsArticles.map(cardOf).join('')}</ul>
+<h2>下单说明（${orderArticles.length} 篇）</h2>
+<ul style="list-style:none;padding:0">${orderArticles.map(cardOf).join('')}</ul>
+<h2>价格与平台</h2>
+<p>所有服务按每 1000 个计价，全平台明码标价，不用注册就能看：</p>
+<ul>
+<li><a href="/price" style="color:#22d3ee">完整价格表</a></li>
+${[...catalog.platforms].filter((p) => p.count && p.label !== 'Other').slice(0, 6)
+    .map((p) => `<li><a href="/c/${p.slug}" style="color:#22d3ee">${esc(PLATFORM_CN[p.label] || p.label)} 增长服务</a></li>`).join('')}
+</ul>
 <a class="seo-cta" href="/order">去下单 →</a>
 <div class="seo-foot">${esc(brand.name)} · 自动交付 · 在线充值</div>
 </div>`;
