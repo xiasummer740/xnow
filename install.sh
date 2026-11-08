@@ -574,6 +574,28 @@ server {
         try_files /en.html =503;
     }
 
+    # 价格表（2026-11-08）：服务端渲染。location = /en 是精确匹配，
+    # /en/price 不会命中它，必须单独一条。
+    location = /price {
+        proxy_pass http://127.0.0.1:3000/price;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+    }
+
+    location = /en/price {
+        proxy_pass http://127.0.0.1:3000/en/price;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 30s;
+    }
+
     # 后端挂了也不能首页白屏：回落到静态 index.html（内容和以前一样，只是没有 SSR 元信息）
     location @spa_home {
         root /var/www/xnow/client/dist;

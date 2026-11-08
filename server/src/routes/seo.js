@@ -441,6 +441,12 @@ router.get('/sitemap.xml', async (req, res) => {
                 }
             }
         }
+        // 价格表（2026-11-08）：拿 `smm panel price list` / `cheapest smm panel`
+        // 这类高购买意图商用词。多数同行不公开价格，这是我们的天然优势。
+        urls.push({ loc: `${base}/price`, pri: '0.9' });
+        if (!brand.isSubsite) {
+            urls.push({ loc: `${base}/en/price`, pri: '0.9' });
+        }
         // 知识库：拿问答词，页面数 +1 列表 +N 篇
         urls.push({ loc: `${base}/guide`, pri: '0.8' });
         for (const a of ARTICLES) {
@@ -1282,6 +1288,145 @@ ${faqHtml(faq)}
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
     } catch (e) {
         console.error('[seo] /en 首页壳失败', e.message);
+        next();
+    }
+});
+
+// ── /price 全平台价格总览（中/英）────────────────────────────────────────
+// 2026-11-08 加。为什么值得单独一页：
+//   `smm panel price list` / `cheapest smm panel` / `tiktok followers price per 1000`
+//   是高购买意图的商用词，而**多数同行不公开价格**（要注册才看）。
+//   我们本来就按「每 1000 个」明码标价，把价格摊开就是天然优势，
+//   而且这页的数据全部来自实时目录，价格变了自动跟着变，不会过期。
+//   同时给 AI 引擎一段可直接摘录的「价目表 + 计价规则」，这是 GEO 最有效的形态。
+const pricePageOf = (brand, catalog, lang) => {
+    const en = lang === 'en';
+    const base = `https://${brand.host}`;
+    const ordered = [...catalog.platforms]
+        .filter((p) => p.label !== 'Other' && p.count > 0)
+        .sort((a, b) => prefIndex(a.label) - prefIndex(b.label));
+    const cheapest = ordered.length ? per1000(Math.min(...ordered.map((p) => p.minPrice))) : '—';
+    const total = catalog.totalServices || 0;
+
+    // 全平台价目表：平台 / 起价 / 服务数 / 支持类型
+    // ⚠️ 过滤掉类型里的「其他」——上游脏分类的兜底桶，写进价格表既没搜索词也不专业。
+    const rows = ordered.map((p) => {
+        const types = (p.types || [])
+            .filter((t) => t.label && t.label !== '其他' && t.label !== 'Other')
+            .slice(0, 6).map((t) => t.label).join(' / ');
+        return `<tr><td><a href="/c/${p.slug}" style="color:#22d3ee">${esc(p.label)}</a></td><td>¥${per1000(p.minPrice)}</td><td>${p.count}</td><td>${esc(types)}</td></tr>`;
+    }).join('');
+
+    const faq = en
+        ? [
+            { q: 'What is the cheapest service you offer?', a: `The lowest starting price is ¥${cheapest} per 1,000 units. Prices differ by platform, quality tier and delivery speed; the order page shows the exact total before you submit.` },
+            { q: 'Is there a minimum order quantity?', a: 'Yes. Each service has its own minimum, usually between 100 and 1,000 units. The minimum is shown next to each service on the order page.' },
+            { q: 'Do prices change?', a: 'This page is generated from the live service catalog, so the figures shown are current. Prices may change as tiers are added or updated.' },
+            { q: 'Are there hidden fees?', a: 'No. The price per 1,000 units is the price you pay, and the order page shows the total before you submit. There is no separate service charge.' },
+        ]
+        : [
+            { q: '最便宜的服务是多少钱？', a: `当前最低起价是 ¥${cheapest} / 1000 个。不同平台、不同质量档位、不同速度的价格不同，下单页会在提交前显示准确总价。` },
+            { q: '有最低下单数量吗？', a: '有。每个服务有各自的最低数量，通常在 100–1000 个之间，具体数字在下单页该服务旁标注。' },
+            { q: '价格会变吗？', a: '本页数据直接来自实时服务目录，显示的就是当前价格。档位新增或调整时价格会随之变化。' },
+            { q: '有没有隐藏费用？', a: '没有。标价就是实际单价，下单页会在提交前显示总价，不额外收取服务费。' },
+        ];
+
+    const title = en
+        ? `${brand.name} Price List - All Platforms from ¥${cheapest} per 1,000`
+        : `${brand.name} 价格表 · 全平台 ${cheapest} 元起 / 1000 个`;
+    const desc = en
+        ? `Full price list for ${brand.name}: starting price per 1,000 units for ${ordered.slice(0, 6).map((p) => p.label).join(', ')} and more. ${total} services in total, prices shown before you order.`
+        : `${brand.name} 全平台价格表：${ordered.slice(0, 6).map((p) => PLATFORM_CN[p.label] || p.label).join('、')} 等平台的每 1000 个起价一览，共 ${total} 个服务，下单前即可看到准确总价。`;
+
+    const body = `<div class="seo-wrap">${styleBlock}
+<h1>${en ? `${esc(brand.name)} · Price List` : `${esc(brand.name)} · 全平台价格表`}</h1>
+<p>${en
+            ? `All services are priced per 1,000 units. The lowest starting price is <b>¥${cheapest}</b>. There are currently <b>${total}</b> services across ${ordered.length} platforms. The exact total is shown on the order page before you submit.`
+            : `所有服务均按「每 1000 个」计价，最低 <b>${cheapest} 元</b> 起。当前共 <b>${total}</b> 个服务，覆盖 ${ordered.length} 个平台。下单页会在提交前显示准确总价。`}</p>
+<h2>${en ? 'Starting price by platform' : '各平台起价一览'}</h2>
+<table class="seo-table"><thead><tr>
+<th>${en ? 'Platform' : '平台'}</th><th>${en ? 'From (per 1,000)' : '起价 / 1000'}</th><th>${en ? 'Services' : '服务数'}</th><th>${en ? 'Types' : '支持类型'}</th>
+</tr></thead><tbody>${rows}</tbody></table>
+<h2>${en ? 'How pricing works' : '计价规则'}</h2>
+<ol>
+<li>${en ? 'Every service is quoted per 1,000 units, so the unit price does not change with quantity.' : '每个服务都按「每 1000 个」报价，单价不随数量变化。'}</li>
+<li>${en ? 'Enter the quantity you need; the order page multiplies it by the unit price and shows the total.' : '填入需要的数量，下单页按单价换算并显示总价。'}</li>
+<li>${en ? 'Higher quality tiers and faster delivery cost more; the cheapest tier is listed here.' : '质量档位越高、速度越快价格越高；本页列出的是各平台最低档起价。'}</li>
+<li>${en ? 'If an order is cancelled or partially completed, the corresponding amount returns to your balance.' : '订单被取消或部分完成时，对应金额自动退回余额。'}</li>
+</ol>
+${en ? '' : linksTo(brand, catalog.platforms, '')}
+<h2>${en ? 'Frequently asked questions' : '常见问题'}</h2>
+${faqHtml(faq)}
+<a class="seo-cta" href="/order">${en ? 'Start an order →' : '去下单 →'}</a>
+<div class="seo-foot">${esc(brand.name)} · ${en ? 'automatic delivery · pay as you go' : '自动交付 · 在线充值即用'}</div>
+</div>`;
+
+    const canonical = `${base}/price`;
+    const zh = `${base}/price`;
+    const enUrl = `${base}/en/price`;
+    const ld = [
+        {
+            '@context': 'https://schema.org',
+            '@type': 'ItemList',
+            name: en ? `${brand.name} price list` : `${brand.name} 价格表`,
+            numberOfItems: ordered.length,
+            itemListElement: ordered.slice(0, 20).map((p, i) => ({
+                '@type': 'ListItem',
+                position: i + 1,
+                name: `${p.label} - ¥${per1000(p.minPrice)} / 1000`,
+                url: `${base}/c/${p.slug}`,
+            })),
+        },
+        {
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+        },
+    ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+
+    return {
+        title, desc, body, canonical, ld,
+        hreflangs: [
+            { lang: 'zh-CN', href: zh },
+            { lang: 'en', href: enUrl },
+            { lang: 'x-default', href: zh },
+        ],
+    };
+};
+
+router.get('/price', async (req, res, next) => {
+    try {
+        const catalog = await loadCatalog(req.site);
+        const brand = brandOf(req, catalog);
+        const page = pricePageOf(brand, catalog, 'zh');
+        const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
+        if (!shell) return next();
+        const html = injectIntoShell(shell, {
+            head: headOf({ brand, title: page.title, desc: page.desc, canonical: page.canonical, ld: page.ld, hreflangs: page.hreflangs }),
+            body: page.body,
+        });
+        res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
+    } catch (e) {
+        console.error('[seo] /price 失败', e.message);
+        next();
+    }
+});
+
+router.get('/en/price', async (req, res, next) => {
+    try {
+        const catalog = await loadCatalog(req.site);
+        const brand = brandOf(req, catalog);
+        if (brand.isSubsite) return next();
+        const page = pricePageOf(brand, catalog, 'en');
+        const shell = readTemplate('en');
+        if (!shell) return next();
+        const html = injectIntoShell(shell, {
+            head: headOf({ brand, title: page.title, desc: page.desc, canonical: page.canonical, ld: page.ld, locale: 'en_US', ogImageAlt: `${brand.name} price list`, hreflangs: page.hreflangs }),
+            body: page.body,
+        });
+        res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
+    } catch (e) {
+        console.error('[seo] /en/price 失败', e.message);
         next();
     }
 });
