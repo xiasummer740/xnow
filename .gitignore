@@ -122,3 +122,12 @@ ISSUES.md
 
 .tmpbuild/
 .indexnow-hosts
+
+# 🔐 搜索平台与第三方 API 凭据（2026-11-08）
+# 本仓库是 PUBLIC：任何私钥/API key 一旦提交就等于公开。
+.secrets/
+*.service-account.json
+.gsc-service-account.json
+.bing-api-key.txt
+bing-api-key.txt
+.bing-submitted
