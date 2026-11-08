@@ -873,8 +873,15 @@ ${linksTo(brand, catalog.platforms, plat.slug)}
         const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
         if (!shell) return res.status(503).type('text/plain').send('building');
         const ldAll = ldExtra.map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+        // 类型子页只有中文和英文两个语言版本（/id/c/tiktok/fans 这类没做），
+        // 所以只声明 zh-CN / en / x-default 三项 —— 声明的 URL 必须真实存在。
+        const typeAlt = brand.isSubsite ? [] : [
+            { lang: 'zh-CN', href: `${base}/c/${plat.slug}/${tc.slug}` },
+            { lang: 'en', href: `${base}/en/c/${plat.slug}` },
+            { lang: 'x-default', href: `${base}/c/${plat.slug}/${tc.slug}` },
+        ];
         const html = injectIntoShell(shell, {
-            head: headOf({ brand, title, desc, canonical, ld: ldAll }),
+            head: headOf({ brand, title, desc, canonical, ld: ldAll, hreflangs: typeAlt }),
             body,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=1800').send(html);
@@ -1477,8 +1484,25 @@ ${linksTo(brand, catalog.platforms, plat.slug)}
 
         const shell = readTemplate(brand.isSubsite ? 'site' : 'main');
         if (!shell) return res.status(503).type('text/plain').send('building');
+        // 🔑 平台页的多语种互指（2026-11-08 补）。
+        //   之前只有 /en/c/:slug 声明了 hreflang，中文平台页一条都没有 ——
+        //   同一内容有 7 个语言版本却互相不指认，Google 会当重复内容处理。
+        //   分站不卖多语种，不声明。
+        // ⚠️ 必须用 brand.host 拼，不能用 base —— 这个路由作用域里没有 base 变量。
+        //    第一次写成 ${base} 直接导致 105 个平台页全部 500（base is not defined）。
+        const siteBase = `https://${brand.host}`;
+        const platAlt = brand.isSubsite ? [] : [
+            { lang: 'zh-CN', href: `${siteBase}/c/${plat.slug}` },
+            { lang: 'en', href: `${siteBase}/en/c/${plat.slug}` },
+            { lang: 'id', href: `${siteBase}/id/c/${plat.slug}` },
+            { lang: 'pt-BR', href: `${siteBase}/pt/c/${plat.slug}` },
+            { lang: 'vi', href: `${siteBase}/vi/c/${plat.slug}` },
+            { lang: 'ar', href: `${siteBase}/ar/c/${plat.slug}` },
+            { lang: 'ru', href: `${siteBase}/ru/c/${plat.slug}` },
+            { lang: 'x-default', href: `${siteBase}/c/${plat.slug}` },
+        ];
         const html = injectIntoShell(shell, {
-            head: headOf({ brand, title, desc, canonical, ld: jsonLdOf(brand, canonical, { platCn, faq, types: plat.types }) }),
+            head: headOf({ brand, title, desc, canonical, ld: jsonLdOf(brand, canonical, { platCn, faq, types: plat.types }), hreflangs: platAlt }),
             body,
         });
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(html);
