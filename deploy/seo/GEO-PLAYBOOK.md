@@ -169,7 +169,7 @@ access_token，不装 `google-auth`（生产机是 Python 3.8 + 系统 pip，装
 
 | 平台 | DA | 位置 | 链接 | **rel（实测）** |
 |---|---|---|---|---|
-| **Dev.to** | 90 | 技术文章正文 | 2 | ✅ **dofollow**（`rel=noopener noreferrer`） |
+| **Dev.to** | 90 | 技术文章正文（2 篇） | 4 | ✅ **dofollow**（`rel=noopener noreferrer`） |
 | **Dev.to** | 90 | 个人资料页 website_url | 1 | ✅ **dofollow**（`rel=noopener me ugc`） |
 | **GitHub** | 100 | README 顶部 | 4 | ❌ nofollow |
 | **Telegraph** | 90 | 产品说明页 | 3 | ❌ nofollow |
@@ -179,9 +179,19 @@ access_token，不装 `google-auth`（生产机是 Python 3.8 + 系统 pip，装
 
 - GitHub README：`https://github.com/xiasummer740/xnow`
 - Dev.to 账号：`https://dev.to/xnowpro`（XNOW PRO / @xnowpro）
-- Dev.to 文章：`https://dev.to/xnowpro/z-1k54`
+- Dev.to 文章 ①：`https://dev.to/xnowpro/z-1k54`
   「Zero-dependency Google Indexing API with Node.js crypto」
+- Dev.to 文章 ②：`https://dev.to/xnowpro/i-shipped-174-pages-across-7-languages-two-were-silently-broken-3noh`
+  「I shipped 174 pages across 7 languages. Two were silently broken.」
+  —— 讲 hreflang 簇不完整会被整体忽略、`dir="rtl"` 部分替换静默失效、
+  CSS 逻辑属性自动镜像、以及「200 状态码不代表页面上有内容」这个检查方法
 - Telegraph：`https://telegra.ph/XNOW-PRO--社媒增长面板使用说明-11-08`
+
+**写作风格要求（2026-11-08 祥哥明确）**：文章要像真人写的，不能有 AI 味。
+具体做法：用第一人称讲当天真踩的坑、承认自己写错、写出具体的错行为
+（599 字节正文 / 0 个 h1 / 正则没匹配也没报错）、承认当时的情绪
+（"felt good. then I started checking"），**不要**工整的三段式、
+不要「总而言之」、不要升华结尾、不要每条都三点。
 
 #### 🔴 踩坑：README 改在非默认分支等于没做
 
