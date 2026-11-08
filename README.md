@@ -2,6 +2,16 @@
 
 > "We build systems not just to write code, but to engineer automated wealth."
 
+**[官网 / Live Site](https://xnow.taikon.top/)** · **[价格表 / Pricing](https://xnow.taikon.top/price)** · **[English](https://xnow.taikon.top/en)** · **[帮助中心 / Guides](https://xnow.taikon.top/guide)**
+
+线上产品：**XNOW PRO** —— 社媒增长 SaaS 面板，支持 TikTok / Instagram / YouTube /
+Telegram / Facebook / X / Shopee / WhatsApp / Line 等平台，明码标价按每 1000 个计费，
+自动交付，无需提供账号密码。站点提供中文、英文、印尼语、葡语（巴西）、越南语、
+阿拉伯语、俄语 7 个语种。
+
+> 本仓库是**技术实现**（部署脚本 / 后端 / 前端 / SEO 渲染层），不是产品营销页。
+> 想看产品本身请点上面的官网链接。
+
 ## 📂 核心目录结构及详细释义 (Project Structure)
 
 ~~~text
