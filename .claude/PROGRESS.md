@@ -2280,3 +2280,66 @@ TG 播报带「上游单已同步取消 / 失败」，一眼看得到结果。
 4. 工具层（DSH / WorkBuddy）的模型计费铁律已写入全局规则，与本项目代码无关。
 
 **三方同步**：本地 `feat/sites` = `0a9004d8` = 生产 `/var/www/xnow`（已推送）。
+
+## 2026-11-08 晚 SEO / GEO 复盘 + `/en` 空壳修复（`5f8063ad`）
+
+祥哥「接着做 SEO/GEO 那份」。先用真实搜索验证「全球用户能不能搜到」，
+再逐项体检技术层，不靠猜。
+
+### 一、真实搜索结果：品牌词 0 命中，且被同名实体挤压
+
+搜「XNOW PRO」返回的依次是 [X-Nova 插件](https://chromewebstore.google.com/detail/x-nova-viral-trending-pos/fonmhmdbebomahhlepjppokhmcoclkkl)、
+X Pro 智能家居、[EEES XNow Pro 安卓应用](https://play.google.com/store/apps/details?id=com.vesubio.escuelafuentes.xnow.pro)、
+[美国 xnow.com](https://urlscan.io/result/8aa14a0c-e051-4c01-866d-17011bf9ccd8#1) —— **本站一条都没有**。
+这印证了 playbook 里「最大短板」的判断，且比预想更糟：不是排得靠后，是压根不在结果里。
+
+### 二、技术层体检：发现一个从 HTTP 200 上看不出来的洞
+
+| 项 | 实测 |
+|---|---|
+| sitemap | 72 条（含 `/en`、`/vpn`），hreflang 三向齐全 |
+| robots.txt | `Content-Signal: search=yes,ai-train=no,use=reference` + AI 爬虫放行 |
+| llms.txt | 6193 字节真 Markdown |
+| 中文首页 | 3556 字符正文、1 个 h1 |
+| 6 类页面（/c、/guide、/vpn） | 全 200、各带 h1、无 noindex |
+| **`/en`** | **head 完整，正文仅 599 字节、0 个 h1/h2** ❌ |
+
+根因：中文首页走 `location = /` → 后端 SSR；`/en` 落到通用 `location /` →
+`try_files $uri.html` → 静态 `en.html`，**根本没走到后端**。
+`prerender.mjs` 只注入 `<head>`，正文仍是空 `<div id="app">`。
+英文页长期以「标题漂亮、内容全空」的形态进索引，全球英文用户搜不到任何实质内容。
+
+### 三、改动
+
+- `seo.js` 新增 `GET /en` SSR，复用同一份实时目录数据：英文平台起价表、
+  四步下单说明、5 条 FAQ、SoftwareApplication + FAQPage 双 JSON-LD、
+  `og:locale=en_US`；分站 `return next()` 不生成（避免串站）。
+  `headOf` 加 `locale`/`ogImageAlt` 可选参数，`readTemplate` 支持 `en.html`。
+- nginx 主站两处模板（`install.sh`、`deploy/nginx/production/xnow-spa-https`）
+  加 `location = /en` → `proxy_pass :3000/en`，后端挂了回落静态 `en.html`。
+  **`siteDomain.js` 是分站生成器，不动** —— 实测分站 `/en` 返回 404，未串主站。
+- `llms.txt` 里 `/en` 从「English version」改成能体现实质内容的描述。
+- `GEO-PLAYBOOK.md` 补本次复盘、真实搜索结果、§二·8 技术记录。
+
+**结果**：`/en` 8526 字节 / 正文 5166 字符 / 1 h1 / 3 h2 / 2 块 JSON-LD。
+全机回归含 4 个邻居项目全 200；中文首页、6 类页面 h1 均正常；
+sitemap 仍 72 条且 `/en` 在其中。
+
+### 四、结论（回答祥哥那个问题）
+
+**技术层已接近满分，但「周边关键词很容易搜到」目前做不到，瓶颈 100% 在站外。**
+站内该做的（71→72 页、真 404、hreflang、8 类结构化数据、llms.txt、
+AI 爬虫放行、英文正文）都做完了。剩下的三件事只能靠人工/时间：
+
+1. **外链与第三方提及（权重最高）** —— 行业目录提交、知识库内容分发到
+   知乎/Reddit/Medium/Quora，见 playbook §3.2 / §3.3。
+2. **GSC 主动「请求编入索引」** —— Google 不吃 IndexNow，sitemap 只是告知，
+   抓不抓由它决定；需要祥哥的 Google 账号。
+3. **品牌词占位** —— 永远用全称 `XNOW PRO`（带 PRO）对抗同名挤压；
+   社交账号统一简介 + 官网互链 + 补进 `sameAs`。
+
+> ⚠️ 教训：**prerender 只做 `<head>` 不算做完 SEO**。
+> 加完 hreflang/sitemap/meta 必须实测「去标签后的正文字节数」，
+> 否则空壳页会长期以 HTTP 200 混在索引里，从状态码完全看不出来。
+
+**三方同步**：本地 `feat/sites` = `5f8063ad` = 生产 `/var/www/xnow`（已推送）。
