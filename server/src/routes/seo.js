@@ -1861,6 +1861,10 @@ ${langSwitcher(base)}
         { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
     ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
     return {
+        // ⚠️ 必须把 cheapest 传给 title：这 5 个语种的标题都带价格，
+        //    原来只传了 brand.name，导致标题里是硬编码的 ¥0,03 ——
+        //    既是死数字（倍率一变就过时），又和实际起价格不符（涨粉实际 15.5）。
+        //    这里传的是 catalog 算出的**零售价**（base × 倍率 × 折扣），不是成本价。
         title: c.title(brand.name), desc: c.lede(brand.name, names, cheapest).replace(/<[^>]*>/g, ''), body, ld,
         canonical: `${base}${langPathOf(lang)}`,
     };
@@ -1961,7 +1965,7 @@ ${langSwitcher(base, `/c/${plat.slug}`)}
         { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
     ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
     return {
-        title: c.title(brand.name, plat.label, cheapest),
+        title: c.title(brand.name, plat.label),
         desc: c.lede(brand.name, plat.label, plat.count, cheapest).replace(/<[^>]*>/g, ''),
         body, ld, canonical: `${base}${langPathOf(lang)}/c/${plat.slug}`,
     };
