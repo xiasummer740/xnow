@@ -1,17 +1,21 @@
-# GEO / SEO 落地手册（2026-11-07）
+# GEO / SEO 落地手册（2026-11-07，2026-11-08 补 /en 复盘）
 
 > 这是「做到顶级」剩下的那部分 —— **本站代码里能做的已经做完了**，剩下的全是站外动作。
 > 阶段一、二已完成并上线（页面 16 → 71），本文件记录：现状基线、已做的技术改动、
 > 以及只有人工能做的外链/品牌动作清单。
+>
+> 🔄 **2026-11-08 复盘**：祥哥问「全球用户能不能通过周边关键词很容易搜到本站」，
+> 实测后补了一处站内短板（`/en` 空壳），见 §二·8。品牌词仍 0 命中，结论不变：
+> **剩下的瓶颈全在站外信号**（§三）。
 
 ---
 
-## 一、现状基线（2026-11-07 实测）
+## 一、现状基线（2026-11-07 实测，2026-11-08 复核）
 
 | 项 | 数值 | 评价 |
 |---|---|---|
 | 可索引页面 | **71**（首页 + /en + 15 平台页 + 44 类型子页 + 知识库 11） | 原 16 |
-| sitemap | 71 条，含 `/en` 与 `xhtml:link` hreflang 注解 | ✅ |
+| sitemap | 72 条（复核时 +1 为 /vpn），含 `/en` 与 `xhtml:link` hreflang 注解 | ✅ |
 | robots.txt | AI 爬虫逐个放行 + `Content-Signal: search=yes,ai-train=no,use=reference` | ✅ 分级授权 |
 | llms.txt / llms-full.txt | 真实 Markdown，6.2KB / 6.9KB | ✅ 原为假 200 |
 | AI 爬虫实测 | GPTBot / OAI-SearchBot / PerplexityBot / ClaudeBot 全部 200 | ✅ |
@@ -19,11 +23,16 @@
 | 软 404 | 已消除（任意未知路径返回真 404 + 品牌页） | ✅ 原为 200+首页 |
 | 性能 | TTFB 53–67ms，gzip 65% | ✅ |
 | IndexNow | 71 地址已提交，HTTP 200 接受 | ✅ |
-| **品牌词可见度** | 搜索「XNOW PRO 社媒增长」命中 0 | ❌ **最大短板** |
+| **英文首页 `/en` 正文** | 复盘时实测仅 599 字节、0 个 h1 —— 已修为 5166 字符 + 1 h1 + 3 h2 | ✅ 2026-11-08 补 |
+| **品牌词可见度** | 真实搜索「XNOW PRO」返回 X-Nova 插件 / X Pro 智能家居 / EEES XNow Pro 安卓应用 / 美国 xnow.com，**本站 0 命中** | ❌ **最大短板** |
 | **外链 / 第三方提及** | 0 | ❌ **最大短板** |
 
 **结论**：技术层已接近满分，天花板在「页面数量 × 外部信号」。页面数量这轮已从 16 推到 71，
 外部信号从 0 开始 —— 这是接下来唯一真正决定成败的地方。
+
+> 2026-11-08 用真实搜索复核，品牌词 0 命中被再次证实，且**被同名实体挤压**：
+> 美国已有 `xnow.com`（urlscan 有档案）、Google Play 有 `EEES XNow Pro`、
+> Chrome 商店有 `X-Nova` 插件。对策见 §3.4（永远用全称 `XNOW PRO`）。
 
 ---
 
@@ -64,6 +73,32 @@
 - `deploy/nginx/production/xnow-spa-https`（线上存档）
 - `server/src/utils/siteDomain.js` 的分站 vhost 生成器
 - 三处都改了白名单 + 真 404 + llms/guide 转发
+
+### 8. `/en` 从空壳改为服务端渲染（2026-11-08 复盘补做）
+
+**实测发现**：`/en` 的 `<head>` 很完整（title / description / canonical /
+三向 hreflang / og / SoftwareApplication JSON-LD），但**正文只有空 `<div id="app">`**，
+去标签后约 599 字节、**0 个 h1/h2**。搜索引擎抓到的是「标题漂亮、内容全空」的壳。
+中文首页 `/` 有 3556 字节正文，因为它走 `location = /` → 后端 SSR；
+而 `/en` 落到通用 `location /` → `try_files $uri.html` → 静态 `en.html`，
+**根本没走到后端**。
+
+改动三处：
+- `server/src/routes/seo.js`：新增 `GET /en` SSR，复用同一份实时目录数据，
+  输出英文正文（平台起价表 / 四步下单 / 5 条 FAQ），
+  SoftwareApplication + FAQPage 双 JSON-LD，`og:locale=en_US`。
+  分站 `return next()` 不生成（避免串站）。
+- nginx 主站两处模板（`install.sh`、`deploy/nginx/production/xnow-spa-https`）
+  加 `location = /en` → `proxy_pass :3000/en`，后端挂了回落静态 `en.html`。
+  **`siteDomain.js` 是分站生成器，不动**（实测分站 `/en` 返回 404，未串主站）。
+- `llms.txt` 里 `/en` 那行从「English version」改成能体现实质内容的描述。
+
+**结果**：8526 字节 / 正文 5166 字符 / 1 h1 / 3 h2 / 2 块 JSON-LD。
+中文首页、6 类页面、4 个分站/邻居项目全 200，sitemap 仍 72 条，`/en` 仍在其中。
+
+> ⚠️ 教训：**prerender 只做 `<head>` 不算做完 SEO**。
+> 加了 hreflang / sitemap / meta 之后必须实测「去标签后的正文字节数」，
+> 否则英文页会长期以空壳形态进索引，且从 HTTP 200 上完全看不出来。
 
 ---
 

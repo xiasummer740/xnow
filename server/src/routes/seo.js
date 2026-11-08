@@ -45,7 +45,8 @@ const hostOf = (req) => {
 // ── 模板（HTML 壳）：按 mtime 缓存，重新部署后自动刷新 ──────────────────────
 const tplCache = new Map();
 const readTemplate = (kind) => {
-    const file = path.join(DIST, kind === 'site' ? 'site.html' : 'index.html');
+    // kind: 'main' → index.html（中文首页）、'site' → site.html（分站）、'en' → en.html（英文首页）
+    const file = path.join(DIST, kind === 'site' ? 'site.html' : kind === 'en' ? 'en.html' : 'index.html');
     try {
         const st = fs.statSync(file);
         const hit = tplCache.get(kind);
@@ -292,7 +293,7 @@ const jsonLdOf = (brand, canonical, page) => {
     return ld.map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
 };
 
-const headOf = ({ brand, title, desc, canonical, ld, hreflangs }) => `<title>${esc(title)}</title>
+const headOf = ({ brand, title, desc, canonical, ld, hreflangs, locale = 'zh_CN', ogImageAlt }) => `<title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}" />
 <link rel="canonical" href="${esc(canonical)}" />
 ${(hreflangs || []).map((h) => `<link rel="alternate" hreflang="${esc(h.lang)}" href="${esc(h.href)}" />`).join('\n')}
@@ -305,8 +306,8 @@ ${(hreflangs || []).map((h) => `<link rel="alternate" hreflang="${esc(h.lang)}" 
 <meta property="og:image" content="https://${esc(brand.host)}/og.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="${esc(brand.name)} · 社媒增长服务" />
-<meta property="og:locale" content="zh_CN" />
+<meta property="og:image:alt" content="${esc(ogImageAlt || (brand.name + ' · 社媒增长服务'))}" />
+<meta property="og:locale" content="${esc(locale)}" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:image" content="https://${esc(brand.host)}/og.png" />
 ${ld}`;
@@ -558,7 +559,7 @@ router.get('/llms.txt', async (req, res) => {
         L.push('## 其他页面');
         L.push('');
         L.push(`- [首页](${base}/)：平台与服务总览、各平台起价`);
-        L.push(`- [英文版](${base}/en)：English version`);
+        L.push(`- [英文版 English](${base}/en)：Full English homepage — platform list, per-1,000 starting prices, how it works, and FAQ`);
         L.push(`- [知识库](${base}/guide)：下单前必看 —— 链接格式、掉粉、档位选择、直播数据等 ${ARTICLES.length} 篇实操说明`);
         L.push(`- [完整服务清单](${base}/llms-full.txt)：逐条列出全部在售服务与价格区间`);
         L.push('');
@@ -1201,6 +1202,86 @@ ${faqHtml(faq)}
         res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
     } catch (e) {
         console.error('[seo] 首页壳失败', e.message);
+        next();
+    }
+});
+
+// ── /en 英文首页（服务端渲染）────────────────────────────────────────────
+// 2026-11-08 实测：/en 之前只是 prerender 出来的 en.html —— <head> 里
+// title/description/hreflang/JSON-LD 一应俱全，但 <body> 只有空的
+// <div id="app">，正文约 599 字节、0 个 h1/h2。搜索引擎抓到的是
+//「标题很漂亮、内容全空」的壳，全球英文用户实际上搜不到任何实质内容。
+// 这里按中文首页同样的办法回填英文正文，复用同一份实时目录数据。
+router.get('/en', async (req, res, next) => {
+    try {
+        const catalog = await loadCatalog(req.site);
+        const brand = brandOf(req, catalog);
+        // 分站没有英文版，不生成（交给静态兜底，避免串站）
+        if (brand.isSubsite) return next();
+        const base = `https://${brand.host}`;
+        const canonical = `${base}/en`;
+        const top = [...catalog.platforms]
+            .filter((p) => p.label !== 'Other')
+            .sort((a, b) => prefIndex(a.label) - prefIndex(b.label))
+            .slice(0, 6);
+        const topNames = top.map((p) => p.label).join(', ');
+        const cheapest = top.length ? per1000(Math.min(...top.map((p) => p.minPrice))) : '—';
+        const title = `${brand.name} - Buy TikTok Followers & Social Media Growth | SMM Panel`;
+        const desc = `${brand.name} is a social media growth panel for ${topNames} and more. Followers, likes, views and comments from ¥${cheapest} per 1,000, with automatic delivery and no account password required.`;
+
+        const rows = top.map((p) => `<tr><td><a href="/c/${p.slug}" style="color:#22d3ee">${esc(p.label)}</a></td><td>¥${per1000(p.minPrice)} / 1,000</td><td>${p.count} services</td></tr>`).join('');
+        // 英文页的平台内链（linksTo 输出中文名，这里另给一份英文的）
+        const enLinks = catalog.platforms.filter((p) => p.label !== 'Other').slice(0, 10)
+            .map((p) => `<a href="/c/${p.slug}">${esc(p.label)}</a>`).join('');
+        const enLinksHtml = enLinks ? `<div class="seo-links">${enLinks}</div>` : '';
+
+        // 英文 FAQ：给搜索引擎和 AI 一段可直接摘录的答案，不写无法验证的自夸
+        const faq = [
+            { q: 'How is pricing calculated?', a: `Every service is priced per 1,000 units. Enter the quantity you need and the order page shows the total before you submit. Prices start at ¥${cheapest} per 1,000 and vary by quality and delivery speed.` },
+            { q: 'Do you need my account password?', a: 'No. Only a public profile link or username is required. We never ask for login credentials.' },
+            { q: 'How does delivery start?', a: 'Orders are processed automatically after submission. We show the live status of each order in your order history, and unfinished orders are refunded.' },
+            { q: 'Which platforms are supported?', a: `${topNames} and more. Each platform page lists the available service types and their minimum order quantities.` },
+            { q: 'What if an order cannot be completed?', a: 'If an order is cancelled or only partially completed, the corresponding amount is credited back to your balance automatically. You can reuse it for a new order.' },
+        ];
+
+        const body = `<div class="seo-wrap">${styleBlock}
+<h1>${esc(brand.name)} · Social Media Growth Panel</h1>
+<p>${esc(brand.name)} provides followers, likes, views and comments for ${esc(topNames)} and more. Pricing starts at <b>¥${cheapest} per 1,000</b>, delivery is automatic, and no account password is required.</p>
+<h2>Platforms and starting prices</h2>
+${rows ? `<table class="seo-table"><thead><tr><th>Platform</th><th>Starting price</th><th>Services</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
+${enLinksHtml}
+<h2>How it works</h2>
+<ol><li>Top up your balance.</li><li>Choose a service and paste your public profile link or username.</li><li>Enter the quantity and confirm the total shown before submitting.</li><li>Track delivery in your order history.</li></ol>
+<h2>Frequently asked questions</h2>
+${faqHtml(faq)}
+<a class="seo-cta" href="/order">Start an order →</a>
+<div class="seo-foot">${esc(brand.name)} · automatic delivery · pay as you go</div>
+</div>`;
+
+        // 英文页用 SoftwareApplication + Organization 双实体，语言标 en
+        const ld = [
+            { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: brand.name, url: canonical, applicationCategory: 'BusinessApplication', operatingSystem: 'Web Application', inLanguage: 'en', description: desc, offers: { '@type': 'Offer', price: cheapest, priceCurrency: 'CNY' } },
+            { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
+        ].map((x) => `<script type="application/ld+json">${JSON.stringify(x)}</script>`).join('\n');
+
+        const shell = readTemplate('en');
+        if (!shell) return next();     // en.html 还没构建 → 静态兜底
+        const html = injectIntoShell(shell, {
+            head: headOf({
+                brand, title, desc, canonical, ld,
+                locale: 'en_US',
+                ogImageAlt: `${brand.name} social media growth panel`,
+                hreflangs: [
+                    { lang: 'zh-CN', href: `${base}/` },
+                    { lang: 'en', href: `${base}/en` },
+                    { lang: 'x-default', href: `${base}/` },
+                ],
+            }),
+            body,
+        });
+        res.type('text/html; charset=utf-8').set('Cache-Control', 'public, max-age=300').send(html);
+    } catch (e) {
+        console.error('[seo] /en 首页壳失败', e.message);
         next();
     }
 });
