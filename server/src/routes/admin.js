@@ -1257,9 +1257,16 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
   try {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
     const from = Date.now() - days * 86400000;
+    // 🏠 2026-11-09：默认排除站长自己的访问（is_owner=1）。
+    //    实测 1223 PV 里 712 PV（58%）是自己刷的，真实访客只占 6% ——
+    //    不排除的话这张表没有参考价值。
+    //    要排查时传 ?include_owner=1 看含自己的原始数据。
+    const includeOwner = String(req.query.include_owner || '') === '1';
+    const where = { ts: { [Op.gte]: from } };
+    if (!includeOwner) where.is_owner = 0;
     const rows = await PageView.findAll({
       attributes: ['visitor_id', 'ip', 'path', 'referrer', 'ts'],
-      where: { ts: { [Op.gte]: from } },
+      where,
       raw: true,
       limit: 20000,
       order: [['id', 'DESC']],

@@ -12,6 +12,10 @@ const PageView = sequelize.define('PageView', {
   country: { type: DataTypes.STRING(60), allowNull: false, defaultValue: '' },
   city: { type: DataTypes.STRING(80), allowNull: false, defaultValue: '' },
   ts: { type: DataTypes.BIGINT, allowNull: false, defaultValue: () => Date.now() }, // 毫秒时间戳
+  // 🏠 2026-11-09：是不是站长自己的访问（管理员登录态 / 自有 IP）。
+  //    统计时默认排除，否则「访问趋势」里全是自己刷的（实测占 58%）。
+  is_owner: { type: DataTypes.TINYINT, allowNull: false, defaultValue: 0 },
 });
 
 export default PageView;
+
