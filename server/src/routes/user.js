@@ -1,13 +1,18 @@
 import express from 'express';
-import { User, Transaction, Order, Config, Notification } from '../models/index.js';
+import { User, Transaction, Order, Config, Notification, VerificationCode } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize';
 import nodemailer from 'nodemailer';
 import { sendTgMessage } from '../utils/tgBot.js';
 
 const router = express.Router();
-global.profileCodes = global.profileCodes || {};
+
+// 🔁 2026-11-09：改邮箱/改密码的验证码原来存在 `global.profileCodes`（进程内存），
+//    **每次 pm2 restart 全部丢失** —— 和注册验证码是同一个坑。
+//    现在统一落到 verification_codes 表，email 字段存 `profile:{uid}` 做命名空间。
+//    （注册码用真实邮箱，改资料码用 profile: 前缀，两套不会互相覆盖。）
 
 router.get('/status', authenticate, async (req, res) => {
   const user = await User.findByPk(req.user.id);
@@ -57,7 +62,11 @@ router.post('/send-profile-code', authenticate, async (req, res) => {
     });
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    global.profileCodes[user.id] = { code, expire: Date.now() + 5 * 60000 };
+        // 落库：先删旧码再写新码，用户重复点「获取验证码」时旧的立即失效
+        const pkey = `profile:${user.id}`;
+        await VerificationCode.destroy({ where: { email: pkey } }).catch(() => {});
+        await VerificationCode.destroy({ where: { expires_at: { [Op.lt]: Date.now() } } }).catch(() => {});
+        await VerificationCode.create({ email: pkey, code, expires_at: Date.now() + 5 * 60 * 1000 });
 
     const cssLogo = `
       <div style="text-align: center; margin-bottom: 35px;">
@@ -125,8 +134,8 @@ router.post('/update-profile', authenticate, async (req, res) => {
     if (!isMatch) return res.json({ status: 'error', message: '当前密码错误' });
     if (!email_code) return res.json({ status: 'error', message: '必须输入邮箱验证码' });
     
-    const cached = global.profileCodes[user.id];
-    if (!cached || cached.code !== email_code || Date.now() > cached.expire) {
+        const cached = await VerificationCode.findOne({ where: { email: `profile:${user.id}` } });
+        if (!cached || String(cached.code) !== String(email_code) || Date.now() > Number(cached.expires_at)) {
       return res.json({ status: 'error', message: '验证码错误或过期' });
     }
 
@@ -149,7 +158,7 @@ router.post('/update-profile', authenticate, async (req, res) => {
     }
     if (updateMsg.length > 0) {
       await user.save();
-      delete global.profileCodes[user.id]; 
+          await VerificationCode.destroy({ where: { email: `profile:${user.id}` } }).catch(() => {}); 
       sendTgMessage(`📝 <b>[用户自助] 修改资料</b>\n🆔 <b>UID:</b> <code>${user.id}</code>\n- ${updateMsg.join('\n- ')}`);
     }
     res.json({ status: 'success', message: '资料已更新' });

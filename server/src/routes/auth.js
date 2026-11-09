@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/index.js';
+import { User, VerificationCode } from '../models/index.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sendEmailCode } from '../utils/email.js';
 import { Op } from 'sequelize';
@@ -16,13 +16,19 @@ const getRealIp = (req) => {
     return ip === '::1' ? '127.0.0.1' : (ip || '未知IP');
 };
 
-const verifyCodeInline = (email, code) => {
-    if (!global.verificationCodes) global.verificationCodes = new Map();
-    const record = global.verificationCodes.get(email);
+const verifyCodeInline = async (email, code) => {
+    // 🔁 2026-11-09：从「进程内存 Map」改成数据库表 verification_codes。
+    //    原来验证码存在 global.verificationCodes 里，**每次 pm2 restart 全部丢失** ——
+    //    用户点了「获取验证码」、邮件也收到了，期间只要后端重启一次，
+    //    填进去就是「验证码不存在或已过期，请重新获取」。
+    //    当天连续部署重启 5-6 次，就有一批注册用户卡在这一步。
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (!cleanEmail) return { valid: false, message: '邮箱不能为空' };
+    const record = await VerificationCode.findOne({ where: { email: cleanEmail } });
     if (!record) return { valid: false, message: '验证码不存在或已过期，请重新获取' };
-    if (record.code !== String(code)) return { valid: false, message: '验证码错误' };
-    if (Date.now() > record.expires) {
-        global.verificationCodes.delete(email);
+    if (String(record.code) !== String(code)) return { valid: false, message: '验证码错误' };
+    if (Date.now() > Number(record.expires_at)) {
+        await VerificationCode.destroy({ where: { email: cleanEmail } });
         return { valid: false, message: '验证码已过期，请重新获取' };
     }
     return { valid: true };
@@ -35,7 +41,7 @@ router.post('/register', async (req, res) => {
 
   if (!cleanPhone || !password) return res.status(400).json({ status: 'error', message: '手机号与密码不能为空' });
 
-  const check = verifyCodeInline(email, code);
+  const check = await verifyCodeInline(email, code);
   if (!check.valid) return res.status(400).json({ status: 'error', message: check.message });
   
   try {
@@ -73,7 +79,8 @@ router.post('/register', async (req, res) => {
       api_key: 'xnow_' + Date.now() + Math.floor(Math.random()*1000)
     });
     
-    if(global.verificationCodes) global.verificationCodes.delete(email);
+    // 注册成功才删码（数据库）。用 delete 不抛错，码不存在也不影响注册结果。
+    await VerificationCode.destroy({ where: { email: String(email || '').trim().toLowerCase() } }).catch(() => {});
     const roleName = assignedRole === 'admin' ? '至尊管理员' : '黄金用户';
     sendTgMessage(`🎉 <b>全站新用户注册</b>\n🆔 <b>UID:</b> <code>${newUser.id}</code>\n📱 <b>账号:</b> <code>${cleanPhone}</code>\n📧 <b>邮箱:</b> ${cleanEmail || '未绑定'}\n🔰 <b>等级:</b> ${roleName}\n🤝 <b>引荐人:</b> ${finalInviterId ? 'UID '+finalInviterId : '无'}\n🌐 <b>IP:</b> <code>${registerIp}</code>`);
     
@@ -152,10 +159,11 @@ router.post('/send-code', async (req, res) => {
         }
     }
 
-    if (!global.verificationCodes) global.verificationCodes = new Map();
-    
-    const existing = global.verificationCodes.get(email);
-    if (existing && Date.now() < existing.expires - 9 * 60 * 1000) {
+    // 频率限制：`expires_at - 9 分钟` 之内发过就拦住（一个码 10 分钟有效，
+    // 也就是发出去 1 分钟内不许再发）。读数据库，重启不丢。
+    const cleanEmailForCode = String(email || '').trim().toLowerCase();
+    const existing = await VerificationCode.findOne({ where: { email: cleanEmailForCode } });
+    if (existing && Date.now() < Number(existing.expires_at) - 9 * 60 * 1000) {
         return res.status(429).json({ status: 'error', message: '发送过于频繁，请稍后再试' });
     }
 
@@ -173,7 +181,18 @@ router.post('/send-code', async (req, res) => {
         } : null;
         const result = await sendEmailCode(email, code, siteCfg);
         if (result.success) {
-            global.verificationCodes.set(email, { code, expires: Date.now() + 10 * 60 * 1000 });
+            // 落库（同邮箱只留最新一条）：先删旧码再写新码，
+            // 这样用户连续两次点「获取验证码」时旧的立即失效，不会两个码都能用。
+            await VerificationCode.destroy({ where: { email: cleanEmailForCode } }).catch(() => {});
+            // 顺手清理已过期的历史记录 —— 用户点了码但没注册的会一直留着，
+            // 不清的话表会慢慢变大。每次发送时清一次，成本可忽略。
+            await VerificationCode.destroy({ where: { expires_at: { [Op.lt]: Date.now() } } }).catch(() => {});
+            await VerificationCode.create({
+                email: cleanEmailForCode,
+                code,
+                expires_at: Date.now() + 10 * 60 * 1000,
+                ip: getRealIp(req),
+            });
             res.json({ status: 'success', message: '验证码已发送，请注意查收邮件(含垃圾箱)' });
         } else {
             console.error('Email Fail:', result.message);
