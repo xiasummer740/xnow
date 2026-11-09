@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { User, VerificationCode } from '../models/index.js';
 import { sendTgMessage } from '../utils/tgBot.js';
 import { sendEmailCode } from '../utils/email.js';
+import { checkEmailDeliverable } from '../utils/emailCheck.js';
 import { Op } from 'sequelize';
 
 const router = express.Router();
@@ -152,6 +153,16 @@ router.post('/send-code', async (req, res) => {
     if (!email) return res.status(400).json({ status: 'error', message: '请提供邮箱地址' });
     email = String(email).trim().toLowerCase();
 
+    // 📮 2026-11-09：发信前先查域名能不能收信（MX 记录）。
+    //    原来客户把 gmail 打成 gmai、把 .com 打成 .con，后端照样返回
+    //    「验证码已发送」，退信全进站长 QQ 邮箱，客户那边什么都不知道、
+    //    只会反复点获取，最后来投诉「你们系统坏了」。
+    //    DNS 抖动时不拦（checkEmailDeliverable 内部已区分 ENOTFOUND 和超时）。
+    const deliverable = await checkEmailDeliverable(email);
+    if (!deliverable.ok) {
+        return res.status(400).json({ status: 'error', message: deliverable.message });
+    }
+
     if (type !== 'reset' && type !== 'login') {
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
@@ -197,8 +208,26 @@ router.post('/send-code', async (req, res) => {
         } else {
             console.error('Email Fail:', result.message);
             // 🔒 98 期：这句话是给**客户**看的，不能把内部细节（SMTP / 后台配置）甩出去。
-      //    站长要排查配置，走「分站 → 邮件 → 发信自测」，那里有逐项原因。
-      res.status(500).json({ status: 'error', message: '验证码发送失败，请稍后再试；多次失败请联系客服' });
+            //    站长要排查配置，走「分站 → 邮件 → 发信自测」，那里有逐项原因。
+            //
+            // 📮 2026-11-09：QQ 邮箱 SMTP 对 qq.com 收件人会校验账号是否存在，
+            //    不存在直接回 `550 The recipient may contain a non-existent account`。
+            //    这是好事（不会静默丢信），但原来一律回「发送失败，请稍后再试」——
+            //    客户以为系统坏了反复重试。这里按 SMTP 状态码给准确的话。
+            const rawMsg = String(result.message || '');
+            if (/550/.test(rawMsg) && /non-existent|does not exist|user unknown/i.test(rawMsg)) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: '该邮箱不存在（QQ 邮箱会校验账号是否真实存在），请检查邮箱地址是否输错',
+                });
+            }
+            if (/\b55[13]\b/.test(rawMsg)) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: '该邮箱拒收我们的邮件，请换一个邮箱试试（建议 QQ / 163 / 126）',
+                });
+            }
+            res.status(500).json({ status: 'error', message: '验证码发送失败，请稍后再试；多次失败请联系客服' });
         }
     } catch (err) {
         res.status(500).json({ status: 'error', message: '邮件服务器连接异常' });
