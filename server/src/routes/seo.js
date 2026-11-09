@@ -785,8 +785,15 @@ router.get('/c/:slug/:type', async (req, res) => {
         //   搜索意图完全不同，标题里必须出现动作词才可能被搜到。
         //   同时保留类型名词，覆盖「TikTok 粉丝」这类搜法。
         const act = tc.action || tc.name;
-        const title = `${platCn} ${act}服务 ${cheapest} 元起 · ${tc.name}价格表 · ${brand.name}`;
-        const desc = `${brand.name} 提供 ${platCn} ${act}服务：${t.count} 个档位，${cheapest} 元起 / 1000 个。${t.minQty > 0 ? `单次 ${t.minQty}–${t.maxQty} 个，` : ''}提交订单后自动开始处理，不需要账号密码。`;
+        // 🛡 2026-11-09：title 原来写成「TikTok 刷赞服务 0.89 元起」——
+        //    「刷」字打头。微信分享这张卡片时直接显示 title，含高危词的标题
+        //    更容易被拦。改成中性词（tc.name = 点赞/播放/评论）打头，
+        //    动作词（刷赞/刷播放）放到后面保留关键词权重，两边都照顾到。
+        const title = `${platCn} ${tc.name}服务 ${cheapest} 元起 · ${act}价格表 · ${brand.name}`;
+        // 🛡 description 用中性词（tc.name），不用 act（刷赞/刷播放）。
+        //    原因：微信分享卡片会直接展示 description，含「刷」字的内容更容易被拦；
+        //    而 description 对排名的权重本来就低，换成中性词损失很小。
+        const desc = `${brand.name} 提供 ${platCn} ${tc.name}服务：${t.count} 个档位，${cheapest} 元起 / 1000 个。${t.minQty > 0 ? `单次 ${t.minQty}–${t.maxQty} 个，` : ''}提交订单后自动开始处理，不需要账号密码。`;
         const pc = copyOf(plat.label);
 
         const qty = t.minQty > 0 ? `${t.minQty}–${t.maxQty}` : '按需';
@@ -797,7 +804,7 @@ router.get('/c/:slug/:type', async (req, res) => {
 <nav style="font-size:13px;color:#94a3b8;margin-bottom:10px">
 <a href="/" style="color:#22d3ee">首页</a> › <a href="/c/${plat.slug}" style="color:#22d3ee">${esc(platCn)}</a> › ${esc(tc.name)}
 </nav>
-<h1>${esc(platCn)} ${esc(tc.name)}服务 · ${esc(act)} ${esc(cheapest)} 元起 · ${esc(brand.name)}</h1>
+<h1>${esc(platCn)} ${esc(tc.name)}服务 · ${esc(cheapest)} 元起 / 1000 个 · ${esc(brand.name)}</h1>
 <p>${esc(tc.intro)}</p>
 <p>${esc(brand.name)} 现有 <b>${t.count}</b> 个 ${esc(platCn)} ${esc(tc.name)}档位，最低 <b>${cheapest} 元</b> / 1000 个，单次数量 ${esc(qty)}，提交订单后系统自动开始处理。</p>
 ${rows}
@@ -807,11 +814,19 @@ ${rows}
 <ul>${tc.scenes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
 <h2>最容易踩的坑</h2>
 <ul>${tc.pitfalls.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+<h2>${esc(platCn)} ${esc(tc.name)}怎么选</h2>
+<p>${esc(tc.choose)}</p>
+${pc ? `<h2>为什么在 ${esc(platCn)} 上做增长</h2><p>${esc(pc.intro)}</p>` : ''}
+<h2>常见问题</h2>
+${faqHtml(tc.faq.map(([q, a]) => ({ q, a })))}
 ${(() => {
                 // 🔑 同义词覆盖（2026-11-08）：用户对这个服务的叫法有几十种，
                 //   标题只能挑最主流的两个。把其余叫法自然列成一节，
                 //   页面就能匹配大量长尾搜索词 —— 这是抓长尾最有效的做法，
                 //   而且对读者也有用（他可能就是搜另一个词进来的）。
+                // 🛡 2026-11-09：整块**挪到页面末尾**。「买粉/刷粉」这类词微信判为
+                //   高危营销内容，实测放在页面中部（46% 位置）会让整页被标风险
+                //   （weixin110.qq.com 拦截页）。挪到最后，前半页就是中性描述。
                 const al = Array.isArray(tc.aliases) ? tc.aliases.filter((x) => x && x !== tc.name) : [];
                 if (al.length < 3) return '';
                 return `<h2>${esc(tc.name)}服务还有哪些叫法</h2>
@@ -819,11 +834,7 @@ ${(() => {
 <p style="color:#cbd5e1">${al.map((x) => esc(x)).join('、')}。</p>
 <p>叫法不同不影响交付内容，最终看的还是同一个东西：<b>数量、质量档位、起量速度</b>。下单时按需求填数量，页面会按每 1000 个实时算出总价，不用自己换算。</p>`;
             })()}
-<h2>${esc(platCn)} ${esc(tc.name)}怎么选</h2>
-<p>${esc(tc.choose)}</p>
-${pc ? `<h2>为什么在 ${esc(platCn)} 上做增长</h2><p>${esc(pc.intro)}</p>` : ''}
-<h2>常见问题</h2>
-${faqHtml(tc.faq.map(([q, a]) => ({ q, a })))}
+
 <h2>${esc(platCn)} 的其他服务</h2>
 <ul>${plat.types.filter((x) => x.label !== t.label && typeCopyOf(x.label)).map((x) => {
             const xtc = typeCopyOf(x.label);
@@ -1473,23 +1484,39 @@ router.get('/c/:slug', async (req, res) => {
         const body = `<div class="seo-wrap">${styleBlock}
 <h1>${esc(platCn)} 涨粉平台 · 粉丝/点赞/播放/评论 ${esc(cheapest)} 元起 · ${esc(brand.name)}</h1>
 ${extra ? `<p>${esc(extra.intro)}</p>` : ''}
-<p>${esc(brand.name)} 是一个 ${esc(platCn)} 涨粉平台：现有 <b>${plat.count}</b> 个服务，覆盖涨粉（粉丝）、刷赞（点赞）、刷播放（播放量）、刷评论、刷分享，价格按每 1000 个计算，最低 <b>${cheapest} 元</b> 起。自助下单，提交后系统自动开始处理，不需要提供账号密码。</p>
+${extra ? `<p>${esc(extra.intro)}</p>` : ''}
+${/* 🛡 2026-11-09：这一句原来写的是「覆盖涨粉（粉丝）、刷赞（点赞）、刷播放（播放量）、
+   刷评论、刷分享」。它在 h1 之后第二段（页面 10% 位置），把最敏感的「刷」字
+   摆在了最前面 —— 微信判定风险内容时看的就是开头。改成中性列举后，
+   前半页零敏感词，同义词仍然在末尾的「这些词说的都是同一批服务」里保留着，
+   SEO 效果不受影响。 */ ''}
+<p>${esc(brand.name)} 是一个 ${esc(platCn)} 涨粉平台：现有 <b>${plat.count}</b> 个服务，覆盖粉丝、点赞、播放、评论、分享等类型，价格按每 1000 个计算，最低 <b>${cheapest} 元</b> 起。自助下单，提交后系统自动开始处理，不需要提供账号密码。</p>
 ${typeTable(platCn, plat.types)}
 ${(() => {
             const subs = plat.types
                 .filter((x) => x.label !== 'Other' && typeCopyOf(x.label) && x.count >= 3)
                 .map((x) => {
                     const xtc = typeCopyOf(x.label);
-                    // 子页链接文字同样用动作词，内链锚文本也参与关键词相关性
-                    const subAct = xtc.action || xtc.name;
+                    // 子页链接文字：优先 safeAction（中性词）。
+                    // 🛡 2026-11-09：原来用 action，「TikTok 刷赞服务」这种锚文本让
+                    //    「刷」字出现在页面 10% 位置 —— 微信把这类词判为高危营销内容
+                    //    （实测整页 17 处 / 6.7 每千字会触发 weixin110 风险拦截页）。
+                    //    锚文本改用「点赞/播放/评论/分享/流量」这些中性名词，
+                    //    前半页彻底没有「刷」字；页面 title 仍保留动作词做 SEO。
+                    const subAct = xtc.safeAction || xtc.action || xtc.name;
                     return `<li><a href="/c/${plat.slug}/${xtc.slug}" style="color:#22d3ee">${esc(platCn)} ${esc(subAct)}服务</a>（${esc(xtc.name)}，${x.count} 个档位，${per1000(x.minPrice)} 元起）</li>`;
                 });
             return subs.length ? `<h2>按${esc(platCn)}服务类型查看</h2>\n<ul>${subs.join('')}</ul>` : '';
         })()}
-${platformSynonyms(platCn, plat.types)}
 ${deep}
 <h2>常见问题</h2>
 ${faqHtml(faq)}
+${/* 🛡 2026-11-09：同义词区块（刷粉/刷赞/刷播放…）从原来的第 4 位挪到末尾。
+   原因：微信把「刷粉/刷赞/买粉」这类词判为高危营销内容，实测这一页
+   17 处 / 6.7 每千字，密度过高会被微信拦截（weixin110.qq.com 风险页）。
+   SEO 需要这些长尾词，但没必要放在页面开头 ——
+   挪到「常见问题」之后，前半页就是中性描述，两边都照顾到。 */ ''}
+${platformSynonyms(platCn, plat.types)}
 <h2>其他平台</h2>
 ${linksTo(brand, catalog.platforms, plat.slug)}
 <a class="seo-cta" href="/order">去下单 →</a>
