@@ -539,6 +539,8 @@ watch(activeTab, (v) => { if (v === 'finance' && !financeData.value) fetchFinanc
 
 // ====== 访问流量统计看板（SEO 埋点数据）======
 const trafficDays = ref(7); const traffic = ref(null); const trafficLoading = ref(false);
+// 🏠 默认 false = 统计时排除站长自己的访问（否则 69% 都是自己刷的，看不出真实情况）
+const trafficIncludeOwner = ref(false);
 
 // 📄 热门落地页：路由路径 → 中文名
 //   祥哥看不懂 /order /mass-order 这些英文路径（2026-11-06：「这个能中文吗」）。
@@ -579,7 +581,10 @@ function pageLabel(path) {
 const fetchTraffic = async () => {
   trafficLoading.value = true;
   try {
-    const res = await fetch(`/api/admin/stats/traffic?days=${trafficDays.value}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
+    // 🏠 2026-11-09：默认排除站长自己的访问（后端 where.is_owner = 0）。
+    //    勾上「含自己的访问」时传 include_owner=1 看原始数据。
+    const q = `days=${trafficDays.value}${trafficIncludeOwner.value ? '&include_owner=1' : ''}`;
+    const res = await fetch(`/api/admin/stats/traffic?${q}`, { headers: { 'Authorization': `Bearer ${userStore.token}` } });
     const j = await res.json();
     if (j.status === 'success') traffic.value = j.data;
     else ui.showToast('流量统计拉取失败', 'error');
@@ -790,18 +795,39 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 
         <!-- 🌐 访问流量 -->
         <div v-if="activeTab === 'traffic'" class="space-y-6">
-          <div class="flex flex-wrap justify-between items-center gap-2">
-            <h3 class="text-lg font-bold text-white flex items-center"><span class="text-sky-400 mr-2">🌐</span> 访问流量统计<span class="ml-3 text-[11px] text-slate-500 font-normal">SEO 埋点 · 访客≈浏览器唯一标识 · 仅供管理员查看</span></h3>
-            <div class="flex items-center space-x-1 text-xs bg-slate-800/60 p-1 rounded-xl border border-slate-700">
-              <button v-for="d in [7,30]" :key="d" @click="trafficDays=d; fetchTraffic()" :class="['px-3 py-1.5 rounded-lg font-bold transition', trafficDays===d ? 'bg-sky-500 text-white shadow' : 'text-slate-300 hover:bg-slate-700']">{{ d }}天</button>
+          <div class="flex flex-wrap justify-between items-center gap-3">
+            <h3 class="text-lg font-bold text-white flex items-center"><span class="text-sky-400 mr-2">🌐</span> 访问流量统计<span class="ml-3 text-[11px] text-slate-500 font-normal">访客 = 一个浏览器算一个人</span></h3>
+            <div class="flex items-center gap-3">
+              <!-- 🏠 2026-11-09：排除自己访问的开关。默认不勾 = 只看真实访客 -->
+              <label class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-300 cursor-pointer select-none">
+                <input type="checkbox" v-model="trafficIncludeOwner" @change="fetchTraffic" class="w-3.5 h-3.5 rounded accent-sky-500">
+                含我自己的访问
+              </label>
+              <div class="flex items-center space-x-1 text-xs bg-slate-800/60 p-1 rounded-xl border border-slate-700">
+                <button v-for="d in [7,30]" :key="d" @click="trafficDays=d; fetchTraffic()" :class="['px-3 py-1.5 rounded-lg font-bold transition', trafficDays===d ? 'bg-sky-500 text-white shadow' : 'text-slate-300 hover:bg-slate-700']">{{ d }}天</button>
+              </div>
             </div>
+          </div>
+
+          <!-- 一句话说清当前口径 -->
+          <div class="text-[11px] px-1 -mt-2" :class="trafficIncludeOwner ? 'text-amber-400/90' : 'text-emerald-400/90'">
+            <span v-if="trafficIncludeOwner">⚠️ 当前包含你自己的访问 —— 数字会虚高，只适合排查用。</span>
+            <span v-else>✅ 已排除你自己的访问，下面是真实访客数据。勾上面的框可以看含自己的原始数据。</span>
           </div>
 
           <div v-if="trafficLoading" class="p-12 text-center text-slate-500 animate-pulse">⏳ 统计加载中...</div>
           <div v-else-if="traffic">
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">总访问量 (PV)</div><div class="text-2xl font-black text-sky-400 font-mono">{{ traffic.total_pv }}</div></div>
-              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">独立访客 (UV)</div><div class="text-2xl font-black text-amber-400 font-mono">{{ traffic.total_uv }}</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                <div class="text-slate-400 text-xs font-bold mb-1">页面打开次数</div>
+                <div class="text-2xl font-black text-sky-400 font-mono">{{ traffic.total_pv }}</div>
+                <div class="text-[10px] text-slate-500 mt-1">同一个人看 10 页算 10 次</div>
+              </div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                <div class="text-slate-400 text-xs font-bold mb-1">来了多少人</div>
+                <div class="text-2xl font-black text-amber-400 font-mono">{{ traffic.total_uv }}</div>
+                <div class="text-[10px] text-slate-500 mt-1">一个浏览器 = 一个人</div>
+              </div>
               <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">统计区间</div><div class="text-2xl font-black text-white font-mono">{{ traffic.days }} 天</div></div>
               <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">人均浏览</div><div class="text-2xl font-black text-emerald-400 font-mono">{{ traffic.total_uv ? (traffic.total_pv / traffic.total_uv).toFixed(1) : '0' }}<span class="text-xs text-slate-500 font-normal"> 页/人</span></div></div>
             </div>
