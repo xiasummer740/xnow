@@ -11,17 +11,15 @@
             <label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{{ appStore.lang === 'zh' ? '安全邮箱' : 'Email' }}</label><input type="email" v-model="form.email" required class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition" :placeholder="appStore.lang === 'zh' ? '用于接收验证码' : 'For security code'">
             <!-- 📮 2026-11-09：发信走的是 QQ 邮箱 SMTP，发到 Gmail / Outlook 这类
                  国际域名很容易被判进垃圾箱（客户反馈「收不到验证码」几乎都是这个原因）。
-                 下面这行是成本最低的止损：让人知道该去哪儿找，以及优先用哪些邮箱。 -->
+                 这里只保留一句最直接的指路，不啰嗦。 -->
             <p class="mt-1.5 text-[11px] leading-relaxed text-slate-500">
               <template v-if="appStore.lang === 'zh'">
-                ✉️ 建议用 <span class="text-slate-300 font-bold">QQ / 163 / 126</span> 邮箱，到得最快。<br>
-                用 <span class="text-slate-400">Gmail / Outlook</span> 如果 5 分钟没收到，请到
-                <span class="text-amber-400/90 font-bold">「垃圾邮件」</span>文件夹里找一下 —— 国际邮箱常把它判成推广邮件。
+                如果使用 <span class="text-slate-400">Gmail / Outlook</span> 邮箱，验证码请到
+                <span class="text-amber-400/90 font-bold">「垃圾邮件」</span>文件夹里找一下。
               </template>
               <template v-else>
-                ✉️ <span class="text-slate-300 font-bold">QQ / 163 / 126</span> mailboxes deliver fastest.<br>
-                Using <span class="text-slate-400">Gmail / Outlook</span>? If the code does not arrive within 5 minutes,
-                check your <span class="text-amber-400/90 font-bold">Spam</span> folder — international providers often filter it.
+                Using <span class="text-slate-400">Gmail / Outlook</span>? Please check your
+                <span class="text-amber-400/90 font-bold">Spam</span> folder for the verification code.
               </template>
             </p>
           </div>
