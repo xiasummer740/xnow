@@ -7,7 +7,24 @@
         <div v-else class="h-12 mx-auto mb-3 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)] rounded-xl grid place-items-center font-black text-lg" style="background:rgba(148,163,184,.14);color:#e2e8f0">{{ (appStore.siteName || '·').trim().charAt(0) }}</div><h2 class="text-xl font-black text-white tracking-widest">{{ appStore.brandName }} <span v-if="!appStore.isSubsite" class="text-amber-400 text-sm italic border border-amber-400/30 px-2 py-0.5 rounded-full ml-2 relative -top-1">PRO</span></h2><p class="text-xs text-slate-400 mt-2 tracking-widest uppercase">{{ mode === 'login' ? 'Welcome Back' : 'Create Account' }}</p></div>
         <form @submit.prevent="handleSubmit" class="space-y-5">
           <div><label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{{ appStore.lang === 'zh' ? '账号 (手机号)' : 'Phone Account' }}</label><input type="text" v-model="form.phone" required class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition" :placeholder="appStore.lang === 'zh' ? '请输入手机号' : 'Enter phone number'"></div>
-          <div v-if="mode === 'register' || mode === 'reset'"><label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{{ appStore.lang === 'zh' ? '安全邮箱' : 'Email' }}</label><input type="email" v-model="form.email" required class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition" :placeholder="appStore.lang === 'zh' ? '用于接收验证码' : 'For security code'"></div>
+          <div v-if="mode === 'register' || mode === 'reset'">
+            <label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{{ appStore.lang === 'zh' ? '安全邮箱' : 'Email' }}</label><input type="email" v-model="form.email" required class="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition" :placeholder="appStore.lang === 'zh' ? '用于接收验证码' : 'For security code'">
+            <!-- 📮 2026-11-09：发信走的是 QQ 邮箱 SMTP，发到 Gmail / Outlook 这类
+                 国际域名很容易被判进垃圾箱（客户反馈「收不到验证码」几乎都是这个原因）。
+                 下面这行是成本最低的止损：让人知道该去哪儿找，以及优先用哪些邮箱。 -->
+            <p class="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+              <template v-if="appStore.lang === 'zh'">
+                ✉️ 建议用 <span class="text-slate-300 font-bold">QQ / 163 / 126</span> 邮箱，到得最快。<br>
+                用 <span class="text-slate-400">Gmail / Outlook</span> 如果 5 分钟没收到，请到
+                <span class="text-amber-400/90 font-bold">「垃圾邮件」</span>文件夹里找一下 —— 国际邮箱常把它判成推广邮件。
+              </template>
+              <template v-else>
+                ✉️ <span class="text-slate-300 font-bold">QQ / 163 / 126</span> mailboxes deliver fastest.<br>
+                Using <span class="text-slate-400">Gmail / Outlook</span>? If the code does not arrive within 5 minutes,
+                check your <span class="text-amber-400/90 font-bold">Spam</span> folder — international providers often filter it.
+              </template>
+            </p>
+          </div>
           <div v-if="mode === 'register' || mode === 'reset'"><label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{{ appStore.lang === 'zh' ? '验证码' : 'Verification Code' }}</label><div class="flex space-x-2"><input type="text" v-model="form.code" required class="flex-1 bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-400 transition" placeholder="6-digit code"><button type="button" @click="sendCode" :disabled="countdown > 0" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap text-sm">{{ countdown > 0 ? `${countdown}s` : (appStore.lang === 'zh' ? '获取' : 'Get Code') }}</button></div></div>
           <div><div class="flex justify-between items-center mb-1.5"><label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">{{ mode === 'reset' ? (appStore.lang === 'zh' ? '新密码' : 'New Password') : (appStore.lang === 'zh' ? '密码' : 'Password') }}</label><a v-if="mode === 'login'" @click.prevent="mode = 'reset'" href="#" class="text-xs text-amber-400 hover:text-amber-300 transition">{{ appStore.lang === 'zh' ? '忘记密码?' : 'Forgot Password?' }}</a></div>
             <div class="relative">
@@ -49,7 +66,15 @@ const sendCode = async () => {
     const res = await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.value.email, type: mode.value }) });
     const data = await res.json(); 
     if (data.status === 'success') { 
-      uiStore.showToast(appStore.lang === 'zh' ? '验证码已发送' : 'Code sent', 'success');
+      // 🚀 2026-11-09：原来这里写死了「验证码已发送」，把后端返回的
+      //    「请注意查收邮件(含垃圾箱)」整个丢掉了 —— 而后端用的是 QQ 邮箱
+      //    SMTP，发到 Gmail/Outlook 这类国际域名很容易被判进垃圾箱。
+      //    用户只看到「已发送」，收件箱里没有，就以为注册坏了。
+      //    现在优先显示后端文案，并额外补一句可操作的指引。
+      const extra = appStore.lang === 'zh'
+        ? '（5 分钟内没收到，请查看垃圾邮件文件夹；或换 163 / 手机号邮箱再试）'
+        : ' (Not received in 5 minutes? Check your spam folder, or try a different email provider.)';
+      uiStore.showToast((data.message || (appStore.lang === 'zh' ? '验证码已发送' : 'Code sent')) + extra, 'success');
       countdown.value = 60; const timer = setInterval(() => { countdown.value--; if (countdown.value <= 0) clearInterval(timer); }, 1000);
     } else { uiStore.showAlert(data.message, '错误'); } 
   } catch (e) { uiStore.showAlert('Network Error', '系统提示'); } 
