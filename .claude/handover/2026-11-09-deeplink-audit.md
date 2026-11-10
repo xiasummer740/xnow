@@ -607,6 +607,118 @@ GSC 的 URL 检查页面**不能用 URL 参数直达**：
 2. 继续铺外链（Dev.to 隔天一篇）
 3. 别再往站内堆新页面 —— 那只会分散权重
 
+
+---
+
+## 附带七（11-10）：自动备份静默停 3 天
+
+祥哥问：「数据邮箱备份怎么没收到啊，停了吗。」
+
+**确实停了：**
+```
+/var/www/xnow/backups/
+  11-01 ✓  11-02 ✓  11-03 ✓  11-04 ✓  11-05 ✓
+  11-06 ✓  11-07 ✓  11-08 ✗  11-09 ✗  11-10 ✗
+```
+
+### 根因
+
+`backupEngine.js`：
+```js
+let lastBackupTime = Date.now();          // 模块级变量 = 进程启动时刻
+export const autoBackupTask = async () => {
+    if (Date.now() - lastBackupTime >= 24小时) { 发备份 }
+}
+```
+`autoBackupTask` 每 5 分钟被 `setInterval` 调一次（app.js L278），
+但 **`lastBackupTime` 每次 pm2 restart 都重置成「现在」**。
+
+11-08 深夜开始密集部署（修 105 页 500、验证码落库等），一天重启十几次，
+进程从没连续活满 24 小时 → **备份引擎一次都没触发**。
+
+### 修法
+
+```js
+const getLastBackupTime = () => {
+    const times = fs.readdirSync(BACKUP_DIR)
+        .filter(isBackupFile)
+        .map(f => fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs)
+        .sort((a, b) => b - a);
+    return times[0] || 0;   // 0 = 从没备份过 → 立刻跑一次
+};
+```
+· 重启不影响计时（读文件时间）
+· 手动备份也会被算进去（mtime 自动更新）
+· 从没备份过时返回 0 → 首次启动立刻备份（合理）
+
+### 验证
+
+部署后手动触发 `autoBackupTask`：
+```
+✅ xnow_backup_2026_11_10_12_15_01.tar.gz  1.24 MB
+   内含 xnow_db.sql + pending_payments.json + uploads/，共 18 个文件
+✅ 邮件发送成功（sendBackupEmail 无异常）
+✅ TG 也发送成功
+```
+补上了 3 天缺口。下次自动备份 11-11 04:15。
+
+⚠️ **本地 db 备份是另一套独立任务**：cron `10 4 * * *` 跑
+`/usr/local/bin/xnow-db-backup.sh`，落 `/var/backups/xnow-db/`，一直正常
+（11-08 / 09 / 10 都有）。停的只是异地那份（邮件/TG）。
+
+### 这是同一类问题的第三次
+
+| 时间 | 存哪 | 后果 |
+|---|---|---|
+| 11-09 | `global.verificationCodes` | 重启丢 → 用户注册失败 |
+| 11-09 | `global.profileCodes` | 同上 → 改资料失败 |
+| 11-10 | `let lastBackupTime` | 重启归零 → **备份静默停 3 天** |
+
+**凡是「多久没做 X 就做一次」的逻辑，起点必须落在磁盘或数据库上，不能放内存。**
+
+---
+
+## 附带八（11-10）：后台流量统计看不懂 → 加开关 + 换说法
+
+祥哥：「加一个排除自己访问的开关，开关在哪我没看到呀，现在这些都是真实访客吗，
+有多少人，我看不懂。」
+
+### 开关
+
+「访问流量」页右上角（7天/30天 左边）：`☐ 含我自己的访问`
+· 默认不勾 = 只看真实访客（后端 `where.is_owner = 0`）
+· 下面一行状态提示，当前口径一眼可见
+
+### 文案
+
+| 原来 | 现在 | 副标注 |
+|---|---|---|
+| 总访问量 (PV) | **页面打开次数** | 同一个人看 10 页算 10 次 |
+| 独立访客 (UV) | **来了多少人** | 一个浏览器 = 一个人 |
+
+### 实测
+
+```
+默认 days=7                  → PV  157  UV 19
+勾选 days=7&include_owner=1  → PV  593  UV 24
+```
+
+### 那 19 个人是谁
+
+逐个查了访问轨迹：
+
+| 访客 | PV | 访问路径 | 判定 |
+|---|---|---|---|
+| 49bf1cd1 | 55 | /order 19次 /history 11次 /boost 5次 | 真实客户 |
+| d6322d6e | 48 | /history 28次 /order 12次 | 真实客户 |
+| ec662557 | 9 PV | /order 60次 /history 51次（跨20天） | 老客户 |
+| 66c61cca | 12 | /vpn /order /my-site | 真实客户 |
+| 66a50bc9 | 12 | /vpn /order /api-doc /vip | 真实客户 |
+| 其余 14 个 | 1-4 | — | 路过/跳出 |
+
+**这 5 个重度访客都没访问过 `/admin`**（那页只有管理员能进），
+所以是真客户在用自己的账号，不是站长本人。
+
 ## 三方同步
 
 本地 `feat/sites` = `4e4406f2` = 生产 `/var/www/xnow`（17 个关键文件 MD5 逐个比对）。
