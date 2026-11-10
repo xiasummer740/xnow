@@ -1253,10 +1253,20 @@ router.get('/finance', authenticate, async (req, res) => {
 // ====== 流量统计看板（SEO/访问埋点聚合）====== 访客=visitor_id(uuid)；pv=页面浏览量；国家按 top IP 批量 geo 解析
 router.get('/stats/traffic', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
-  const fmtDate = (ms) => { const d = new Date(ms); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
-  try {
+  try {    // days=1 表示「今天」；7/30 是滚动窗口。
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
-    const from = Date.now() - days * 86400000;
+    // 🕗 2026-11-10：days=1 要按**北京时间自然日**算「今天 0 点到现在」，
+    //    而不是「最近 24 小时」—— 服务器是 UTC，直接用 Date.now()-24h 会让
+    //    「今天」错位 8 小时（把昨天下午也算进来）。站长看后台想看的是
+    //    「今天到现在来了多少人」，那必须按他所在时区的零点切。
+    let from;
+    if (days === 1) {
+      const BJ_OFFSET = 8 * 3600 * 1000;
+      const bjNow = Date.now() + BJ_OFFSET;
+      from = Math.floor(bjNow / 86400000) * 86400000 - BJ_OFFSET;
+    } else {
+      from = Date.now() - days * 86400000;
+    }
     // 🏠 2026-11-09：默认排除站长自己的访问（is_owner=1）。
     //    实测 1223 PV 里 712 PV（58%）是自己刷的，真实访客只占 6% ——
     //    不排除的话这张表没有参考价值。
@@ -1275,18 +1285,38 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
     const total_pv = rows.length;
     const total_uv = new Set(rows.map((r) => r.visitor_id || r.ip).filter(Boolean)).size;
 
-    // 按天趋势
+    // 趋势分组：
+    // 🕗 2026-11-10：days=1（今天）改成**按小时**聚合 —— 只有一天的数据按天分组
+    //    只会有 1 个点，图上看不出「今天什么时候人多」。按小时能看到今天的流量分布。
+    //    同时把日期/小时都按**北京时间**格式化：服务器是 UTC，之前用 new Date(ms)
+    //    直接取日期会比北京慢 8 小时（北京凌晨 0-8 点的访问会被算到前一天）。
+    const BJ = 8 * 3600 * 1000;
+    const bjDate = (ms) => {
+      const d = new Date(Number(ms) + BJ);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+    };
+    const bjHour = (ms) => {
+      const d = new Date(Number(ms) + BJ);
+      return String(d.getUTCHours()).padStart(2, '0') + ':00';
+    };
+    const groupByHour = days === 1;
+
     const trendMap = new Map();
     const daySeen = new Map();
     for (const r of rows) {
-      const d = fmtDate(Number(r.ts) || from);
-      if (!trendMap.has(d)) trendMap.set(d, { pv: 0, uv: 0 });
-      trendMap.get(d).pv++;
-      if (!daySeen.has(d)) daySeen.set(d, new Set());
-      daySeen.get(d).add(r.visitor_id || r.ip);
+      const ts = Number(r.ts) || from;
+      const key = groupByHour ? bjHour(ts) : bjDate(ts);
+      if (!trendMap.has(key)) trendMap.set(key, { pv: 0, uv: 0 });
+      trendMap.get(key).pv++;
+      if (!daySeen.has(key)) daySeen.set(key, new Set());
+      daySeen.get(key).add(r.visitor_id || r.ip);
     }
-    for (const [d, set] of daySeen) trendMap.get(d).uv = set.size;
-    const trend = [...trendMap.entries()].map(([date, v]) => ({ date: date.slice(5), pv: v.pv, uv: v.uv }));
+    for (const [k, set] of daySeen) trendMap.get(k).uv = set.size;
+    // 按时间正序排（小时序列要顺着 0→23 走）
+    const trend = [...trendMap.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+        .map(([date, v]) => ({ date: groupByHour ? date : date.slice(5), pv: v.pv, uv: v.uv }));
 
     // 热门页面
     const pageMap = new Map();

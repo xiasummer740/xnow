@@ -597,7 +597,13 @@ const trafficTrendOption = computed(() => {
     tooltip: { trigger: 'axis' },
     legend: { data: ['访问量', '访客'], textStyle: { color: '#94a3b8' } },
     grid: { left: 50, right: 20, top: 40, bottom: 30 },
-    xAxis: { type: 'category', data: traffic.value.trend.map((d) => d.date), axisLabel: { color: '#64748b' } },
+    // 🕗 2026-11-10：今天模式后端返回的是**小时**序列（0:00-23:00，最多 24 个点），
+    //    标签比「11-09」多，直接铺开会叠在一起。超过 12 个就旋转 45°。
+    xAxis: {
+      type: 'category',
+      data: traffic.value.trend.map((d) => d.date),
+      axisLabel: { color: '#64748b', interval: 'auto', rotate: traffic.value.trend.length > 12 ? 45 : 0, fontSize: 10 },
+    },
     yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e293b' } }, axisLabel: { color: '#64748b' } },
     series: [
       { name: '访问量', type: 'bar', data: traffic.value.trend.map((d) => d.pv), itemStyle: { color: '#38bdf8' }, barMaxWidth: 20 },
@@ -804,7 +810,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 含我自己的访问
               </label>
               <div class="flex items-center space-x-1 text-xs bg-slate-800/60 p-1 rounded-xl border border-slate-700">
-                <button v-for="d in [7,30]" :key="d" @click="trafficDays=d; fetchTraffic()" :class="['px-3 py-1.5 rounded-lg font-bold transition', trafficDays===d ? 'bg-sky-500 text-white shadow' : 'text-slate-300 hover:bg-slate-700']">{{ d }}天</button>
+                <!-- 🕗 2026-11-10：加「今天」选项。days=1 在后端按北京时间自然日算
+                     （今天 0 点到现在），不是「最近 24 小时」—— 站长想看的是
+                     「今天到现在来了多少人」。 -->
+                <button v-for="opt in [{v:1,label:'今天'},{v:7,label:'7天'},{v:30,label:'30天'}]" :key="opt.v" @click="trafficDays=opt.v; fetchTraffic()" :class="['px-3 py-1.5 rounded-lg font-bold transition', trafficDays===opt.v ? 'bg-sky-500 text-white shadow' : 'text-slate-300 hover:bg-slate-700']">{{ opt.label }}</button>
               </div>
             </div>
           </div>
@@ -828,12 +837,19 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 <div class="text-2xl font-black text-amber-400 font-mono">{{ traffic.total_uv }}</div>
                 <div class="text-[10px] text-slate-500 mt-1">一个浏览器 = 一个人</div>
               </div>
-              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">统计区间</div><div class="text-2xl font-black text-white font-mono">{{ traffic.days }} 天</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                <div class="text-slate-400 text-xs font-bold mb-1">统计区间</div>
+                <div class="text-2xl font-black text-white font-mono">{{ traffic.days === 1 ? '今天' : traffic.days + ' 天' }}</div>
+                <div v-if="traffic.days === 1" class="text-[10px] text-slate-500 mt-1">北京时间 0 点到现在</div>
+              </div>
               <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold mb-1">人均浏览</div><div class="text-2xl font-black text-emerald-400 font-mono">{{ traffic.total_uv ? (traffic.total_pv / traffic.total_uv).toFixed(1) : '0' }}<span class="text-xs text-slate-500 font-normal"> 页/人</span></div></div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-2">📈 访问趋势</div><v-chart v-if="traffic.trend?.length" :option="trafficTrendOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无趋势数据</div></div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                <div class="text-slate-300 text-sm font-bold mb-2">📈 {{ traffic.days === 1 ? '今日流量（按小时）' : '访问趋势' }}</div>
+                <v-chart v-if="traffic.trend?.length" :option="trafficTrendOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无趋势数据</div>
+              </div>
               <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-2">🌍 访客国家分布</div><v-chart v-if="traffic.countries?.length" :option="trafficCountryOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无国家数据</div></div>
             </div>
 
