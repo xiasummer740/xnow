@@ -253,7 +253,35 @@ export const restoreBackup = (filepath) => {
     });
 };
 
-let lastBackupTime = Date.now();
+/**
+ * 距上次备份过了多久 —— **读磁盘上最新备份文件的 mtime，不用内存变量**。
+ *
+ * 🔴 2026-11-10 踩的坑：原来是 `let lastBackupTime = Date.now();`（模块级变量），
+ *    每次 pm2 restart 都会重置成「现在」。而 autoBackupTask 每 5 分钟才检查一次
+ *    `Date.now() - lastBackupTime >= 24小时` —— 只要进程活不到 24 小时就**永远不会备份**。
+ *
+ *    实测后果：11-07 之后备份彻底停了（11-08 / 09 / 10 三天没有新文件），
+ *    因为那几天在密集部署、反复重启 pm2，进程从没连续活满 24 小时。
+ *    祥哥问「数据邮箱备份怎么没收到，停了吗」就是这件事。
+ *
+ *    改成读文件 mtime 之后：重启不影响计时，手动备份也会被算进去。
+ *    返回 0 表示从没备份过 → 下一步会立刻跑一次（首次启动即备份，合理）。
+ */
+const getLastBackupTime = () => {
+    try {
+        const times = fs.readdirSync(BACKUP_DIR)
+            .filter(isBackupFile)
+            .map((f) => {
+                try { return fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs; } catch { return 0; }
+            })
+            .filter((t) => t > 0)
+            .sort((a, b) => b - a);
+        return times[0] || 0;
+    } catch {
+        return 0;
+    }
+};
+
 export const autoBackupTask = async () => {
     try {
         const conf = await Config.findOne({ where: { key: 'auto_backup_interval' } });
@@ -261,9 +289,9 @@ export const autoBackupTask = async () => {
         if (intervalHours <= 0) return;
 
         const msInterval = intervalHours * 60 * 60 * 1000;
+        const lastBackupTime = getLastBackupTime();
         if (Date.now() - lastBackupTime >= msInterval) {
             const backup = await createBackup();
-            lastBackupTime = Date.now();
 
             // ⚠️ 保留策略**按文件修改时间**排序，不能按文件名 —— 文件名的时间戳是
             // `2026_10_13` 这种**不补零**格式，字典序里 '1' < '9'，于是 10 月的名字排到
