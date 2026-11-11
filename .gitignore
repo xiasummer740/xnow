@@ -149,3 +149,7 @@ ISSUES.md
 
 # Bing 已提交 URL 记录（每日配额 100，靠它去重）
 .bing-submitted
+
+# GSC 每日提交的本地进度与日志（tools/gsc-daily-index.py 生成）
+tools/gsc-requested.json
+tools/gsc-daily-index.log
