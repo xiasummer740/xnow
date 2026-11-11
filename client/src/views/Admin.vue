@@ -128,16 +128,68 @@ const orderDetail = ref({ show: false, data: null, note: '' });
 const openOrderDetail = (o) => { orderDetail.value = { show: true, data: o, note: o.admin_note || '' }; };
 const closeOrderDetail = () => { orderDetail.value.show = false; };
 
+/**
+ * 退款：先查上游状态，再决定要不要二次确认。
+ *
+ * 🔍 2026-11-11 祥哥要求「不能我直接退了，万一上游没用退款按钮或者退款没有到账呢」。
+ *    实测发现上游「立即启动」类服务一旦开跑，取消请求只是被受理（给工单号），
+ *    实际不执行 —— 钱退给客户，上游成本追不回来，纯亏。
+ *    所以点退款先调 refund-check：
+ *      · Pending（还没跑）      → 直接退，成本能追回
+ *      · In progress / Completed → 弹二次确认，明确告知"预计追不回 ¥X"
+ */
 const refundOrder = async (o) => {
   if (!await uiStore.confirm(`确定退款订单 ${o.order_no}？金额: ¥${o.charge}`)) return;
   try {
+    // ① 预检
+    let pre = null;
+    try {
+      const pr = await fetch('/api/admin/orders/refund-check', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+        body: JSON.stringify({ orderId: o.id })
+      });
+      const pj = await pr.json();
+      if (pj.status === 'success') pre = pj.data;
+    } catch { /* 预检失败不挡住退款，后端还有一道 */ }
+
+    let force = false;
+    if (pre && pre.needForce) {
+      const lossTxt = Number(pre.estLoss || 0) > 0
+        ? `\n\n⚠️ 退款后上游成本 ¥${Number(pre.estLoss).toFixed(2)} 追不回来（纯亏）`
+        : '';
+      const ok = await uiStore.confirm(
+        `这笔订单的上游状态：${pre.upstreamStatus || '未知'}\n\n` +
+        `${pre.reason}\n${pre.suggestion}` + lossTxt +
+        `\n\n仍然要退款 ¥${Number(pre.refundAmount).toFixed(2)} 吗？`
+      );
+      if (!ok) return;
+      force = true;
+    }
+
+    // ② 执行退款
     const res = await fetch('/api/admin/orders/refund', {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
-      body: JSON.stringify({ orderId: o.id })
+      body: JSON.stringify({ orderId: o.id, force })
     });
     const j = await res.json();
-    if (j.status === 'success') { ui.showToast('退款成功', 'success'); fetchOrders(); }
-    else { ui.showToast(j.message || '退款失败', 'error'); }
+    if (j.status === 'success') { ui.showToast(j.message || '退款成功', 'success'); fetchOrders(); }
+    else {
+      // 后端兜底的预检拦截（前端没拿到 pre 时）
+      if (j.code === 'UPSTREAM_RUNNING') {
+        const ok = await uiStore.confirm(`${j.message}\n\n仍然要退款吗？`);
+        if (ok) {
+          const res2 = await fetch('/api/admin/orders/refund', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userStore.token}` },
+            body: JSON.stringify({ orderId: o.id, force: true })
+          });
+          const j2 = await res2.json();
+          if (j2.status === 'success') { ui.showToast(j2.message || '退款成功', 'success'); fetchOrders(); }
+          else ui.showToast(j2.message || '退款失败', 'error');
+        }
+        return;
+      }
+      ui.showToast(j.message || '退款失败', 'error');
+    }
   } catch (e) { ui.showToast('网络异常', 'error'); }
 };
 

@@ -214,4 +214,107 @@ export async function sweepPendingCancellations(limit = 20) {
   return { total: rows.length, ok, fail };
 }
 
+
+/**
+ * 🔍 查上游一笔订单的当前状态（退款预检用）。
+ *
+ * 2026-11-11 加：祥哥要的是「退款前先确认上游能不能取消 / 退了没有」。
+ * 实测上游 `action=status` 返回：
+ *   { "5827672": { charge, start_count, status, remains, currency } }
+ * status 取值：Pending / In progress / Processing / Completed / Partial / Canceled
+ *
+ * ⚠️ 上游没有「退款状态」字段，也没有「这笔钱退回来没有」的显式标记。
+ *    能确认的只有订单状态 —— 状态变 Canceled 才说明这单停了（成本才有机会回）。
+ *
+ * @returns {Promise<{ok:boolean, status?:string, remains?:number, charge?:number, reason?:string, raw?:any}>}
+ */
+export async function queryUpstreamStatus(upstreamOrderId) {
+  const id = String(upstreamOrderId ?? '').trim();
+  if (!id || id === 'null' || id === 'undefined') {
+    return { ok: false, reason: '没有上游单号（订单可能还没推上去）' };
+  }
+  const confs = await Config.findAll({ where: { key: ['upstream_url', 'upstream_key'] } });
+  const conf = {};
+  confs.forEach((c) => (conf[c.key] = c.value));
+  if (!conf.upstream_url || !conf.upstream_key) {
+    return { ok: false, reason: '上游地址或密钥未配置' };
+  }
+  try {
+    const body = new URLSearchParams({
+      key: conf.upstream_key, action: 'status', orders: id,
+    }).toString();
+    const r = await axios.post(conf.upstream_url, body, { headers: FORM, timeout: CANCEL_TIMEOUT_MS });
+    const d = r.data && r.data[id];
+    if (!d || !d.status) return { ok: false, reason: '上游没有返回该单状态', raw: r.data };
+    return {
+      ok: true,
+      status: String(d.status),
+      remains: d.remains !== undefined ? Number(d.remains) : undefined,
+      charge: d.charge !== undefined ? Number(d.charge) : undefined,
+      raw: d,
+    };
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || String(e) };
+  }
+}
+
+/**
+ * 退款前预检：这笔订单现在退款，上游那边会怎样？
+ *
+ * 返回是否允许直接退、要不要管理员二次确认、以及预计追不回的成本。
+ * 🔴 只查不改 —— 这个函数绝不产生副作用，可以随便调。
+ */
+export async function checkRefundable(order) {
+  const result = {
+    upstreamStatus: null,
+    canRefund: true,
+    needForce: false,
+    estLoss: 0,          // 预计追不回来的上游成本
+    reason: '',
+    suggestion: '',
+  };
+  if (!order || !order.upstream_order_id) {
+    result.reason = '这单没有上游单号（可能还没提交到上游）';
+    result.suggestion = '可以直接退款，上游那边没有需要取消的单';
+    return result;
+  }
+
+  const q = await queryUpstreamStatus(order.upstream_order_id);
+  if (!q.ok) {
+    result.needForce = true;
+    result.estLoss = Number(order.upstream_charge || 0);
+    result.reason = `查不到上游状态：${q.reason || '未知原因'}`;
+    result.suggestion = '无法确认上游是否还在跑，需要你确认后再退';
+    return result;
+  }
+
+  const st = (q.status || '').toLowerCase();
+  const cost = Number(order.upstream_charge || 0);
+  result.upstreamStatus = q.status;
+
+  if (/cancel/.test(st)) {
+    result.reason = '上游单已取消，没有成本损失';
+    result.suggestion = '可以放心退款';
+    return result;
+  }
+  if (/pending|排队/.test(st)) {
+    result.reason = '上游单还在排队，尚未开始执行';
+    result.suggestion = '可以先取消上游，成本能追回';
+    return result;
+  }
+  if (/completed|partial|完成/.test(st)) {
+    result.needForce = true;
+    result.estLoss = cost;   // 已交付的部分成本已经花掉
+    result.reason = '上游单已完成/部分完成，成本已经花掉';
+    result.suggestion = '退款后这部分成本追不回来，确认要退再退';
+    return result;
+  }
+  // in progress / processing / 其它运行态
+  result.needForce = true;
+  result.estLoss = cost;
+  result.reason = '上游单已开始执行，且「立即启动」类服务取消后成本不返还';
+  result.suggestion = '退款会让这单的上游成本白花，确认要退再退';
+  return result;
+}
+
 export default cancelUpstreamAfterRefund;

@@ -961,9 +961,76 @@ router.get('/transactions', authenticate, async (req, res) => {
 // ====== 订单运营操作 ======
 
 // 订单退款
-router.post('/orders/refund', authenticate, async (req, res) => {
+// 🔍 退款预检：前端点「退款」时先调这个，拿到上游状态再决定要不要弹二次确认。
+//    和 /orders/refund 里的预检是同一套判定（checkRefundable），只是这里只查不改。
+router.post('/orders/refund-check', authenticate, async (req, res) => {
   if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
   const { orderId } = req.body;
+  try {
+    const order = await Order.findByPk(orderId);
+    if (!order) return res.json({ status: 'error', message: '订单不存在' });
+    const { checkRefundable } = await import('../utils/upstreamCancel.js');
+    const pc = await checkRefundable(order);
+    // 按现有规则算一下会退多少（和退款接口保持一致，避免"预览 10 元、实退 8 元"）
+    const qty = parseInt(order.quantity) || 1;
+    const remains = parseInt(order.remains) || 0;
+    const ratio = remains > 0 && remains < qty ? remains / qty : 1;
+    const refundAmount = parseFloat((parseFloat(order.charge) * ratio).toFixed(6));
+    return res.json({
+      status: 'success',
+      data: {
+        orderNo: order.order_no,
+        upstreamStatus: pc.upstreamStatus,
+        canRefund: pc.canRefund,
+        needForce: pc.needForce,
+        estLoss: pc.estLoss,
+        reason: pc.reason,
+        suggestion: pc.suggestion,
+        refundAmount,
+        charge: parseFloat(order.charge),
+        isRefunded: !!order.is_refunded,
+      },
+    });
+  } catch (e) {
+    return res.json({ status: 'error', message: '预检失败: ' + ((e && e.message) || e) });
+  }
+});
+
+router.post('/orders/refund', authenticate, async (req, res) => {
+  if (!['admin', 'super_admin'].includes(req.user.role)) return res.status(403).json({ status: 'error' });
+  const { orderId, force } = req.body;
+
+  // 🔍 2026-11-11 退款预检（祥哥要求：先确认上游能不能取消 / 退了没有，再退客户钱）
+  //    必须在**事务外**做 —— 这是网络请求（最多 12 秒），持着事务会把余额行锁死。
+  //    判定规则见 utils/upstreamCancel.js → checkRefundable：
+  //      已取消 / 排队中        → 直接退，成本能追回
+  //      已开始执行 / 已完成    → 需要 force=true 二次确认，退款后成本追不回
+  //      查不到状态             → 同样要 force（宁可多问一句，不能默默亏钱）
+  try {
+    const pre = await Order.findByPk(orderId);
+    if (pre) {
+      const { checkRefundable } = await import('../utils/upstreamCancel.js');
+      const pc = await checkRefundable(pre);
+      if (pc.needForce && force !== true) {
+        return res.json({
+          status: 'error',
+          code: 'UPSTREAM_RUNNING',
+          message:
+            `${pc.reason}\n${pc.suggestion}` +
+            (pc.estLoss > 0 ? `\n预计追不回的成本：¥${Number(pc.estLoss).toFixed(2)}` : ''),
+          data: {
+            upstreamStatus: pc.upstreamStatus,
+            estLoss: pc.estLoss,
+            suggestion: pc.suggestion,
+          },
+        });
+      }
+    }
+  } catch (e) {
+    // 预检本身出错不能挡住退款（管理员可能正急着处理客户投诉），只记日志
+    console.warn('[admin/refund] 预检异常，按原流程继续:', (e && e.message) || e);
+  }
+
   const t = await sequelize.transaction();
   try {
     // 🔒 事务 + 行锁：中途出错(500)或并发双击也不会「钱退了标记没写」导致重复退款
