@@ -283,6 +283,18 @@ app.listen(PORT, "127.0.0.1", async () => {
   setInterval(runSiteBillingCheck, 1000 * 60 * 10);
   setTimeout(runSiteBillingCheck, 1000 * 60 * 2);
   setInterval(autoTrafficWarning, 1000 * 60 * 60); // 每小时检查流量预警
+  // 🚫 退款后的上游取消跟踪（2026-11-11 加）。
+  //    上游取消是**异步**的：调 cancel 只拿到工单号，状态不一定马上变。
+  //    实测「已完成」的单能取消成功，「进行中」的「立即启动」单取消不了（成本追不回）。
+  //    所以每分钟扫一遍「已退款但上游还没确认取消」的单：
+  //      查状态 → 已取消就落标记停止跟踪；还没就再调一次取消；
+  //      退款超过 6 小时仍未取消 → 标记「需人工核对上游退款」并发 TG 告警。
+  //    ⚠️ 这个任务以前根本没挂上定时器，等于形同虚设。
+  setInterval(() => {
+    import('./utils/upstreamCancel.js')
+      .then(({ sweepPendingCancellations }) => sweepPendingCancellations(15))
+      .catch((e) => console.warn('[cancelSweep] 异常:', (e && e.message) || e));
+  }, 1000 * 60 * 1);
   setInterval(checkNginxTempDirs, 1000 * 60 * 5);  // nginx 临时目录属主自愈（防大响应被腰斩）
   setInterval(checkNginxErrors, 1000 * 60 * 5);    // nginx 严重错误告警（防静默故障）
   // 🔎 抓取防回退自检：robots 被 CF 托管内容盖回去 / GPTBot 被 AI 策略再拦 / sitemap 掉地址，

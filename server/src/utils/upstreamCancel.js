@@ -151,30 +151,59 @@ export async function cancelUpstreamAfterRefund(order, opts = {}) {
   // 把「上游取消」的结果留在订单上，管理员一眼看得到，不用翻日志。
   // 用 admin_note 而不是 refund_reason —— 后者是给客户看的，不能出现
   // 「上游/取消接口」这类内部字眼。
-  const tag = result.ok
-    ? '上游单已自动取消'
-    : `上游单取消失败:${String(result.reason || '').slice(0, 60)}`;
+  // 🔴 2026-11-11 关键修正：cancel 返回「工单已受理」**不等于已取消**。
+  //    实测服务 29920（立即启动类）：连续两次取消都拿到工单号（112932/112935），
+  //    但轮询 60 秒状态始终 Processing，上游余额还在掉。
+  //    旧代码把 accepted 当成功 → 标记「已自动取消」→ sweep 不再扫这单 →
+  //    **永远不重试**，上游一直跑、成本一直扣。
+  //
+  //    所以这里分三种标记：
+  //      confirmed（已确认取消）  → 标「上游单已自动取消」，sweep 停止跟踪
+  //      accepted（工单已受理）   → 标「取消已提交待生效」，sweep 继续查
+  //      failed                   → 标「取消失败:原因」，sweep 继续重试
+  let confirmed = false;
+  if (result.ok && !result.already) {
+    // 受理后给上游一点时间，再查一次状态确认
+    await new Promise((r) => setTimeout(r, 2500));
+    const q = await queryUpstreamStatus(order.upstream_order_id);
+    confirmed = !!(q.ok && /cancel/i.test(String(q.status || '')));
+  } else if (result.ok && result.already) {
+    confirmed = true;
+  }
+
+  let tag;
+  if (confirmed) {
+    tag = '上游单已自动取消';
+  } else if (result.ok) {
+    const ticket = result.ticket ? `#${result.ticket}` : '';
+    tag = `上游单取消已提交${ticket}待生效`;
+  } else {
+    tag = `上游单取消失败:${String(result.reason || '').slice(0, 60)}`;
+  }
   let note = String(order.admin_note || '').trim();
   // 幂等写入：成功了就把旧的「失败」标记替换掉（否则定时兜底会永远重扫这一单），
   // 失败了就更新最后一次原因，但保留「曾失败」的事实供人工排查。
-  note = note.replace(/\[上游单(?:已自动取消|取消失败:[^\]]*)\]/g, '').trim();
+  note = note.replace(/\[上游单[^\]]*\]/g, '').trim();
   order.admin_note = (note ? note + ' ' : '') + `[${tag}]`;
   try { await order.save(); } catch (e) { /* 备注写不进去不影响退款主流程 */ }
 
-  if (!result.ok) {
+  if (confirmed) {
+    console.log(`✅ [cancelAfterRefund] order=${order.order_no} up=${order.upstream_order_id} 已确认取消`);
+  } else if (result.ok) {
+    console.log(
+      `⏳ [cancelAfterRefund] order=${order.order_no} up=${order.upstream_order_id} ` +
+      `取消已受理${result.ticket ? '(工单 ' + result.ticket + ')' : ''}，等待上游生效 —— sweep 会继续跟踪`
+    );
+  } else {
     console.warn(
       `⚠️ [cancelAfterRefund] 上游单取消失败 order=${order.order_no} up=${order.upstream_order_id} ` +
       `service=${order.service_id} allowCancel=${allowed} reason=${result.reason}`
     );
     // 失败也**不抛**：钱已经退了，抛出去只会让接口 500，客户以为退款失败。
-    // 由 sweepPendingCancellations() 每分钟重试，或管理员在备注里看到后手动处理。
-  } else {
-    console.log(
-      `✅ [cancelAfterRefund] order=${order.order_no} up=${order.upstream_order_id} ` +
-      `${result.already ? '原本已取消' : '已取消'}`
-    );
+    // 由 sweepPendingCancellations() 定期重试，或管理员在备注里看到后手动处理。
   }
-  return result;
+  // 把 confirmed 带给调用方，让 sweep 知道该不该继续跟
+  return { ...result, confirmed };
 }
 
 /**
@@ -184,50 +213,94 @@ export async function cancelUpstreamAfterRefund(order, opts = {}) {
  */
 export async function sweepPendingCancellations(limit = 20) {
   const { Op } = await import('sequelize');
-  // 只看最近 7 天：更早的已退款单，上游那边大概率早已手动处理或自然结束，
-  // 全量重扫会对上游发一堆无意义请求，还可能触发限流。
+  const { sendTgMessage } = await import('./tgBot.js');
+
+  // 只扫最近 7 天：太老的单上游早清理了，全量重扫会打爆上游还可能限流
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const rows = await Order.findAll({
     where: {
       is_refunded: true,
       upstream_order_id: { [Op.not]: null },
       updated_at: { [Op.gte]: since },
-      [Op.or]: [
-        { admin_note: null },
-        { admin_note: '' },
-        { admin_note: { [Op.notLike]: '%上游单已自动取消%' } },
+      // 还没「已确认取消」也没标记「需人工」的，都要继续跟
+      [Op.and]: [
+        {
+          [Op.or]: [
+            { admin_note: null },
+            { admin_note: '' },
+            { admin_note: { [Op.notLike]: '%上游单已自动取消%' } },
+          ],
+        },
+        {
+          [Op.or]: [
+            { admin_note: null },
+            { admin_note: '' },
+            { admin_note: { [Op.notLike]: '%需人工核对上游退款%' } },
+          ],
+        },
       ],
     },
     order: [['updated_at', 'DESC']],
     limit,
   });
 
-  let ok = 0;
-  let fail = 0;
+  let confirmed = 0;
+  let pending = 0;
+  let failed = 0;
+  let escalated = 0;
+
   for (const o of rows) {
+    // ① 先查状态 —— 退款是异步的，上游可能已经把单取消了但我们还不知道
+    const q = await queryUpstreamStatus(o.upstream_order_id);
+    if (q.ok && /cancel/i.test(String(q.status || ''))) {
+      let note = String(o.admin_note || '').trim();
+      note = note.replace(/\[上游单[^\]]*\]/g, '').trim();
+      o.admin_note = (note ? note + ' ' : '') + '[上游单已自动取消]';
+      try { await o.save(); } catch { /* 忽略 */ }
+      confirmed++;
+      continue;
+    }
+
+    // ② 还没取消 —— 看看这笔退款多久了。退款反应慢是常态，
+    //    但超过 6 小时还纹丝不动，基本就是上游没执行，得人去后台点。
+    const refundAgeH = (Date.now() - new Date(o.updated_at).getTime()) / 3600000;
+    if (q.ok && refundAgeH > 6) {
+      let note = String(o.admin_note || '').trim();
+      const tries = (note.match(/\[取消尝试 (\d+) 次\]/) || [])[1];
+      const n = (parseInt(tries, 10) || 0) + 1;
+      note = note.replace(/\[取消尝试 \d+ 次\]/g, '').trim();
+      if (n >= 3) {
+        note = note.replace(/\[上游单[^\]]*\]/g, '').trim();
+        o.admin_note = (note ? note + ' ' : '') + `[需人工核对上游退款] 退款已 ${refundAgeH.toFixed(1)} 小时，上游状态仍是 ${q.status}`;
+        try { await o.save(); } catch { /* 忽略 */ }
+        escalated++;
+        try {
+          await sendTgMessage(
+            `⚠️ <b>退款已过 ${refundAgeH.toFixed(1)} 小时，上游仍未取消</b>\n` +
+            `订单：<code>${o.order_no}</code>\n上游单：<code>${o.upstream_order_id}</code>\n` +
+            `状态：<b>${q.status}</b>\n金额：¥${parseFloat(o.charge || 0).toFixed(2)}\n` +
+            `👉 请到上游后台「订单 → 退款」页面核对这笔`
+          );
+        } catch { /* TG 失败不影响主流程 */ }
+        continue;
+      }
+      o.admin_note = (note ? note + ' ' : '') + `[取消尝试 ${n} 次]`;
+      try { await o.save(); } catch { /* 忽略 */ }
+    }
+
+    // ③ 继续尝试取消
     const r = await cancelUpstreamAfterRefund(o);
-    if (r.ok) ok++; else fail++;
+    if (r && r.confirmed) confirmed++;
+    else if (r && r.ok) pending++;
+    else failed++;
   }
+
   if (rows.length) {
-    console.log(`[cancelSweep] 本轮 ${rows.length} 条，成功 ${ok}，失败 ${fail}`);
+    console.log(`[cancelSweep] 本轮 ${rows.length} 条 → 确认取消 ${confirmed}、待生效 ${pending}、失败 ${failed}、转人工 ${escalated}`);
   }
-  return { total: rows.length, ok, fail };
+  return { total: rows.length, confirmed, pending, failed, escalated };
 }
 
-
-/**
- * 🔍 查上游一笔订单的当前状态（退款预检用）。
- *
- * 2026-11-11 加：祥哥要的是「退款前先确认上游能不能取消 / 退了没有」。
- * 实测上游 `action=status` 返回：
- *   { "5827672": { charge, start_count, status, remains, currency } }
- * status 取值：Pending / In progress / Processing / Completed / Partial / Canceled
- *
- * ⚠️ 上游没有「退款状态」字段，也没有「这笔钱退回来没有」的显式标记。
- *    能确认的只有订单状态 —— 状态变 Canceled 才说明这单停了（成本才有机会回）。
- *
- * @returns {Promise<{ok:boolean, status?:string, remains?:number, charge?:number, reason?:string, raw?:any}>}
- */
 export async function queryUpstreamStatus(upstreamOrderId) {
   const id = String(upstreamOrderId ?? '').trim();
   if (!id || id === 'null' || id === 'undefined') {
