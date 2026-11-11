@@ -65,8 +65,9 @@ export async function cancelUpstreamOrder(upstreamOrderId) {
 
     const body = new URLSearchParams({
       key: conf.upstream_key,
+      // 🔴 2026-11-11 修：上游要的是 orders（复数），用单数它根本不处理
       action: 'cancel',
-      order: id,
+      orders: id,
     }).toString();
     const res = await axios.post(conf.upstream_url, body, {
       headers: FORM,
@@ -74,22 +75,42 @@ export async function cancelUpstreamOrder(upstreamOrderId) {
     });
     const data = res.data;
 
-    // 上游 v2 的 cancel 成功回复形态：{"order":<id>} 或 {"success":true}；
-    // 也可能直接回个空对象。有 error 就当失败，但「已取消/不存在」按幂等处理。
-    if (data && typeof data === 'object' && data.error) {
-      const msg = String(data.error);
-      // 「已经取消 / 单子本来就结束」按幂等成功处理。
-      // ⚠️ 不能只匹配 "cancel"：上游对「已完成」「暂时不允许取消」也回
-      //    "Cancel unavailable. Try again later."，那句含 cancel 但**不是**
-      //    已取消。误判成成功 = 不再重试 = 上游继续跑、成本照扣。
-      if (/already cancel|already cancelled|not (active|pending|processing)|order (is )?(already )?(cancel|finish|complete)|已取消|订单已完成/i.test(msg)) {
+    // 🔴 2026-11-11 修：上游返回的是**数组**，旧代码只查 data.error（数组上恒为 undefined），
+    //    于是「没取消成功」被判成「已取消」→ 本地标记退款，上游继续跑、成本照扣。
+    //    实测响应形态：
+    //      success → [{"order":<id>,"cancel":<工单号 数字>}]
+    //      not found → [{"order":<id>,"cancel":{"error":"Incorrect order ID"}}]
+    //    ⚠️ cancel 返回数字只代表**取消请求已受理**，上游状态可能仍是 Processing，
+    //       要等它处理完。所以这里返回 accepted，最终结果由状态查询确认。
+    const items = Array.isArray(data) ? data : [data];
+    const item = items.find((x) => x && String(x.order) === String(id)) || items[0] || {};
+    const cancelField = item.cancel;
+
+    // 形态①：cancel 是对象且带 error → 失败
+    if (cancelField && typeof cancelField === 'object' && cancelField.error) {
+      const msg = String(cancelField.error);
+      if (/already cancel|already cancelled|not (active|pending|processing)|order (is )?(already )?(cancel|finish|complete)|incorrect order id|已取消|订单已完成/i.test(msg)) {
         return { ok: true, already: true, raw: data };
       }
-      // "Cancel unavailable" 特指服务此刻不允许取消（订阅型常见）：
-      // 明确判为失败，让兜底任务留着这单、并让管理员在备注里看到。
       return { ok: false, reason: msg, raw: data };
     }
-    return { ok: true, raw: data };
+
+    // 形态②：cancel 是数字 → 取消工单已受理
+    if (typeof cancelField === 'number' && cancelField > 0) {
+      return { ok: true, accepted: true, ticket: cancelField, raw: data };
+    }
+
+    // 形态③：顶层给 error（老接口兼容）
+    if (data && !Array.isArray(data) && typeof data === 'object' && data.error) {
+      const msg = String(data.error);
+      if (/already cancel|already cancelled|not (active|pending|processing)|incorrect order id|已取消/i.test(msg)) {
+        return { ok: true, already: true, raw: data };
+      }
+      return { ok: false, reason: msg, raw: data };
+    }
+
+    // 兜底：没 error 也不能算"已取消"，显式标 unverified
+    return { ok: true, unverified: true, raw: data };
   } catch (e) {
     return { ok: false, reason: (e && e.message) || String(e) };
   }
