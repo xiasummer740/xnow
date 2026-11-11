@@ -577,7 +577,41 @@ export async function reconcilePayments() {
           markFailed(pay.order_id, reason)
           // 只有「确实确认用户没付」才归到放弃支付汇总；查不了 / 我们这边出问题的，必须单独叫人
           if (r.noAoid || r.queryErr || r.queryStatus === 'fee_error') {
-            sendTgMessage('⚠️ <b>BufPay 单无法确认已付款，已挂起待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + reason)
+            // 📎 2026-11-11：告警里补一句「这之后用户有没有用别的渠道付成功」。
+            //    实测祥哥收到过一条「挂起待人工核对」，去查才发现用户 95 秒后就改用
+            //    支付宝付成功了，那单（微信）是他自己取消的 —— 白查一趟。
+            //    判定逻辑不动（缺 aoid 就叫人核对，宁可多问也不吞钱），
+            //    只是把判断依据直接写进消息，看到就知道要不要管。
+            let hint = ''
+            try {
+              const after = new Date(pay.created_at).getTime()
+              const [later] = await sequelize.query(
+                `SELECT amount, type, created_at FROM transactions
+                 WHERE user_id = ? AND amount > 0 AND created_at > ?
+                 ORDER BY id ASC LIMIT 1`,
+                { replacements: [pay.user_id, new Date(after)] }
+              )
+              if (later && later.length) {
+                const t = later[0]
+                const mins = Math.round((new Date(t.created_at).getTime() - after) / 60000)
+                // ⏱ 间隔长短决定怎么理解：
+                //    几十秒到几分钟 → 用户当场换了个渠道
+                //    几小时以上     → 他当时没付成，隔了很久才回来付
+                //    这两种情况处理方式不同，别写成一句话。
+                const when = mins < 60
+                  ? `${mins} 分钟后`
+                  : mins < 24 * 60
+                    ? `${(mins / 60).toFixed(1)} 小时后`
+                    : `${Math.round(mins / 1440)} 天后`
+                const guess = mins <= 15
+                  ? '很可能是他自己取消后立刻换了渠道 —— 确认一下即可，不用补单。'
+                  : '当时那单应该是没付成，他后来才回来付的。这单大概率不用管，但建议顺手看一眼支付平台后台。'
+                hint = `\n\n✅ <b>该用户 ${when}已成功充值 ¥${parseFloat(t.amount).toFixed(2)}（${t.type}）</b>\n${guess}`
+              } else {
+                hint = `\n\n⚠️ 该用户之后没有其他成功充值记录，<b>可能真的付了但回调丢了</b>，建议去支付平台后台核对。`
+              }
+            } catch { /* 查不到就不加提示，不影响主告警 */ }
+            sendTgMessage('⚠️ <b>BufPay 单无法确认已付款，已挂起待人工核对</b>\n🔗 <code>' + pay.order_id + '</code>\n👤 user:' + pay.user_id + '\n💵 amount:' + pay.amount + '\n❌ ' + reason + hint)
           } else {
             gaveUp.push({ ...pay, reason })
           }
