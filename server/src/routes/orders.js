@@ -176,15 +176,33 @@ router.post('/add', authenticate, async (req, res) => {
           user_id: req.user.id,
           status: { [Op.notIn]: ['已完成', '已取消', '已退款', '部分完成', 'Completed', 'Canceled', 'Cancelled', 'Partial'] },
         },
-        attributes: ['order_no', 'link', 'status'],
+        attributes: ['order_no', 'link', 'status', 'quantity', 'start_count', 'remains', 'createdAt'],
         transaction: t,
       });
       const dup = myActive.find((o) => normTarget(o.link) === normTarget(targetForCheck));
       if (dup) {
         await t.rollback();
+        // 📊 2026-11-11 祥哥转来客户反馈：只写「完成前请勿重复下单」，客户不知道要等多久，
+        //    客服也答不上来。实测订单跑 1 小时是常事（上游队列慢），
+        //    把「已跑多久 / 进度 / 大概还要多久」直接写进提示，客户自己就能判断。
+        const mins = Math.max(0, Math.round((Date.now() - new Date(dup.createdAt).getTime()) / 60000));
+        const ageText = mins < 60 ? `${mins} 分钟` : mins < 1440 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.round(mins / 1440)} 天`;
+        const doneQty = Math.max(0, Number(dup.quantity || 0) - Number(dup.remains || 0));
+        const totalQty = Number(dup.quantity || 0);
+        const progressText = totalQty
+          ? `已完成 ${doneQty.toLocaleString()} / ${totalQty.toLocaleString()}（${Math.round((doneQty / totalQty) * 100)}%）`
+          : '';
+        // 按已跑时长粗估剩余：跑了一半以上 = 快好了；跑得很少 = 上游还没开始
+        const pct = totalQty ? doneQty / totalQty : 0;
+        const etaText = pct >= 0.8 ? '应该快跑完了'
+          : pct > 0 ? '还在跑，预计还要一段时间'
+            : (mins > 60 ? '这一单上游还没开始跑，可以先联系客服查询进度' : '刚提交，上游正在排队');
         return res.json({
           status: 'error',
-          message: `这个链接已经有一单在进行中（单号 ${dup.order_no}），完成前请勿重复下单，否则会重复计数。`,
+          message:
+            `这个链接已经有一单在进行中（单号 ${dup.order_no}）。\n` +
+            `已下单 ${ageText}${progressText ? '，' + progressText : ''}。\n` +
+            `${etaText}——完成前请勿重复下单，否则会重复计数。`,
         });
       }
     }
@@ -539,11 +557,13 @@ router.post('/batch/quote', authenticate, async (req, res) => {
   try {
     const rows = await Order.findAll({
       where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED } },
-      attributes: ['order_no', 'link'],
+      attributes: ['order_no', 'link', 'quantity', 'remains', 'createdAt'],
     });
     for (const o of rows) {
       const k = normT(o.link);
-      if (k && !activeByTarget.has(k)) activeByTarget.set(k, o.order_no);
+      if (k && !activeByTarget.has(k)) {
+        activeByTarget.set(k, { order_no: o.order_no, createdAt: o.createdAt, quantity: o.quantity, remains: o.remains });
+      }
     }
   } catch (e) { /* 查不到就不拦 */ }
   const seenInQuote = new Map();
@@ -579,8 +599,16 @@ router.post('/batch/quote', authenticate, async (req, res) => {
 
     const nt = normT(link);
     if (nt) {
-      const dupNo = activeByTarget.get(nt);
-      if (dupNo) { items.push({ ...base, ok: false, message: `该链接已有一单在进行中（${dupNo}）` }); continue; }
+      const dupInfo = activeByTarget.get(nt);
+      if (dupInfo) {
+        const mins = Math.max(0, Math.round((Date.now() - new Date(dupInfo.createdAt).getTime()) / 60000));
+        const ageText = mins < 60 ? `${mins} 分钟` : mins < 1440 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.round(mins / 1440)} 天`;
+        const totalQty = Number(dupInfo.quantity || 0);
+        const doneQty = Math.max(0, totalQty - Number(dupInfo.remains || 0));
+        const progressText = totalQty ? `，${doneQty.toLocaleString()}/${totalQty.toLocaleString()}（${Math.round((doneQty / totalQty) * 100)}%）` : '';
+        items.push({ ...base, ok: false, message: `该链接已有一单在进行中（${dupInfo.order_no}，已下单 ${ageText}${progressText}）` });
+        continue;
+      }
       if (seenInQuote.has(nt)) { items.push({ ...base, ok: false, message: `与第 ${seenInQuote.get(nt)} 条链接重复` }); continue; }
     }
 
@@ -647,15 +675,25 @@ router.post('/batch', authenticate, async (req, res) => {
     .replace(/\/+$/, '');
 
   const FINISHED_STATUSES = ['已完成', '已取消', '已退款', '部分完成', 'Completed', 'Canceled', 'Cancelled', 'Partial'];
-  const dbActiveByTarget = new Map();  // normTarget → 进行中的单号
+  // normTarget → { order_no, createdAt, quantity, remains }
+  // 📊 2026-11-11：原来只存单号，提示里只能说「有一单在进行中」；
+  //    客户不知道要等多久，客服也答不上。改存完整信息，提示里带进度和时长。
+  const dbActiveByTarget = new Map();
   try {
     const myActive = await Order.findAll({
       where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED_STATUSES } },
-      attributes: ['order_no', 'link'],
+      attributes: ['order_no', 'link', 'quantity', 'remains', 'createdAt'],
     });
     for (const o of myActive) {
       const k = normTarget(o.link);
-      if (k && !dbActiveByTarget.has(k)) dbActiveByTarget.set(k, o.order_no);
+      if (k && !dbActiveByTarget.has(k)) {
+        dbActiveByTarget.set(k, {
+          order_no: o.order_no,
+          createdAt: o.createdAt,
+          quantity: o.quantity,
+          remains: o.remains,
+        });
+      }
     }
   } catch (e) { /* 查不到就不拦，不影响正常下单 */ }
 
@@ -718,12 +756,18 @@ router.post('/batch', authenticate, async (req, res) => {
       // ② 同一链接重复下单（库里进行中的 / 本批内已成功的）
       const nt = normTarget(targetRaw);
       if (nt) {
-        const dupNo = dbActiveByTarget.get(nt);
-        if (dupNo) {
+        const dupInfo = dbActiveByTarget.get(nt);
+        if (dupInfo) {
           await t.rollback();
+          // 同单笔下单一样，把进度和时长写清楚（批量时客户最关心「还要等多久」）
+          const mins = Math.max(0, Math.round((Date.now() - new Date(dupInfo.createdAt).getTime()) / 60000));
+          const ageText = mins < 60 ? `${mins} 分钟` : mins < 1440 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.round(mins / 1440)} 天`;
+          const totalQty = Number(dupInfo.quantity || 0);
+          const doneQty = Math.max(0, totalQty - Number(dupInfo.remains || 0));
+          const progressText = totalQty ? `，${doneQty.toLocaleString()}/${totalQty.toLocaleString()}（${Math.round((doneQty / totalQty) * 100)}%）` : '';
           results.push({
             serviceId, link, quantity, status: 'error',
-            message: `这个链接已有一单在进行中（单号 ${dupNo}），完成前请勿重复下单`,
+            message: `这个链接已有一单在进行中（单号 ${dupInfo.order_no}，已下单 ${ageText}${progressText}），完成前请勿重复下单`,
           });
           continue;
         }
