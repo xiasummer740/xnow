@@ -604,7 +604,7 @@ const selectService = (id) => {
     }
 };
 
-const submitOrder = async () => {
+const submitOrder = async (forceDup = false) => {
   if(!activeServiceId.value) return uiStore.showToast('请选择服务！', 'error');
   // 🔌 按类型校验必填项（Subscriptions/Invites 没有链接，校验用户名）
   if (usesLink.value && !form.value.link) return uiStore.showToast('请输入目标链接！', 'error');
@@ -637,13 +637,17 @@ const submitOrder = async () => {
       return uiStore.showToast(`拦截：当前数量 ${currentQty} 超出服务最高限制 ${maxQty}`, 'error');
   }
 
-  const confirm = await uiStore.showConfirm(`确认消费 ${appStore.formatMoney(rawTotalPrice.value)} 提交该订单吗？`);
-  if (!confirm) return;
+  // forceDup = 客户刚在「已有进行中订单」弹窗里点了继续，金额上一轮已确认过，不再重复弹
+  if (!forceDup) {
+      const confirm = await uiStore.showConfirm(`确认消费 ${appStore.formatMoney(rawTotalPrice.value)} 提交该订单吗？`);
+      if (!confirm) return;
+  }
   
   isSubmitting.value = true;
   try {
       // 🔌 按类型组装载荷：只发当前类型需要的字段（服务端还会再校验一次）
       const payload = { 
+          force_duplicate: forceDup ? true : undefined,
           serviceId: activeServiceId.value, 
           serviceName: activeService.value.name, 
           link: usesLink.value ? form.value.link : undefined,
@@ -686,6 +690,28 @@ const submitOrder = async () => {
           const uData = await uRes.json();
           if(uData.status === 'success') { userStore.userInfo.balance = uData.balance; }
       } else { 
+          // 🆕 2026-11-11：同链接已有一单在进行中 —— 不再硬拦。
+          //    祥哥急报「客户等着下单」，而卡住的单可能是上游排队（实测有单跑 8 小时才 7%）。
+          //    改成问一句「是不是要追加」，客户点继续就带上 force_duplicate 重提，
+          //    后端跳过这条拦截。这样既不误点重复扣费，也不把想追加的客户挡在门外。
+          if (data.code === 'DUPLICATE_ACTIVE_ORDER' && data.dup && !forceDup) {
+              const d = data.dup;
+              const ageMin = Number(d.age_minutes || 0);
+              const ageTxt = ageMin < 60 ? `${ageMin} 分钟`
+                  : ageMin < 1440 ? `${(ageMin / 60).toFixed(1)} 小时`
+                      : `${Math.round(ageMin / 1440)} 天`;
+              const proceed = await uiStore.showConfirm(
+                  `这个链接已经有一单在进行中：\n\n` +
+                  `单号：${d.order_no}\n` +
+                  `已下单：${ageTxt}\n` +
+                  `进度：${Number(d.done || 0).toLocaleString()} / ${Number(d.total || 0).toLocaleString()}（${d.percent || 0}%）\n\n` +
+                  `继续下单会让同一个链接同时跑两单，数量会叠加。\n` +
+                  `如果你是想追加数量，点「确定」；担心重复，点「取消」。`
+              );
+              if (proceed) return submitOrder(true);
+              isSubmitting.value = false;
+              return;
+          }
           // 💡 接管并翻译错误提示
           const friendlyError = translateUpstreamError(data.message || '下单失败，系统繁忙请稍后重试');
           uiStore.showToast(friendlyError, 'error');

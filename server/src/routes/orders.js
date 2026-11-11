@@ -101,6 +101,54 @@ const buildUpstreamPayload = (service, b) => {
   return p;
 };
 
+/**
+ * 距今多少分钟。
+ *
+ * ✅ 结论（2026-11-11 排查半天后确认）：`Order.findAll` 这类**模型查询**读出的
+ *    `createdAt` 本身是正确的 UTC Date —— 例如 XN179436792419156 读出
+ *    `2026-11-10T19:32:04Z`，与 `Date.now()` 相减正好 481 分钟（8 小时），
+ *    和库里存的北京时间串 "2026-11-11 11:32:04" 完全对得上。
+ *    **直接相减即可，不要额外做时区偏移。**
+ *
+ * ⚠️ 踩坑记录：排查时用 `sequelize.query()`（raw 模式）查同一张表，它**不套用
+ *    models 的时区处理**，直接返回 `03:24:29Z`（把北京时间串当 UTC），
+ *    于是算出来只有 5 分钟 —— 差点据此给生产代码加了错误的 -8 小时，
+ *    也一度把 database.js 的 timezone 改错。诊断脚本必须和业务代码用同一种查询方式。
+ */
+function minutesSince(d) {
+  const t = new Date(d).getTime();
+  return Number.isFinite(t) ? Math.max(0, Math.round((Date.now() - t) / 60000)) : 0;
+}
+
+/**
+ * 判断一单「进行中」的订单是不是已经卡死了 —— 卡死的单不该再挡住客户下新单。
+ *
+ * 🔴 2026-11-11 祥哥急报：「先把客户下单的问题解决，等着要下单的。」
+ *    实测订单 XN179433866963214：500 个浏览量跑了 8 小时只完成 36 个（7%）。
+ *    客户想给同一个视频补量，被「已有一单在进行中」挡住下不了单 —— 卡了 8 小时的单，
+ *    拦住客户只会把人赶走，而那单本来就不知道什么时候能跑完。
+ *
+ * 放行条件（三个同时满足才算卡死，缺一不可，避免误放行正常的大单）：
+ *   ① 已跑 ≥ 3 小时
+ *   ② 完成度 < 30%
+ *   ③ 数量 ≤ 5000（大单跑几小时是正常的，不能放行）
+ *
+ * 放行后同链接会同时存在两单，各自扣费、各自计数 —— 这正是客户想要的追加量。
+ */
+const STALE_ACTIVE_HOURS = 3;
+const STALE_ACTIVE_PCT = 0.3;
+const STALE_ACTIVE_MAX_QTY = 5000;
+function isStaleActive(o) {
+  try {
+    const mins = minutesSince(o.createdAt);
+    if (!(mins >= STALE_ACTIVE_HOURS * 60)) return false;
+    const total = Number(o.quantity || 0);
+    if (!total || total > STALE_ACTIVE_MAX_QTY) return false;
+    const done = Math.max(0, total - Number(o.remains || 0));
+    return (done / total) < STALE_ACTIVE_PCT;
+  } catch { return false; }
+}
+
 
 router.post('/add', authenticate, async (req, res) => {
   // 💡 解除参数封锁：除 comments / custom_comments 外，再放行特殊类型所需字段
@@ -108,6 +156,10 @@ router.post('/add', authenticate, async (req, res) => {
     serviceId, link, quantity, comments, custom_comments,
     username, posts, delay, expiry, hashtag, runs, interval
   } = req.body;
+  // 🆕 2026-11-11：客户在弹窗里明确点了「继续追加」才会带这个标记。
+  //    同链接已有一单在进行中时默认拦截（防误点重复扣费），
+  //    客户确认要追加量时才放行 —— 这时重复计数正是他要的效果。
+  const forceDuplicate = req.body.force_duplicate === true || req.body.forceDuplicate === true;
   const oldPosts = req.body.old_posts !== undefined ? req.body.old_posts : req.body.oldPosts;
   const answerNumber = req.body.answer_number !== undefined ? req.body.answer_number : req.body.answerNumber;
   // ⚠️ 不能在这里就要求 link —— Subscriptions / Invites 类型上游根本不收 link
@@ -175,17 +227,22 @@ router.post('/add', authenticate, async (req, res) => {
         where: {
           user_id: req.user.id,
           status: { [Op.notIn]: ['已完成', '已取消', '已退款', '部分完成', 'Completed', 'Canceled', 'Cancelled', 'Partial'] },
+          // 已退款的不拦：退款流程只写 is_refunded=1，status 常常还是「处理中」
+          is_refunded: { [Op.ne]: 1 },
         },
         attributes: ['order_no', 'link', 'status', 'quantity', 'start_count', 'remains', 'createdAt'],
         transaction: t,
       });
-      const dup = myActive.find((o) => normTarget(o.link) === normTarget(targetForCheck));
+      // force_duplicate = 客户已经在弹窗里确认过「要追加」，直接跳过这条拦截
+      const dup = forceDuplicate
+        ? undefined
+        : myActive.find((o) => normTarget(o.link) === normTarget(targetForCheck) && !isStaleActive(o));
       if (dup) {
         await t.rollback();
         // 📊 2026-11-11 祥哥转来客户反馈：只写「完成前请勿重复下单」，客户不知道要等多久，
         //    客服也答不上来。实测订单跑 1 小时是常事（上游队列慢），
         //    把「已跑多久 / 进度 / 大概还要多久」直接写进提示，客户自己就能判断。
-        const mins = Math.max(0, Math.round((Date.now() - new Date(dup.createdAt).getTime()) / 60000));
+        const mins = minutesSince(dup.createdAt);
         const ageText = mins < 60 ? `${mins} 分钟` : mins < 1440 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.round(mins / 1440)} 天`;
         const doneQty = Math.max(0, Number(dup.quantity || 0) - Number(dup.remains || 0));
         const totalQty = Number(dup.quantity || 0);
@@ -199,6 +256,15 @@ router.post('/add', authenticate, async (req, res) => {
             : (mins > 60 ? '这一单上游还没开始跑，可以先联系客服查询进度' : '刚提交，上游正在排队');
         return res.json({
           status: 'error',
+          // 🆕 code 让前端知道「这个错误可以确认后继续」——前端据此弹「仍然追加」按钮
+          code: 'DUPLICATE_ACTIVE_ORDER',
+          dup: {
+            order_no: dup.order_no,
+            age_minutes: mins,
+            done: doneQty,
+            total: totalQty,
+            percent: totalQty ? Math.round((doneQty / totalQty) * 100) : 0,
+          },
           message:
             `这个链接已经有一单在进行中（单号 ${dup.order_no}）。\n` +
             `已下单 ${ageText}${progressText ? '，' + progressText : ''}。\n` +
@@ -556,12 +622,13 @@ router.post('/batch/quote', authenticate, async (req, res) => {
   const activeByTarget = new Map();
   try {
     const rows = await Order.findAll({
-      where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED } },
+      where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED }, is_refunded: { [Op.ne]: 1 } },
       attributes: ['order_no', 'link', 'quantity', 'remains', 'createdAt'],
     });
     for (const o of rows) {
       const k = normT(o.link);
-      if (k && !activeByTarget.has(k)) {
+      // 卡死的单不参与拦截（同 isStaleActive 的规则）—— 否则预览说不能下、实际也下不了
+      if (k && !activeByTarget.has(k) && !isStaleActive(o)) {
         activeByTarget.set(k, { order_no: o.order_no, createdAt: o.createdAt, quantity: o.quantity, remains: o.remains });
       }
     }
@@ -601,7 +668,7 @@ router.post('/batch/quote', authenticate, async (req, res) => {
     if (nt) {
       const dupInfo = activeByTarget.get(nt);
       if (dupInfo) {
-        const mins = Math.max(0, Math.round((Date.now() - new Date(dupInfo.createdAt).getTime()) / 60000));
+        const mins = minutesSince(dupInfo.createdAt);
         const ageText = mins < 60 ? `${mins} 分钟` : mins < 1440 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.round(mins / 1440)} 天`;
         const totalQty = Number(dupInfo.quantity || 0);
         const doneQty = Math.max(0, totalQty - Number(dupInfo.remains || 0));
@@ -681,12 +748,13 @@ router.post('/batch', authenticate, async (req, res) => {
   const dbActiveByTarget = new Map();
   try {
     const myActive = await Order.findAll({
-      where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED_STATUSES } },
+      where: { user_id: req.user.id, status: { [Op.notIn]: FINISHED_STATUSES }, is_refunded: { [Op.ne]: 1 } },
       attributes: ['order_no', 'link', 'quantity', 'remains', 'createdAt'],
     });
     for (const o of myActive) {
       const k = normTarget(o.link);
-      if (k && !dbActiveByTarget.has(k)) {
+      // 卡死的单不参与拦截（同 isStaleActive 规则）
+      if (k && !dbActiveByTarget.has(k) && !isStaleActive(o)) {
         dbActiveByTarget.set(k, {
           order_no: o.order_no,
           createdAt: o.createdAt,
@@ -760,7 +828,7 @@ router.post('/batch', authenticate, async (req, res) => {
         if (dupInfo) {
           await t.rollback();
           // 同单笔下单一样，把进度和时长写清楚（批量时客户最关心「还要等多久」）
-          const mins = Math.max(0, Math.round((Date.now() - new Date(dupInfo.createdAt).getTime()) / 60000));
+          const mins = minutesSince(dupInfo.createdAt);
           const ageText = mins < 60 ? `${mins} 分钟` : mins < 1440 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.round(mins / 1440)} 天`;
           const totalQty = Number(dupInfo.quantity || 0);
           const doneQty = Math.max(0, totalQty - Number(dupInfo.remains || 0));
