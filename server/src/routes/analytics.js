@@ -46,6 +46,25 @@ const isOwnerVisit = (token, ip) => {
   return false;
 };
 
+/**
+ * 从上报的 token 里解出登录用户 id（没登录返回 null）。
+ *
+ * 👤 2026-11-11：后台要区分「已成交 / 注册未成交 / 未注册」三类访客，
+ *    所以每条访问都要记下它属于哪个登录用户。
+ *    前端埋点本来就在传 token（当初为判断 is_owner 加的），这里顺手解出 user_id。
+ *    ⚠️ token 无效 / 过期一律返回 null 当匿名访客 —— 埋点绝不能因此报错。
+ */
+const userIdFromToken = (token) => {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const id = Number(payload && payload.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+};
+
 router.post('/visit', async (req, res) => {
   try {
     const body = req.body || {};
@@ -67,6 +86,7 @@ router.post('/visit', async (req, res) => {
       referrer,
       ts: now,
       is_owner: isOwnerVisit(body.token, ip) ? 1 : 0,
+      user_id: userIdFromToken(body.token),
     });
     res.status(204).end();
   } catch {

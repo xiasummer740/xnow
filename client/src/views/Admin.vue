@@ -673,6 +673,39 @@ const trafficCountryOption = computed(() => {
   };
 });
 
+/**
+ * 👥 访客身份分层饼图（2026-11-11 祥哥要的转化漏斗）
+ *
+ * 三类：未注册访客（灰）/ 注册未成交（黄）/ 已成交客户（绿）
+ * 数据来自后端 stats/traffic 的 userTypes —— 靠 page_views.user_id 关联
+ * orders / transactions 判断是否成交。
+ */
+const USER_TYPE_COLORS = { guest: '#64748b', registered: '#fbbf24', paid: '#34d399' };
+const trafficUserTypeOption = computed(() => {
+  const list = traffic.value?.userTypes || [];
+  const total = list.reduce((s, x) => s + (x.pv || 0), 0);
+  if (!total) return {};
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: (p) => `${p.name}<br/>打开 ${p.value} 次（${p.percent}%）`,
+    },
+    legend: { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      type: 'pie',
+      radius: ['42%', '68%'],
+      center: ['50%', '44%'],
+      data: list.filter((x) => x.pv > 0).map((x) => ({
+        name: `${x.label}（${x.uv} 人）`,
+        value: x.pv,
+        itemStyle: { color: USER_TYPE_COLORS[x.type] || '#94a3b8' },
+      })),
+      label: { color: '#cbd5e1', fontSize: 11, formatter: '{d}%' },
+      itemStyle: { borderColor: '#0f172a', borderWidth: 2 },
+    }],
+  };
+});
+
 const exportCSV = (endpoint, params) => {
   const p = new URLSearchParams(params); p.set('token', userStore.token);
   window.open(`/api/admin/${endpoint}/export?${p}`);
@@ -902,6 +935,29 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                 <div class="text-slate-300 text-sm font-bold mb-2">📈 {{ traffic.days === 1 ? '今日流量（按小时）' : '访问趋势' }}</div>
                 <v-chart v-if="traffic.trend?.length" :option="trafficTrendOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无趋势数据</div>
               </div>
+              <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+                <div class="text-slate-300 text-sm font-bold mb-2 flex items-center justify-between">
+                  <span>👥 访客身份分层</span>
+                  <span class="text-[10px] text-slate-500 font-normal">未注册 / 注册未成交 / 已成交</span>
+                </div>
+                <!-- 👥 2026-11-11：从这天起埋点才记 user_id，之前的访问分不了类 -->
+                <v-chart v-if="traffic.userTypesAvailable && traffic.userTypes?.some((x) => x.pv > 0)" :option="trafficUserTypeOption" style="height:240px" autoresize />
+                <div v-else class="py-8 text-center">
+                  <div class="text-slate-500 text-xs">还没有可分类的访问</div>
+                  <div class="text-slate-600 text-[10px] mt-1.5 px-4">访问埋点从 2026-11-11 起才记录登录身份，<br/>之前的访问分不出是谁，只会算进「未注册访客」。</div>
+                </div>
+                <!-- 明细表：三类的人数和浏览量 -->
+                <div v-if="traffic.userTypesAvailable && traffic.userTypes?.some((x) => x.pv > 0)" class="grid grid-cols-3 gap-2 mt-2">
+                  <div v-for="ut in traffic.userTypes" :key="ut.type" class="text-center">
+                    <div class="text-[10px] text-slate-500">{{ ut.label }}</div>
+                    <div class="text-sm font-mono font-bold" :style="{ color: USER_TYPE_COLORS[ut.type] }">{{ ut.uv }} 人</div>
+                    <div class="text-[10px] text-slate-600">{{ ut.pv }} PV</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl"><div class="text-slate-300 text-sm font-bold mb-2">🌍 访客国家分布</div><v-chart v-if="traffic.countries?.length" :option="trafficCountryOption" style="height:240px" autoresize /><div v-else class="text-slate-500 text-xs py-12 text-center">暂无国家数据</div></div>
             </div>
 

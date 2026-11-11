@@ -1342,7 +1342,7 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
     const where = { ts: { [Op.gte]: from } };
     if (!includeOwner) where.is_owner = 0;
     const rows = await PageView.findAll({
-      attributes: ['visitor_id', 'ip', 'path', 'referrer', 'ts'],
+      attributes: ['visitor_id', 'ip', 'path', 'referrer', 'ts', 'user_id'],
       where,
       raw: true,
       limit: 20000,
@@ -1410,7 +1410,61 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
     }
     const countries = [...ctryMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([country, pv]) => ({ country, pv }));
 
-    res.json({ status: 'success', data: { total_pv, total_uv, days, trend, pages, sources, countries } });
+    // 👤 访客身份分层（2026-11-11 祥哥要的转化漏斗）
+    //    三类：
+    //      未注册      —— page_views.user_id 是 NULL（没登录就来的）
+    //      注册未成交  —— 登录了但既没下过单、也没充过值
+    //      已成交      —— 有真实订单（排除全退的）或有过充值
+    //    ⚠️ user_id 这一列从 2026-11-11 才开始记，更早的访问全是 NULL，
+    //       会被算进「未注册」——前端会注明统计口径。
+    let userTypes = [];
+    let userTypesAvailable = false;
+    try {
+      const uids = [...new Set(rows.map((r) => Number(r.user_id)).filter((n) => Number.isFinite(n) && n > 0))];
+      userTypesAvailable = uids.length > 0;
+
+      // 哪些 uid 算「已成交」：有订单且不是全退，或者有过正向流水（充值）
+      const paidSet = new Set();
+      if (uids.length) {
+        const [orderRows] = await sequelize.query(
+          `SELECT DISTINCT user_id FROM orders
+           WHERE user_id IN (:uids) AND is_refunded = 0`,
+          { replacements: { uids } }
+        );
+        orderRows.forEach((x) => paidSet.add(Number(x.user_id)));
+        const [txRows] = await sequelize.query(
+          `SELECT DISTINCT user_id FROM transactions
+           WHERE user_id IN (:uids) AND amount > 0`,
+          { replacements: { uids } }
+        );
+        txRows.forEach((x) => paidSet.add(Number(x.user_id)));
+      }
+
+      const bucket = {
+        guest: { label: '未注册访客', pv: 0, visitors: new Set() },
+        registered: { label: '注册未成交', pv: 0, visitors: new Set() },
+        paid: { label: '已成交客户', pv: 0, visitors: new Set() },
+      };
+      for (const r of rows) {
+        const uid = Number(r.user_id);
+        const key = !Number.isFinite(uid) || uid <= 0
+          ? 'guest'
+          : (paidSet.has(uid) ? 'paid' : 'registered');
+        bucket[key].pv++;
+        const vkey = r.visitor_id || r.ip || '';
+        if (vkey) bucket[key].visitors.add(vkey);
+      }
+      userTypes = Object.entries(bucket).map(([k, v]) => ({
+        type: k,
+        label: v.label,
+        pv: v.pv,
+        uv: v.visitors.size,
+      }));
+    } catch (e) {
+      console.warn('[stats/traffic] 访客分层计算失败:', (e && e.message) || e);
+    }
+
+    res.json({ status: 'success', data: { total_pv, total_uv, days, trend, pages, sources, countries, userTypes, userTypesAvailable } });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
