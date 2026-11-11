@@ -593,6 +593,26 @@ watch(activeTab, (v) => { if (v === 'finance' && !financeData.value) fetchFinanc
 const trafficDays = ref(7); const traffic = ref(null); const trafficLoading = ref(false);
 // 🏠 默认 false = 统计时排除站长自己的访问（否则 69% 都是自己刷的，看不出真实情况）
 const trafficIncludeOwner = ref(false);
+// 👤 访客名单默认只显示前 8 条，多的点「看全部」
+const showAllVisitors = ref(false);
+const visibleVisitors = computed(() => {
+  const list = traffic.value?.visitorUsers || [];
+  return showAllVisitors.value ? list : list.slice(0, 8);
+});
+/** 访客「最近来访」时间：今天的只显示时分，更早的显示月-日 时:分 */
+function fmtVisitTime(ts) {
+  const n = Number(ts);
+  if (!n) return '-';
+  const d = new Date(n);
+  const p = (x) => String(x).padStart(2, '0');
+  const bj = new Date(n + 8 * 3600 * 1000);
+  const nowBj = new Date(Date.now() + 8 * 3600 * 1000);
+  const sameDay = bj.getUTCFullYear() === nowBj.getUTCFullYear()
+    && bj.getUTCMonth() === nowBj.getUTCMonth()
+    && bj.getUTCDate() === nowBj.getUTCDate();
+  const hm = `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}`;
+  return sameDay ? hm : `${p(bj.getUTCMonth() + 1)}-${p(bj.getUTCDate())} ${hm}`;
+}
 
 // 📄 热门落地页：路由路径 → 中文名
 //   祥哥看不懂 /order /mass-order 这些英文路径（2026-11-06：「这个能中文吗」）。
@@ -953,6 +973,59 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
                     <div class="text-sm font-mono font-bold" :style="{ color: USER_TYPE_COLORS[ut.type] }">{{ ut.uv }} 人</div>
                     <div class="text-[10px] text-slate-600">{{ ut.pv }} PV</div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 👤 2026-11-11 祥哥要「一看就知道是哪些用户来看了」：
+                 把登录过的访客按人列出来，带 UID / 手机号 / 是否成交 / 看了几页 / 最近一次 -->
+            <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl">
+              <div class="flex items-center justify-between mb-3">
+                <div class="text-slate-300 text-sm font-bold">
+                  👤 具体访客名单
+                  <span class="text-[11px] text-slate-500 font-normal ml-1.5">
+                    {{ (traffic.visitorUsers || []).length }} 个已登录用户来过
+                  </span>
+                </div>
+                <button v-if="(traffic.visitorUsers || []).length > 8"
+                  @click="showAllVisitors = !showAllVisitors"
+                  class="text-[11px] text-sky-400 hover:text-sky-300">
+                  {{ showAllVisitors ? '收起' : '看全部' }}
+                </button>
+              </div>
+              <div v-if="(traffic.visitorUsers || []).length" class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-slate-500 border-b border-slate-700/60">
+                      <th class="text-left py-1.5 font-normal">UID</th>
+                      <th class="text-left py-1.5 font-normal">账号</th>
+                      <th class="text-left py-1.5 font-normal">类型</th>
+                      <th class="text-right py-1.5 font-normal">访问</th>
+                      <th class="text-right py-1.5 font-normal">浏览页数</th>
+                      <th class="text-right py-1.5 font-normal">最近来访</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="vu in visibleVisitors" :key="vu.uid" class="border-b border-slate-700/30 hover:bg-slate-700/20">
+                      <td class="py-1.5 font-mono text-slate-400">{{ vu.uid }}</td>
+                      <td class="py-1.5 text-slate-200 font-mono">{{ vu.phone || vu.email || '(未填)' }}</td>
+                      <td class="py-1.5">
+                        <span :class="['px-1.5 py-0.5 rounded text-[10px] font-bold',
+                          vu.type === 'paid' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400']">
+                          {{ vu.type === 'paid' ? '已成交' : '未成交' }}
+                        </span>
+                      </td>
+                      <td class="py-1.5 text-right font-mono text-sky-400">{{ vu.pv }} PV</td>
+                      <td class="py-1.5 text-right font-mono text-slate-400">{{ vu.pages }}</td>
+                      <td class="py-1.5 text-right text-slate-500 font-mono text-[11px]">{{ fmtVisitTime(vu.lastTs) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-else class="py-6 text-center">
+                <div class="text-slate-500 text-xs">还没有登录用户来访</div>
+                <div class="text-slate-600 text-[10px] mt-1">
+                  访客身份从 2026-11-11 起才记录，之前的访问看不出是谁
                 </div>
               </div>
             </div>

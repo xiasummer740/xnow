@@ -1419,6 +1419,7 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
     //       会被算进「未注册」——前端会注明统计口径。
     let userTypes = [];
     let userTypesAvailable = false;
+    let visitorUsers = [];
     try {
       const uids = [...new Set(rows.map((r) => Number(r.user_id)).filter((n) => Number.isFinite(n) && n > 0))];
       userTypesAvailable = uids.length > 0;
@@ -1460,11 +1461,49 @@ router.get('/stats/traffic', authenticate, async (req, res) => {
         pv: v.pv,
         uv: v.visitors.size,
       }));
+
+      // 👤 2026-11-11 祥哥要「一看就知道是哪些用户来看了」：
+      //    把有登录身份的访客按 uid 聚合成名单，带上手机号和最近访问时间。
+      //    未注册的没 uid，列不出来（只有 visitor_id），所以不在这里。
+      const uidStat = new Map();  // uid -> { pv, lastTs, paths }
+      for (const r of rows) {
+        const uid = Number(r.user_id);
+        if (!Number.isFinite(uid) || uid <= 0) continue;
+        if (!uidStat.has(uid)) uidStat.set(uid, { uid, pv: 0, lastTs: 0, paths: new Set() });
+        const st = uidStat.get(uid);
+        st.pv++;
+        st.lastTs = Math.max(st.lastTs, Number(r.ts) || 0);
+        if (r.path) st.paths.add(r.path);
+      }
+      if (uidStat.size) {
+        const ids = [...uidStat.keys()];
+        const [users] = await sequelize.query(
+          `SELECT id, phone, email, balance FROM users WHERE id IN (:ids)`,
+          { replacements: { ids } }
+        );
+        const uMap = new Map(users.map((u) => [Number(u.id), u]));
+        visitorUsers = [...uidStat.values()]
+          .sort((a, b) => b.pv - a.pv)
+          .slice(0, 30)
+          .map((s) => {
+            const u = uMap.get(s.uid) || {};
+            return {
+              uid: s.uid,
+              phone: u.phone || '',
+              email: u.email || '',
+              balance: u.balance !== undefined ? parseFloat(u.balance) : null,
+              type: paidSet.has(s.uid) ? 'paid' : 'registered',
+              pv: s.pv,
+              pages: s.paths.size,
+              lastTs: s.lastTs,
+            };
+          });
+      }
     } catch (e) {
       console.warn('[stats/traffic] 访客分层计算失败:', (e && e.message) || e);
     }
 
-    res.json({ status: 'success', data: { total_pv, total_uv, days, trend, pages, sources, countries, userTypes, userTypesAvailable } });
+    res.json({ status: 'success', data: { total_pv, total_uv, days, trend, pages, sources, countries, userTypes, userTypesAvailable, visitorUsers } });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
